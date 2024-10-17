@@ -123,11 +123,19 @@ func cmd_deployment_ls(usage func(), name []string, args []string) error {
 	return deployment.PrintList()
 }
 
+func cmd_deployment_inspect(usage func(), name []string, args []string) error {
+	flag := new_flag_set(name, usage)
+	flag.Parse(args)
+
+	return deployment.PrintInspect(flag.Args()...)
+}
+
 func cmd_deployment(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
 
 	return run_subcommand(name, args, flag, map[string]Subcommand{
-		"ls": {cmd_deployment_ls, "", "List all deployments"},
+		"ls":      {cmd_deployment_ls, "", "List all deployments"},
+		"inspect": {cmd_deployment_inspect, "", "Inspect deployment in current directory or on the command-line"},
 	})
 }
 

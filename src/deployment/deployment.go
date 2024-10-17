@@ -1,6 +1,7 @@
 package deployment
 
 import (
+	"encoding/json"
 	"os"
 	"path"
 
@@ -36,5 +37,24 @@ func PrintList() error {
 		tbl.AddRow(depl.AppName, depl.InstanceName, depl.DeploymentName)
 	}
 	tbl.Print()
+	return nil
+}
+
+func PrintInspect(deployments ...string) error {
+	if len(deployments) == 0 {
+		return PrintInspect(".")
+	}
+
+	for _, dir := range deployments {
+		depl, err := ReadDeployment(dir, "")
+		if err != nil {
+			return err
+		}
+
+		err = json.NewEncoder(os.Stdout).Encode(depl)
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
