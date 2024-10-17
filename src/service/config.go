@@ -2,9 +2,11 @@ package service
 
 import (
 	"encoding/json"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -13,7 +15,8 @@ type PartialService struct {
 }
 
 type Hook struct {
-	When string   `jsob:"when"`
+	Id   string   `json:"id"`
+	When string   `json:"when"`
 	Exec []string `json:"exec"`
 }
 
@@ -69,15 +72,20 @@ func LoadService(path string, fix_paths bool, base *Service) (*Service, error) {
 		service = &Service{}
 	}
 
-	_, err = f.Seek(0, os.SEEK_SET)
+	_, err = f.Seek(0, io.SeekStart)
 	if err != nil {
 		return nil, err
 	}
+
+	last_hooks := service.Hooks
+	service.Hooks = []*Hook{}
 
 	err = json.NewDecoder(f).Decode(service)
 	if err != nil {
 		return nil, err
 	}
+
+	service.Hooks = merge_hooks(last_hooks, service.Hooks)
 
 	service.BasePath = dir
 
@@ -95,6 +103,9 @@ func LoadService(path string, fix_paths bool, base *Service) (*Service, error) {
 		}
 
 		for _, hook := range service.Hooks {
+			if len(hook.Exec) == 0 {
+				continue
+			}
 			if err := fix_path(dir, &hook.Exec[0], true); err != nil {
 				return nil, err
 			}
@@ -102,6 +113,25 @@ func LoadService(path string, fix_paths bool, base *Service) (*Service, error) {
 	}
 
 	return service, nil
+}
+
+func merge_hooks(layer1 []*Hook, layer2 []*Hook) []*Hook {
+	log.Printf("merge: %+v\nwith: %+v\n", layer1, layer2)
+	var result []*Hook = append([]*Hook{}, layer1...)
+	for _, layered_hook := range layer2 {
+		var i = -1
+		if layered_hook.Id != "" {
+			i = slices.IndexFunc(result, func(h *Hook) bool { return h.Id == layered_hook.Id })
+		}
+		if i == -1 {
+			// new hook, append to results
+			result = append(result, layered_hook)
+		} else {
+			// replace hook with the new one
+			result[i] = layered_hook
+		}
+	}
+	return result
 }
 
 func fix_path(dir string, path *string, is_executable bool) error {
