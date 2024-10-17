@@ -1,0 +1,11 @@
+[Unit]
+Description=Register Conductor CGI function at %f
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/conductor cgi declare %f
+RemainAfterExit=true
+
+[Install]
+WantedBy=multi-user.target
+

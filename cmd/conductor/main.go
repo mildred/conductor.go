@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/mildred/conductor.go/src/deployment"
+	"github.com/mildred/conductor.go/src/install"
 	"github.com/mildred/conductor.go/src/service"
 )
 
@@ -111,11 +112,37 @@ func cmd_reload(usage func(), name []string, args []string) error {
 	return service.Reload()
 }
 
+func cmd_system_install(usage func(), name []string, args []string) error {
+	flag := new_flag_set(name, usage)
+	destdir := flag.String("destdir", "", "Directory root where to perform installation")
+	flag.Parse(args)
+
+	return install.Install(*destdir)
+}
+
+func cmd_system_uninstall(usage func(), name []string, args []string) error {
+	flag := new_flag_set(name, usage)
+	destdir := flag.String("destdir", "", "Directory root where to uninstall")
+	flag.Parse(args)
+
+	return install.Uninstall(*destdir)
+}
+
+func cmd_system(usage func(), name []string, args []string) error {
+	flag := new_flag_set(name, usage)
+
+	return run_cubcommand(name, args, flag, map[string]Subcommand{
+		"install":   {cmd_system_install, "", "Install system services"},
+		"uninstall": {cmd_system_uninstall, "", "Uninstall system services"},
+	})
+}
+
 func Main() error {
 	flag := new_flag_set(os.Args[0:1], nil)
 
 	return run_cubcommand(os.Args[0:1], os.Args[1:], flag, map[string]Subcommand{
 		"reload": {cmd_reload, "", "Reload and start services in well-known locations"},
+		"system": {cmd_system, "...", "System management"},
 		"_":      {cmd_private, "...", "Internal commands"},
 	})
 }
