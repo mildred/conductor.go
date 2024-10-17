@@ -39,7 +39,7 @@ func NewDeploymentFromService(service *service.Service, deployment_name string) 
 func ReadDeployment(dir, deployment_id string) (*Deployment, error) {
 	_, err := os.Stat(path.Join(dir, ConfigName))
 	if err != nil {
-		service, err := service.LoadService(service.ConfigName, false, nil)
+		service, err := service.LoadService(path.Join(dir, service.ConfigName), false, nil)
 		if err != nil {
 			return nil, err
 		}

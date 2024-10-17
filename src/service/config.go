@@ -19,13 +19,13 @@ type Hook struct {
 
 type Service struct {
 	BasePath            string
-	AppName             string            `json:"app_name"`              // my-app
-	InstanceName        string            `json:"instance_name"`         // staging
-	Config              map[string]string `json:"config"`                // key-value pairs for config and templating, CHANNEL=staging
-	PodTemplate         string            `json:"pod_template"`          // Template file for pod
-	ConfigMapTemplate   string            `json:"config_map_template"`   // ConfigMap template file
-	ProxyConfigTemplate string            `json:"proxy_config_template"` // Template file for the load-balancer config
-	Hooks               []*Hook           `json:"hooks"`
+	AppName             string            `json:"app_name",omitempty`              // my-app
+	InstanceName        string            `json:"instance_name",omitempty`         // staging
+	Config              map[string]string `json:"config",omitempty`                // key-value pairs for config and templating, CHANNEL=staging
+	PodTemplate         string            `json:"pod_template",omitempty`          // Template file for pod
+	ConfigMapTemplate   string            `json:"config_map_template",omitempty`   // ConfigMap template file
+	ProxyConfigTemplate string            `json:"proxy_config_template",omitempty` // Template file for the load-balancer config
+	Hooks               []*Hook           `json:"hooks",omitempty`
 }
 
 const ConfigName = "conductor-service.json"
@@ -44,9 +44,15 @@ func LoadService(path string, fix_paths bool, base *Service) (*Service, error) {
 
 	if service == nil {
 		service = &Service{}
+		service.Config = map[string]string{}
+		service.Hooks = []*Hook{}
 	}
 
-	json.NewDecoder(f).Decode(partial)
+	err = json.NewDecoder(f).Decode(partial)
+	if err != nil {
+		return nil, err
+	}
+
 	if len(partial.Inherit) > 0 {
 		for _, inherit := range partial.Inherit {
 			inherit = join_paths(dir, inherit)
@@ -63,7 +69,15 @@ func LoadService(path string, fix_paths bool, base *Service) (*Service, error) {
 		service = &Service{}
 	}
 
-	json.NewDecoder(f).Decode(service)
+	_, err = f.Seek(0, os.SEEK_SET)
+	if err != nil {
+		return nil, err
+	}
+
+	err = json.NewDecoder(f).Decode(service)
+	if err != nil {
+		return nil, err
+	}
 
 	service.BasePath = dir
 
