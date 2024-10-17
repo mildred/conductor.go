@@ -9,13 +9,16 @@ import (
 	"path"
 	"time"
 
+	"github.com/gandarez/go-realpath"
 	"github.com/mildred/conductor.go/src/service"
+	"github.com/mildred/conductor.go/src/tmpl"
 )
 
 const ConfigName = "conductor-deployment.json"
 
 type Deployment struct {
 	*service.Service
+	ServiceDir           string          `json:"service_dir"`
 	DeploymentName       string          `json:"conductor_deployment"`
 	PodName              string          `json:"pod_name"`
 	TemplatedPod         string          `json:"templated_pod"`
@@ -28,6 +31,7 @@ func NewDeploymentFromService(service *service.Service, deployment_name string) 
 	log.Printf("prepare: Set up deployment %q from service %q-%q\n", deployment_name, service.AppName, service.InstanceName)
 	return &Deployment{
 		Service:              service,
+		ServiceDir:           service.BasePath,
 		DeploymentName:       deployment_name,
 		PodName:              "conductor-" + deployment_name,
 		TemplatedPod:         "",
@@ -39,12 +43,12 @@ func NewDeploymentFromService(service *service.Service, deployment_name string) 
 func ReadDeployment(dir, deployment_id string) (*Deployment, error) {
 	_, err := os.Stat(path.Join(dir, ConfigName))
 	if err != nil {
-		service, err := service.LoadService(path.Join(dir, service.ConfigName), false, nil)
+		service_file, err := realpath.Realpath(path.Join(dir, service.ConfigName))
 		if err != nil {
 			return nil, err
 		}
 
-		err = service.FillDefaults()
+		service, err := service.LoadServiceAndFillDefaults(service_file, false)
 		if err != nil {
 			return nil, err
 		}
@@ -67,13 +71,13 @@ func ReadDeployment(dir, deployment_id string) (*Deployment, error) {
 
 func (depl *Deployment) TemplatePod() error {
 	log.Printf("prepare: Templating the pod\n")
-	res, err := depl.template(depl.PodTemplate)
+	res, err := tmpl.RunTemplate(depl.PodTemplate, depl.Vars())
 	if err != nil {
 		return err
 	}
 	depl.TemplatedPod = res
 
-	res, err = depl.template(depl.ConfigMapTemplate)
+	res, err = tmpl.RunTemplate(depl.ConfigMapTemplate, depl.Vars())
 	if err != nil {
 		return err
 	}
@@ -84,7 +88,7 @@ func (depl *Deployment) TemplatePod() error {
 
 func (depl *Deployment) TemplateProxyConfig() error {
 	log.Printf("prepare: Templating the proxy config\n")
-	res, err := depl.template(depl.ProxyConfigTemplate)
+	res, err := tmpl.RunTemplate(depl.ProxyConfigTemplate, depl.Vars())
 	if err != nil {
 		return err
 	}
@@ -101,31 +105,12 @@ func (depl *Deployment) TemplateAll() error {
 	return depl.TemplateProxyConfig()
 }
 
-func (depl *Deployment) vars() []string {
-	var vars []string = []string{
-		"CONDUCTOR_APP=" + depl.AppName,
-		"CONDUCTOR_INSTANCE=" + depl.InstanceName,
-		"CONDUCTOR_DEPLOYMENT=" + depl.DeploymentName,
-		"POD_NAME=" + depl.PodName,
-		"POD_IP_ADDRESS=" + depl.PodIpAddress,
-	}
-	for k, v := range depl.Config {
-		vars = append(vars, fmt.Sprintf("%s=%s", k, v))
-	}
-	return vars
-}
-
-func (depl *Deployment) template(fname string) (string, error) {
-	if fname == "" {
-		return "", nil
-	}
-
-	fmt.Printf("templating: execute %s\n", fname)
-	vars := depl.vars()
-	cmd := exec.Command(fname, vars...)
-	cmd.Env = append(cmd.Environ(), vars...)
-	res, err := cmd.Output()
-	return string(res), err
+func (depl *Deployment) Vars() []string {
+	return append(depl.Service.Vars(),
+		"CONDUCTOR_DEPLOYMENT="+depl.DeploymentName,
+		"POD_NAME="+depl.PodName,
+		"POD_IP_ADDRESS="+depl.PodIpAddress,
+	)
 }
 
 func (depl *Deployment) Save(fname string) error {
@@ -148,6 +133,9 @@ func LoadDeployment(fname string) (*Deployment, error) {
 
 	res := &Deployment{}
 	err = json.NewDecoder(f).Decode(res)
+
+	res.BasePath = res.ServiceDir
+
 	log.Printf("Loaded deployment %s, service %s-%s\n", res.DeploymentName, res.AppName, res.InstanceName)
 	return res, err
 }
@@ -261,7 +249,7 @@ func (depl *Deployment) RunHooks(when string) error {
 				"--scope",
 				"--unit=" + fmt.Sprintf("hook-%s-%s", depl.DeploymentName, when),
 			}, hook.Exec...)...)
-		cmd.Env = append(cmd.Environ(), depl.vars()...)
+		cmd.Env = append(cmd.Environ(), depl.Vars()...)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		err := cmd.Run()

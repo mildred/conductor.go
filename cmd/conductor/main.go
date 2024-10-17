@@ -47,14 +47,30 @@ func service_cleanup(usage func(), name []string, args []string) error {
 	return service.Cleanup()
 }
 
+func service_register(usage func(), name []string, args []string) error {
+	flag := new_flag_set(name, usage)
+	flag.Parse(args)
+
+	return service.CaddyRegister(true, ".")
+}
+
+func service_deregister(usage func(), name []string, args []string) error {
+	flag := new_flag_set(name, usage)
+	flag.Parse(args)
+
+	return service.CaddyRegister(false, ".")
+}
+
 func private_service(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
 
 	return run_subcommand(name, args, flag, map[string]Subcommand{
-		"start":   {service_start, "", "Start a service"},
-		"restart": {service_restart, "", "Restart a service"},
-		"stop":    {service_stop, "", "Stop a service"},
-		"cleanup": {service_cleanup, "", "Clean up service after it has stopped"},
+		"start":      {service_start, "", "Start a service"},
+		"restart":    {service_restart, "", "Restart a service"},
+		"stop":       {service_stop, "", "Stop a service"},
+		"cleanup":    {service_cleanup, "", "Clean up service after it has stopped"},
+		"register":   {service_register, "", "Register service to load balancer"},
+		"deregister": {service_deregister, "", "Deregister service from load balancer"},
 	})
 }
 
@@ -105,14 +121,30 @@ func deployment_cleanup(usage func(), name []string, args []string) error {
 	return deployment.Cleanup()
 }
 
+func deployment_register(usage func(), name []string, args []string) error {
+	flag := new_flag_set(name, usage)
+	flag.Parse(args)
+
+	return deployment.CaddyRegister(true, ".")
+}
+
+func deployment_deregister(usage func(), name []string, args []string) error {
+	flag := new_flag_set(name, usage)
+	flag.Parse(args)
+
+	return deployment.CaddyRegister(false, ".")
+}
+
 func private_deployment(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
 
 	return run_subcommand(name, args, flag, map[string]Subcommand{
-		"prepare": {deployment_prepare, "", "Prepare a deployment before starting it"},
-		"start":   {deployment_start, "", "Start a deployment"},
-		"stop":    {deployment_stop, "", "Stop a deployment"},
-		"cleanup": {deployment_cleanup, "", "Clean up deployment after it has stopped"},
+		"prepare":    {deployment_prepare, "", "Prepare a deployment before starting it"},
+		"start":      {deployment_start, "", "Start a deployment"},
+		"stop":       {deployment_stop, "", "Stop a deployment"},
+		"cleanup":    {deployment_cleanup, "", "Clean up deployment after it has stopped"},
+		"register":   {deployment_register, "", "Register deployment to load balancer"},
+		"deregister": {deployment_deregister, "", "Deregister deployment from load balancer"},
 	})
 }
 

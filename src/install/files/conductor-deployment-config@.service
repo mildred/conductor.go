@@ -1,0 +1,18 @@
+[Unit]
+Description=Conductor Deployment configuration for %i
+Requires=caddy.service
+After=caddy.service
+
+# Ensures that the unit is restarted when the Caddy server restarts (required to
+# refresh the caddy config)
+PartOf=caddy.service
+
+[Service]
+WorkingDirectory=/run/conductor/deployment/%i
+TimeoutStartSec=0
+RemainAfterExit=yes
+
+ExecStartPre=-/usr/local/bin/conductor _ deployment deregister
+ExecStartPre=/usr/local/bin/conductor _ deployment register
+ExecStart=/bin/true
+ExecStopPost=/usr/local/bin/conductor _ deployment deregister

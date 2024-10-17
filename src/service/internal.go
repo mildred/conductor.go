@@ -1,7 +1,13 @@
 package service
 
 import (
+	"encoding/json"
+	"log"
+	"path"
+
+	"github.com/mildred/conductor.go/src/caddy"
 	"github.com/mildred/conductor.go/src/dirs"
+	"github.com/mildred/conductor.go/src/tmpl"
 )
 
 // Note for services: a linked proxy config is set up when the service itself is
@@ -54,4 +60,40 @@ func Reload() error {
 func Declare(definition_path string) error {
 	// Loop through location and set up services
 	return nil
+}
+
+func CaddyRegister(register bool, dir string) error {
+	service, err := LoadServiceAndFillDefaults(path.Join(dir, ConfigName), true)
+	if err != nil {
+		return err
+	}
+
+	if service.ProxyConfigTemplate == "" {
+		return nil
+	}
+
+	var configs []caddy.ConfigItem
+
+	caddy, err := caddy.NewClient(service.CaddyLoadBalancer.ApiEndpoint)
+	if err != nil {
+		return err
+	}
+
+	config, err := tmpl.RunTemplate(service.ProxyConfigTemplate, service.Vars())
+	if err != nil {
+		return err
+	}
+
+	err = json.Unmarshal([]byte(config), &configs)
+	if err != nil {
+		return err
+	}
+
+	if register {
+		log.Printf("register: Register service")
+	} else {
+		log.Printf("register: Deregister service")
+	}
+
+	return caddy.Register(register, configs)
 }

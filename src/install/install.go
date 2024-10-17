@@ -2,6 +2,7 @@ package install
 
 import (
 	"os"
+	"os/exec"
 	"path"
 )
 
@@ -26,6 +27,11 @@ func Install(destdir string) error {
 		return err
 	}
 
+	err = exec.Command("systemctl", "daemon-reload").Run()
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -41,6 +47,11 @@ func Uninstall(destdir string) error {
 	}
 
 	err = os.Remove(destdir + ConductorCGIFunctionServiceLocation)
+	if err != nil {
+		return err
+	}
+
+	err = exec.Command("systemctl", "daemon-reload").Run()
 	if err != nil {
 		return err
 	}

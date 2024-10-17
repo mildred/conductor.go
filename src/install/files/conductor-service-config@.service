@@ -1,0 +1,18 @@
+[Unit]
+Description=Conductor Service configuration for %f
+Requires=caddy.service
+After=caddy.service
+
+# Ensures that the unit is restarted when the Caddy server restarts (required to
+# refresh the caddy config)
+PartOf=caddy.service
+
+[Service]
+WorkingDirectory=%f
+TimeoutStartSec=0
+RemainAfterExit=yes
+
+ExecStartPre=-/usr/local/bin/conductor _ service deregister
+ExecStartPre=/usr/local/bin/conductor _ service register
+ExecStart=/bin/true
+ExecStopPost=/usr/local/bin/conductor _ service deregister

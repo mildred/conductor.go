@@ -1,13 +1,19 @@
 package deployment
 
 import (
+	"encoding/json"
+	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path"
 
 	"github.com/coreos/go-systemd/v22/daemon"
+	"github.com/coreos/go-systemd/v22/unit"
 
+	"github.com/mildred/conductor.go/src/caddy"
 	"github.com/mildred/conductor.go/src/dirs"
+	"github.com/mildred/conductor.go/src/tmpl"
 )
 
 // Note for deployment hooks, there could be different ways to hook:
@@ -116,13 +122,18 @@ func Start() error {
 	}
 
 	//
-	// TODO: Add IP address to load balancer
+	// Add IP address to load balancer
 	//
 	// notify load balancer of ip address, hook into existing load balancer
 	// configuration for the service and add the IP address
 	//
 
 	log.Printf("start: Adding deployment to load-balancer...\n")
+	cmd := exec.Command("systemctl", "start", "conductor-deployment-config@"+depl.DeploymentName+".service")
+	err = cmd.Run()
+	if err != nil {
+		return err
+	}
 
 	//
 	// Notify that the deployment is ready
@@ -169,10 +180,15 @@ func Stop() error {
 	}
 
 	//
-	// TODO: Remove the IP address from the load balancer
+	// Remove the IP address from the load balancer
 	//
 
 	log.Printf("stop: Removing deployment from load-balancer...\n")
+	cmd := exec.Command("systemctl", "stop", "conductor-deployment-config@"+depl.DeploymentName+".service")
+	err = cmd.Run()
+	if err != nil {
+		return err
+	}
 
 	if err != nil {
 		log.Printf("stop: ERROR when removing from the load-balancer: %v\n", err)
@@ -229,4 +245,48 @@ func Cleanup() error {
 
 	log.Printf("cleanup: Cleanup sequence completed\n", cwd)
 	return nil
+}
+
+func CaddyRegister(register bool, dir string) error {
+	depl, err := LoadDeployment(ConfigName)
+	if err != nil {
+		return err
+	}
+
+	if depl.ProxyConfigTemplate == "" {
+		return nil
+	}
+
+	var configs []caddy.ConfigItem
+
+	caddy, err := caddy.NewClient(depl.CaddyLoadBalancer.ApiEndpoint)
+	if err != nil {
+		return err
+	}
+
+	config, err := tmpl.RunTemplate(depl.ProxyConfigTemplate, depl.Vars())
+	if err != nil {
+		return err
+	}
+
+	err = json.Unmarshal([]byte(config), &configs)
+	if err != nil {
+		return err
+	}
+
+	if register {
+		unit_name := fmt.Sprintf("conductor-service-config@%s.service", unit.UnitNamePathEscape(depl.ServiceDir))
+		log.Printf("register: Ensure the service config %s is registered", unit_name)
+
+		err = exec.Command("systemctl", "start", unit_name).Run()
+		if err != nil {
+			return err
+		}
+
+		log.Printf("register: Register pod IP %s", depl.PodIpAddress)
+	} else {
+		log.Printf("register: Deregister pod IP %s", depl.PodIpAddress)
+	}
+
+	return caddy.Register(register, configs)
 }

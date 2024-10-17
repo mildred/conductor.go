@@ -2,6 +2,7 @@ package service
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"os"
@@ -20,6 +21,15 @@ type Hook struct {
 	Exec []string `json:"exec"`
 }
 
+type CaddyMapping struct {
+	Port int `json:"port"`
+}
+
+type CaddyConfig struct {
+	ApiEndpoint string         `json:"api_endpoint"`
+	Mapping     []CaddyMapping `json:"mapping"`
+}
+
 type Service struct {
 	BasePath            string
 	AppName             string            `json:"app_name",omitempty`              // my-app
@@ -29,9 +39,24 @@ type Service struct {
 	ConfigMapTemplate   string            `json:"config_map_template",omitempty`   // ConfigMap template file
 	ProxyConfigTemplate string            `json:"proxy_config_template",omitempty` // Template file for the load-balancer config
 	Hooks               []*Hook           `json:"hooks",omitempty`
+	CaddyLoadBalancer   CaddyConfig       `json:"caddy_load_balancer"`
 }
 
 const ConfigName = "conductor-service.json"
+
+func LoadServiceAndFillDefaults(path string, fix_paths bool) (*Service, error) {
+	service, err := LoadService(path, fix_paths, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	err = service.FillDefaults()
+	if err != nil {
+		return nil, err
+	}
+
+	return service, nil
+}
 
 func LoadService(path string, fix_paths bool, base *Service) (*Service, error) {
 	dir := filepath.Dir(path)
@@ -149,6 +174,9 @@ func (service *Service) FillDefaults() error {
 	if service.ProxyConfigTemplate == "" {
 		service.PodTemplate = filepath.Join(service.BasePath, "proxy-config.template")
 	}
+	if service.CaddyLoadBalancer.ApiEndpoint == "" {
+		service.CaddyLoadBalancer.ApiEndpoint = "http://localhost:2019"
+	}
 	return nil
 }
 
@@ -158,4 +186,15 @@ func join_paths(base, path string) string {
 	} else {
 		return filepath.Join(base, path)
 	}
+}
+
+func (service *Service) Vars() []string {
+	var vars []string = []string{
+		"CONDUCTOR_APP=" + service.AppName,
+		"CONDUCTOR_INSTANCE=" + service.InstanceName,
+	}
+	for k, v := range service.Config {
+		vars = append(vars, fmt.Sprintf("%s=%s", k, v))
+	}
+	return vars
 }
