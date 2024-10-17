@@ -1,0 +1,11 @@
+[Unit]
+Description=Register Conductor service at %f
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/conductor service declare %f
+RemainAfterExit=true
+
+[Install]
+WantedBy=multi-user.target
+

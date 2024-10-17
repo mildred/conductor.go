@@ -28,7 +28,7 @@ func new_flag_set(name []string, usage func()) *flag.FlagSet {
 	return flag
 }
 
-func run_cubcommand(name []string, args0 []string, flag *flag.FlagSet, subcommands map[string]Subcommand) error {
+func run_subcommand(name []string, args0 []string, flag *flag.FlagSet, subcommands map[string]Subcommand) error {
 	var cmd string
 	var next_args []string
 

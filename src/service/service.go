@@ -1,12 +1,8 @@
 package service
 
-type Service struct {
-	Name                string            `json:"app_name"`              // my-app
-	InstanceName        string            `json:"instance_name"`         // staging
-	Config              map[string]string `json:"config"`                // key-value pairs for config and templating, CHANNEL=staging
-	PodTemplate         string            `json:"pod_template"`          // Template file for pod
-	ProxyConfigTemplate string            `json:"proxy_config_template"` // Template file for the load-balancer config
-}
+import (
+	"github.com/mildred/conductor.go/src/dirs"
+)
 
 // Note for services: a linked proxy config is set up when the service itself is
 // enabled. The service depends on this proxy config
@@ -48,7 +44,14 @@ func Cleanup() error {
 	return nil
 }
 
+var LookupPaths []string = dirs.MultiJoin("services", append(append([]string{dirs.SelfRuntimeDir}, dirs.SelfConfigDirs...), dirs.SelfDataDirs...)...)
+
 func Reload() error {
+	// Loop through location and set up services
+	return nil
+}
+
+func Declare(definition_path string) error {
 	// Loop through location and set up services
 	return nil
 }
