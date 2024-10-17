@@ -2,6 +2,7 @@ package service
 
 import (
 	"encoding/json"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -48,11 +49,9 @@ func LoadService(path string, fix_paths bool, base *Service) (*Service, error) {
 	json.NewDecoder(f).Decode(partial)
 	if len(partial.Inherit) > 0 {
 		for _, inherit := range partial.Inherit {
-			inherit, err = filepath.Rel(dir, inherit)
-			if err != nil {
-				return nil, err
-			}
+			inherit = join_paths(dir, inherit)
 
+			log.Printf("service: %s inherit from %s", dir, inherit)
 			service, err = LoadService(inherit, true, service)
 			if err != nil {
 				return nil, err
@@ -93,10 +92,7 @@ func LoadService(path string, fix_paths bool, base *Service) (*Service, error) {
 
 func fix_path(dir string, path *string, is_executable bool) error {
 	if *path != "" && dir != "" && !strings.HasPrefix(*path, "/") && (!is_executable || strings.Contains(*path, "/")) {
-		p, err := filepath.Rel(dir, *path)
-		if err != nil {
-			return err
-		}
+		p := join_paths(dir, *path)
 		*path = p
 	}
 	return nil
@@ -110,4 +106,12 @@ func (service *Service) FillDefaults() error {
 		service.PodTemplate = filepath.Join(service.BasePath, "proxy-config.template")
 	}
 	return nil
+}
+
+func join_paths(base, path string) string {
+	if filepath.IsAbs(path) {
+		return path
+	} else {
+		return filepath.Join(base, path)
+	}
 }

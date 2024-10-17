@@ -120,6 +120,7 @@ func (depl *Deployment) template(fname string) (string, error) {
 		return "", nil
 	}
 
+	fmt.Printf("templating: execute %s\n", fname)
 	vars := depl.vars()
 	cmd := exec.Command(fname, vars...)
 	cmd.Env = append(cmd.Environ(), vars...)
