@@ -130,7 +130,7 @@ func (depl *Deployment) template(fname string) (string, error) {
 
 func (depl *Deployment) Save(fname string) error {
 	log.Printf("Save deployment to %s\n", fname)
-	f, err := os.OpenFile(fname, os.O_RDWR, 0)
+	f, err := os.OpenFile(fname, os.O_TRUNC|os.O_CREATE|os.O_RDWR, 0)
 	if err != nil {
 		return err
 	}
