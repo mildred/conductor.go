@@ -84,7 +84,7 @@ func (depl *Deployment) TemplatePod() error {
 
 func (depl *Deployment) TemplateProxyConfig() error {
 	log.Printf("prepare: Templating the proxy config\n")
-	res, err := depl.template(depl.PodTemplate)
+	res, err := depl.template(depl.ProxyConfigTemplate)
 	if err != nil {
 		return err
 	}
