@@ -9,7 +9,7 @@ TimeoutStartSec=0
 Restart=always
 RestartPreventExitStatus=10
 
-WorkingDirectory=/run/conductor/deployment/%i
+WorkingDirectory=/run/conductor/deployments/%i
 Environment=CONDUCTOR_DEPLOYMENT=%i
 Environment=CONDUCTOR_SYSTEMD_UNIT=%n
 ExecStartPre=/usr/local/bin/conductor _ deployment prepare

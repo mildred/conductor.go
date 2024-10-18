@@ -9,9 +9,6 @@ import (
 	"path"
 	"time"
 
-	"github.com/coreos/go-systemd/v22/unit"
-	"github.com/gandarez/go-realpath"
-
 	"github.com/mildred/conductor.go/src/dirs"
 	"github.com/mildred/conductor.go/src/service"
 	"github.com/mildred/conductor.go/src/tmpl"
@@ -23,11 +20,11 @@ const ConfigName = "conductor-deployment.json"
 var DeploymentRunDir = dirs.Join(dirs.SelfRuntimeDir, "deployments")
 
 func DeploymentUnit(name string) string {
-	return fmt.Sprintf("conductor-deployment@%s.service", unit.UnitNameEscape(name))
+	return fmt.Sprintf("conductor-deployment@%s.service", name)
 }
 
 func DeploymentConfigUnit(name string) string {
-	return fmt.Sprintf("conductor-deployment-config@%s.service", unit.UnitNameEscape(name))
+	return fmt.Sprintf("conductor-deployment-config@%s.service", name)
 }
 
 type Deployment struct {
@@ -61,12 +58,7 @@ func ReadDeployment(dir, deployment_id string) (*Deployment, error) {
 	if err != nil && !os.IsNotExist(err) {
 		return nil, err
 	} else if err != nil {
-		service_file, err := realpath.Realpath(path.Join(dir, service.ConfigName))
-		if err != nil {
-			return nil, err
-		}
-
-		service, err := service.LoadServiceAndFillDefaults(service_file, false)
+		service, err := service.LoadServiceDir(dir)
 		if err != nil {
 			return nil, err
 		}

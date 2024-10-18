@@ -12,6 +12,7 @@ import (
 
 	"github.com/coreos/go-systemd/v22/unit"
 	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
+	"github.com/yookoala/realpath"
 	"golang.org/x/crypto/sha3"
 
 	"github.com/mildred/conductor.go/src/dirs"
@@ -38,6 +39,7 @@ type CaddyConfig struct {
 
 type Service struct {
 	BasePath                string
+	Name                    string
 	Id                      string
 	AppName                 string            `json:"app_name",omitempty`              // my-app
 	InstanceName            string            `json:"instance_name",omitempty`         // staging
@@ -54,6 +56,137 @@ type Service struct {
 const ConfigName = "conductor-service.json"
 
 var ServiceDirs = dirs.MultiJoin("services", append([]string{dirs.SelfRuntimeDir}, append(dirs.SelfConfigDirs, dirs.SelfDataDirs...)...)...)
+
+func ServiceFileByName(name string) (string, error) {
+	if name == "." || strings.HasPrefix(name, "/") || strings.HasPrefix(name, "./") {
+		name = strings.TrimSuffix(name, "/"+ConfigName)
+		service_file, err := realpath.Realpath(filepath.Join(name, ConfigName))
+		if err != nil {
+			return "", err
+		}
+		_, err = os.Stat(service_file)
+		if err != nil {
+			return "", err
+		}
+		return service_file, nil
+	} else if strings.Contains(name, "/") {
+		return "", fmt.Errorf("Invalid service name with '/' within, if you mean a part, it must start with '/' or './'")
+	} else {
+		for _, dir := range ServiceDirs {
+			service_file := filepath.Join(dir, name, ConfigName)
+			_, err := os.Stat(service_file)
+			if err != nil && !os.IsNotExist(err) {
+				return "", err
+			} else if err != nil {
+				// ignore error, this is not a valid service dir
+				continue
+			}
+
+			// We found the service_dir
+			service_file, err = realpath.Realpath(service_file)
+			if err != nil {
+				return "", err
+			}
+			return service_file, nil
+		}
+		return "", fmt.Errorf("Service %q is not found", name)
+	}
+}
+
+func ServiceDirByName(name string) (string, error) {
+	file, err := ServiceFileByName(name)
+	if err != nil {
+		return "", err
+	}
+
+	return filepath.Dir(file), err
+}
+
+func ServiceUnitByName(name string) (string, error) {
+	file, err := ServiceDirByName(name)
+	if err != nil {
+		return "", err
+	}
+
+	return ServiceUnit(file), err
+}
+
+func ServiceRealpath(service_dir string) (string, error) {
+	service_file, err := realpath.Realpath(filepath.Join(service_dir, ConfigName))
+	if err != nil {
+		return "", err
+	}
+	_, err = os.Stat(service_file)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Dir(service_file), nil
+}
+
+// func ValidateServiceNameFromDir(service_dir, name_hint string) (string, error) {
+// 	stat, err := os.Stat(filepath.Join(service_dir, ConfigName))
+// 	if err != nil {
+// 		return "", err
+// 	}
+//
+// 	for _, services_dir := range ServiceDirs {
+// 		dir := filepath.Join(services_dir, name_hint)
+// 		st, err := os.Stat(filepath.Join(dir, ConfigName))
+// 		if err != nil && !os.IsNotExist(err) {
+// 			return "", err
+// 		} else if err != nil {
+// 			// ignore error, this is not a valid service dir
+// 			continue
+// 		}
+//
+// 		if os.SameFile(stat, st) {
+// 			return name_hint, nil
+// 		} else {
+// 			return "", nil
+// 		}
+// 	}
+//
+// 	return "", nil
+// }
+
+func ServiceNameFromFile(service_file string) (string, error) {
+	stat, err := os.Stat(service_file)
+	if err != nil {
+		return "", err
+	}
+
+	names := map[string]bool{}
+
+	for _, services_dir := range ServiceDirs {
+		entries, err := os.ReadDir(services_dir)
+		if err != nil && !os.IsNotExist(err) {
+			return "", err
+		}
+
+		for _, ent := range entries {
+			if names[ent.Name()] {
+				// Name is shadowed
+				continue
+			}
+			names[ent.Name()] = true
+
+			dir := filepath.Join(services_dir, ent.Name())
+			st, err := os.Stat(filepath.Join(dir, ConfigName))
+			if err != nil && !os.IsNotExist(err) {
+				return "", err
+			} else if err != nil {
+				// ignore error, this is not a valid service dir
+				continue
+			} else {
+				if os.SameFile(stat, st) {
+					return ent.Name(), nil
+				}
+			}
+		}
+	}
+
+	return "", nil
+}
 
 func ServiceUnit(path string) string {
 	return fmt.Sprintf("conductor-service@%s.service", unit.UnitNamePathEscape(path))
@@ -73,12 +206,26 @@ func ServiceDirFromUnit(u string) string {
 	}
 }
 
-func LoadServiceDir(dir string, fix_paths bool) (*Service, error) {
-	return LoadServiceAndFillDefaults(filepath.Join(dir, ConfigName), fix_paths)
+func LoadServiceByName(name string) (*Service, error) {
+	service_file, err := ServiceFileByName(name)
+	if err != nil {
+		return nil, err
+	}
+
+	return LoadServiceFile(service_file)
 }
 
-func LoadServiceAndFillDefaults(path string, fix_paths bool) (*Service, error) {
-	service, err := LoadService(path, fix_paths, nil)
+func LoadServiceDir(dir string) (*Service, error) {
+	return LoadServiceFile(filepath.Join(dir, ConfigName))
+}
+
+func LoadServiceFile(path string) (*Service, error) {
+	path, err := realpath.Realpath(path)
+	if err != nil {
+		return nil, err
+	}
+
+	service, err := loadService(path, true, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -93,10 +240,16 @@ func LoadServiceAndFillDefaults(path string, fix_paths bool) (*Service, error) {
 		return nil, err
 	}
 
+	name, err := ServiceNameFromFile(path)
+	if err != nil {
+		return nil, err
+	}
+	service.Name = name
+
 	return service, nil
 }
 
-func LoadService(path string, fix_paths bool, base *Service) (*Service, error) {
+func loadService(path string, fix_paths bool, base *Service) (*Service, error) {
 	dir := filepath.Dir(path)
 	f, err := os.Open(path)
 	if err != nil {
@@ -139,7 +292,7 @@ func LoadService(path string, fix_paths bool, base *Service) (*Service, error) {
 			}
 
 			log.Printf("service: %s inherit from %s", dir, inherit)
-			service, err = LoadService(inherit, true, service)
+			service, err = loadService(inherit, true, service)
 			if err != nil {
 				return nil, err
 			}
@@ -172,11 +325,11 @@ func LoadService(path string, fix_paths bool, base *Service) (*Service, error) {
 			return nil, err
 		}
 
-		if err := fix_path(dir, &service.ProxyConfigTemplate, false); err != nil {
+		if err := fix_path(dir, &service.ConfigMapTemplate, false); err != nil {
 			return nil, err
 		}
 
-		if err := fix_path(dir, &service.BasePath, false); err != nil {
+		if err := fix_path(dir, &service.ProxyConfigTemplate, false); err != nil {
 			return nil, err
 		}
 

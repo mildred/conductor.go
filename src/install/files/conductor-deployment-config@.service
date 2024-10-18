@@ -8,7 +8,7 @@ After=caddy.service
 PartOf=caddy.service
 
 [Service]
-WorkingDirectory=/run/conductor/deployment/%i
+WorkingDirectory=/run/conductor/deployments/%i
 TimeoutStartSec=0
 RemainAfterExit=yes
 

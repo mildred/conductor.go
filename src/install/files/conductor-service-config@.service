@@ -12,7 +12,7 @@ WorkingDirectory=%f
 TimeoutStartSec=0
 RemainAfterExit=yes
 
-ExecStartPre=-/usr/local/bin/conductor _ service deregister
-ExecStartPre=/usr/local/bin/conductor _ service register
+ExecStartPre=-/usr/local/bin/conductor _ service deregister %f
+ExecStartPre=/usr/local/bin/conductor _ service register %f
 ExecStart=/bin/true
-ExecStopPost=/usr/local/bin/conductor _ service deregister
+ExecStopPost=/usr/local/bin/conductor _ service deregister %f

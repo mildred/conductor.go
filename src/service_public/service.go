@@ -10,7 +10,6 @@ import (
 	"slices"
 
 	"github.com/coreos/go-systemd/v22/dbus"
-	"github.com/gandarez/go-realpath"
 	"github.com/rodaine/table"
 
 	"github.com/mildred/conductor.go/src/utils"
@@ -47,6 +46,11 @@ func Reload(inclusive bool) error {
 			} else if err != nil {
 				// ignore error, this is not a valid service dir
 				continue
+			}
+
+			service_dir, err = ServiceRealpath(service_dir)
+			if err != nil {
+				return err
 			}
 
 			service_dirs = append(service_dirs, service_dir)
@@ -90,13 +94,33 @@ func Reload(inclusive bool) error {
 }
 
 func Start(definition_path string) error {
-	path, err := realpath.Realpath(definition_path)
+	unit, err := ServiceUnitByName(definition_path)
 	if err != nil {
 		return err
 	}
 
-	fmt.Fprintf(os.Stderr, "+ systemctl start %q\n", ServiceUnit(path))
-	return exec.Command("systemctl", "start", ServiceUnit(path)).Run()
+	fmt.Fprintf(os.Stderr, "+ systemctl start %q\n", unit)
+	return exec.Command("systemctl", "start", unit).Run()
+}
+
+func Stop(definition_path string) error {
+	unit, err := ServiceUnitByName(definition_path)
+	if err != nil {
+		return err
+	}
+
+	fmt.Fprintf(os.Stderr, "+ systemctl stop %q\n", unit)
+	return exec.Command("systemctl", "stop", unit).Run()
+}
+
+func Restart(definition_path string) error {
+	unit, err := ServiceUnitByName(definition_path)
+	if err != nil {
+		return err
+	}
+
+	fmt.Fprintf(os.Stderr, "+ systemctl restart %q\n", unit)
+	return exec.Command("systemctl", "restart", unit).Run()
 }
 
 type PrintListSettings struct {
@@ -115,6 +139,7 @@ func PrintList(settings PrintListSettings) error {
 		return err
 	}
 
+	var list_service_dirs []string
 	var list_services []*Service
 	var list_status []dbus.UnitStatus
 	var extra_cols []string
@@ -125,11 +150,12 @@ func PrintList(settings PrintListSettings) error {
 			continue
 		}
 
-		service, err := LoadServiceDir(service_dir, true)
+		service, err := LoadServiceDir(service_dir)
 		if err != nil {
 			return err
 		}
 
+		list_service_dirs = append(list_service_dirs, service_dir)
 		list_services = append(list_services, service)
 		list_status = append(list_status, u)
 
@@ -140,9 +166,51 @@ func PrintList(settings PrintListSettings) error {
 		}
 	}
 
+	for _, dir := range ServiceDirs {
+		entries, err := os.ReadDir(dir)
+		if err != nil && !os.IsNotExist(err) {
+			return err
+		}
+
+		for _, ent := range entries {
+			service_dir := path.Join(dir, ent.Name())
+			_, err = os.Stat(path.Join(service_dir, ConfigName))
+			if err != nil && !os.IsNotExist(err) {
+				return err
+			} else if err != nil {
+				// ignore error, this is not a valid service dir
+				continue
+			}
+
+			service_dir, err = ServiceRealpath(service_dir)
+			if err != nil {
+				return err
+			}
+
+			if slices.Contains(list_service_dirs, service_dir) {
+				continue
+			}
+
+			service, err := LoadServiceDir(service_dir)
+			if err != nil {
+				return err
+			}
+
+			list_service_dirs = append(list_service_dirs, service_dir)
+			list_services = append(list_services, service)
+			list_status = append(list_status, dbus.UnitStatus{})
+
+			if extra_cols == nil {
+				extra_cols = service.DisplayServiceConfig
+			} else {
+				utils.IntersectHoles(&extra_cols, service.DisplayServiceConfig)
+			}
+		}
+	}
+
 	extra_cols = utils.Compact(extra_cols...)
 
-	row := []interface{}{"App", "Instance", "Enabled", "Active", "State"}
+	row := []interface{}{"Name", "App", "Instance", "Enabled", "Active", "State"}
 	if settings.Unit {
 		row = append(row, "Unit")
 	}
@@ -154,7 +222,7 @@ func PrintList(settings PrintListSettings) error {
 	for i, service := range list_services {
 		u := list_status[i]
 
-		row = []interface{}{service.AppName, service.InstanceName, u.LoadState, u.ActiveState, u.SubState}
+		row = []interface{}{service.Name, service.AppName, service.InstanceName, u.LoadState, u.ActiveState, u.SubState}
 		if settings.Unit {
 			row = append(row, u.Name)
 		}
@@ -168,13 +236,13 @@ func PrintList(settings PrintListSettings) error {
 	return nil
 }
 
-func PrintInspect(fix_paths bool, services ...string) error {
+func PrintInspect(services ...string) error {
 	if len(services) == 0 {
-		return PrintInspect(fix_paths, ".")
+		return PrintInspect(".")
 	}
 
-	for _, dir := range services {
-		service, err := LoadServiceDir(dir, fix_paths)
+	for _, name := range services {
+		service, err := LoadServiceByName(name)
 		if err != nil {
 			return err
 		}

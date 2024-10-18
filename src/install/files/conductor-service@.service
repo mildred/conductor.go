@@ -1,6 +1,6 @@
 [Unit]
 Description=Conductor service %f
-Wants=conductor-service-config-config@%f.service
+Wants=conductor-service-config@%i.service
 
 [Service]
 WorkingDirectory=%f
@@ -11,10 +11,10 @@ NotifyAccess=all
 TimeoutSec=300
 # RemainAfterExit=yes
 
-ExecStart=/usr/local/bin/conductor _ service start
-ExecReload=/usr/local/bin/conductor _ service restart
-ExecStop=/usr/local/bin/conductor _ service stop
-ExecStopPost=/usr/local/bin/conductor _ service cleanup
+ExecStart=/usr/local/bin/conductor _ service start %f
+ExecReload=/usr/local/bin/conductor _ service restart %f
+ExecStop=/usr/local/bin/conductor _ service stop %f
+ExecStopPost=/usr/local/bin/conductor _ service cleanup %f
 
 [Install]
 WantedBy=multi-user.target

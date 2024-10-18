@@ -3,12 +3,12 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
+	"log"
 	"os"
 	"os/exec"
 	"path"
 	"strings"
-
-	"github.com/gandarez/go-realpath"
 
 	"github.com/mildred/conductor.go/src/deployment"
 	"github.com/mildred/conductor.go/src/deployment_internal"
@@ -31,54 +31,78 @@ func private_service_start(usage func(), name []string, args []string) error {
 	})
 	flag.Parse(args)
 
-	return service_internal.StartOrRestart(false)
+	if flag.NArg() != 1 {
+		return fmt.Errorf("Command %s must take a single service definition as argument", strings.Join(name, " "))
+	}
+
+	return service_internal.StartOrRestart(false, flag.Arg(0))
 }
 
 func private_service_restart(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
 	flag.Parse(args)
 
-	return service_internal.StartOrRestart(true)
+	if flag.NArg() != 1 {
+		return fmt.Errorf("Command %s must take a single service definition as argument", strings.Join(name, " "))
+	}
+
+	return service_internal.StartOrRestart(true, flag.Arg(0))
 }
 
 func private_service_stop(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
 	flag.Parse(args)
 
-	return service_internal.Stop()
+	if flag.NArg() != 1 {
+		return fmt.Errorf("Command %s must take a single service definition as argument", strings.Join(name, " "))
+	}
+
+	return service_internal.Stop(flag.Arg(0))
 }
 
 func private_service_cleanup(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
 	flag.Parse(args)
 
-	return service_internal.Cleanup()
+	if flag.NArg() != 1 {
+		return fmt.Errorf("Command %s must take a single service definition as argument", strings.Join(name, " "))
+	}
+
+	return service_internal.Cleanup(flag.Arg(0))
 }
 
 func private_service_register(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
 	flag.Parse(args)
 
-	return service_internal.CaddyRegister(true, ".")
+	if flag.NArg() != 1 {
+		return fmt.Errorf("Command %s must take a single service definition as argument", strings.Join(name, " "))
+	}
+
+	return service_internal.CaddyRegister(true, flag.Arg(0))
 }
 
 func private_service_deregister(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
 	flag.Parse(args)
 
-	return service_internal.CaddyRegister(false, ".")
+	if flag.NArg() != 1 {
+		return fmt.Errorf("Command %s must take a single service definition as argument", strings.Join(name, " "))
+	}
+
+	return service_internal.CaddyRegister(false, flag.Arg(0))
 }
 
 func private_service(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
 
 	return run_subcommand(name, args, flag, map[string]Subcommand{
-		"start":      {private_service_start, "", "Start a service"},
-		"restart":    {private_service_restart, "", "Restart a service"},
-		"stop":       {private_service_stop, "", "Stop a service"},
-		"cleanup":    {private_service_cleanup, "", "Clean up service after it has stopped"},
-		"register":   {private_service_register, "", "Register service to load balancer"},
-		"deregister": {private_service_deregister, "", "Deregister service from load balancer"},
+		"start":      {private_service_start, "SERVICE", "Start a service"},
+		"restart":    {private_service_restart, "SERVICE", "Restart a service"},
+		"stop":       {private_service_stop, "SERVICE", "Stop a service"},
+		"cleanup":    {private_service_cleanup, "SERVICE", "Clean up service after it has stopped"},
+		"register":   {private_service_register, "SERVICE", "Register service to load balancer"},
+		"deregister": {private_service_deregister, "SERVICE", "Deregister service from load balancer"},
 	})
 }
 
@@ -93,18 +117,43 @@ func cmd_service_start(usage func(), name []string, args []string) error {
 	return service_public.Start(flag.Arg(0))
 }
 
-func cmd_service_inspect(usage func(), name []string, args []string) error {
+func cmd_service_stop(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
-	original_paths := flag.Bool("original-paths", true, "Paths are relative to the service directory")
 	flag.Parse(args)
 
-	return service_public.PrintInspect(!*original_paths, flag.Args()...)
+	if flag.NArg() != 1 {
+		return fmt.Errorf("Command %s must take a single service definition as argument", strings.Join(name, " "))
+	}
+
+	return service_public.Stop(flag.Arg(0))
+}
+
+func cmd_service_restart(usage func(), name []string, args []string) error {
+	flag := new_flag_set(name, usage)
+	flag.Parse(args)
+
+	if flag.NArg() != 1 {
+		return fmt.Errorf("Command %s must take a single service definition as argument", strings.Join(name, " "))
+	}
+
+	return service_public.Restart(flag.Arg(0))
+}
+
+func cmd_service_inspect(usage func(), name []string, args []string) error {
+	flag := new_flag_set(name, usage)
+	flag.Parse(args)
+
+	log.Default().SetOutput(io.Discard)
+
+	return service_public.PrintInspect(flag.Args()...)
 }
 
 func cmd_service_ls(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
 	unit := flag.Bool("unit", false, "Show systemd unit column")
 	flag.Parse(args)
+
+	log.Default().SetOutput(io.Discard)
 
 	return service_public.PrintList(service_public.PrintListSettings{
 		Unit: *unit,
@@ -115,13 +164,15 @@ func cmd_service_unit(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
 	flag.Parse(args)
 
+	log.Default().SetOutput(io.Discard)
+
 	for _, arg := range flag.Args() {
-		path, err := realpath.Realpath(arg)
+		unit, err := service.ServiceUnitByName(arg)
 		if err != nil {
 			return err
 		}
 
-		fmt.Println(service.ServiceUnit(path))
+		fmt.Println(unit)
 	}
 	return nil
 }
@@ -130,13 +181,16 @@ func cmd_service_status(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
 	flag.Parse(args)
 
+	log.Default().SetOutput(io.Discard)
+
 	var cli []string = []string{"status"}
 	for _, arg := range flag.Args() {
-		path, err := realpath.Realpath(arg)
+		unit, err := service.ServiceUnitByName(arg)
 		if err != nil {
 			return err
 		}
-		cli = append(cli, service.ServiceUnit(path))
+
+		cli = append(cli, unit)
 	}
 
 	cmd := exec.Command("systemctl", cli...)
@@ -151,7 +205,9 @@ func cmd_service(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
 
 	return run_subcommand(name, args, flag, map[string]Subcommand{
-		"start":   {cmd_service_start, "", "Declare and start a service"},
+		"start":   {cmd_service_start, "SERVICE", "Declare and start a service"},
+		"stop":    {cmd_service_stop, "SERVICE", "Stop a service"},
+		"restart": {cmd_service_restart, "SERVICE", "Restart a service"},
 		"inspect": {cmd_service_inspect, "", "Inspect a service in current directory or on the command-line"},
 		"ls":      {cmd_service_ls, "", "List all services"},
 		"status":  {cmd_service_status, "", "Status from systemctl"},
@@ -219,6 +275,8 @@ func cmd_deployment_ls(usage func(), name []string, args []string) error {
 	unit := flag.Bool("unit", false, "Show systemd units column")
 	flag.Parse(args)
 
+	log.Default().SetOutput(io.Discard)
+
 	return deployment_public.PrintList(deployment_public.PrintListSettings{
 		Unit:        *unit,
 		ServiceUnit: *unit,
@@ -229,12 +287,16 @@ func cmd_deployment_inspect(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
 	flag.Parse(args)
 
+	log.Default().SetOutput(io.Discard)
+
 	return deployment_public.PrintInspect(flag.Args()...)
 }
 
 func cmd_deployment_unit(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
 	flag.Parse(args)
+
+	log.Default().SetOutput(io.Discard)
 
 	ids := flag.Args()
 	if len(ids) == 0 {
@@ -254,6 +316,8 @@ func cmd_deployment_unit(usage func(), name []string, args []string) error {
 func cmd_deployment_status(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
 	flag.Parse(args)
+
+	log.Default().SetOutput(io.Discard)
 
 	ids := flag.Args()
 	if len(ids) == 0 {

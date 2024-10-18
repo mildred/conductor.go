@@ -7,7 +7,6 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"path"
 	"time"
 
 	"github.com/coreos/go-systemd/v22/daemon"
@@ -25,11 +24,10 @@ import (
 // Note for services: a linked proxy config is set up when the service itself is
 // enabled. The service depends on this proxy config
 
-func StartOrRestart(restart bool) error {
+func StartOrRestart(restart bool, service_name string) error {
 	var prefix string = "start"
 	var err error
 	var ctx = context.Background()
-	var dir = "."
 
 	//
 	// [restart] Notify systemd reload in progress
@@ -60,7 +58,7 @@ func StartOrRestart(restart bool) error {
 	// Fetch service config
 	//
 
-	service, err := LoadServiceAndFillDefaults(path.Join(dir, ConfigName), true)
+	service, err := LoadServiceByName(service_name)
 	if err != nil {
 		return err
 	}
@@ -68,6 +66,8 @@ func StartOrRestart(restart bool) error {
 	//
 	// Find or create a suitable deployment
 	//
+
+	log.Printf("%s: Loaded service, find new or existing deployments...\n", prefix)
 
 	depl, depl_status, err := deployment_util.StartNewOrExistingFromService(ctx, service)
 	if err != nil {
@@ -160,9 +160,7 @@ func StartOrRestart(restart bool) error {
 	return err
 }
 
-func Stop() error {
-	var dir = "."
-
+func Stop(service_name string) error {
 	//
 	// Notify stop in progress
 	//
@@ -176,7 +174,7 @@ func Stop() error {
 	// Fetch service config
 	//
 
-	service, err := LoadServiceAndFillDefaults(path.Join(dir, ConfigName), true)
+	service, err := LoadServiceByName(service_name)
 	if err != nil {
 		return err
 	}
@@ -204,7 +202,7 @@ func Stop() error {
 	return nil
 }
 
-func Cleanup() error {
+func Cleanup(service_name string) error {
 	//
 	// Remove temp files if there is any
 	//
@@ -217,8 +215,8 @@ func Cleanup() error {
 
 var LookupPaths []string = dirs.MultiJoin("services", append(append([]string{dirs.SelfRuntimeDir}, dirs.SelfConfigDirs...), dirs.SelfDataDirs...)...)
 
-func CaddyRegister(register bool, dir string) error {
-	service, err := LoadServiceAndFillDefaults(path.Join(dir, ConfigName), true)
+func CaddyRegister(register bool, service_name string) error {
+	service, err := LoadServiceByName(service_name)
 	if err != nil {
 		return err
 	}

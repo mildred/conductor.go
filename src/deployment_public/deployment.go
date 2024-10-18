@@ -56,7 +56,7 @@ func PrintList(settings PrintListSettings) error {
 			}
 		}
 
-		service, err := service.LoadServiceDir(depl.ServiceDir, true)
+		service, err := service.LoadServiceDir(depl.ServiceDir)
 		if err != nil {
 			return err
 		}

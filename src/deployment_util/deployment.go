@@ -82,8 +82,10 @@ func StartNewOrExistingFromService(ctx context.Context, svc *service.Service) (*
 	//
 
 	if len(started_deployments) > 0 {
+		log.Printf("found started deployment %q", started_deployments[0])
 		return started_deployments[0], "started", nil
 	} else if len(starting_deployments) > 0 {
+		log.Printf("found starting deployment %q", started_deployments[0])
 		return starting_deployments[0], "starting", nil
 	} else {
 
@@ -93,18 +95,24 @@ func StartNewOrExistingFromService(ctx context.Context, svc *service.Service) (*
 
 		var name string
 		var i = 1
-		for {
+		for i < 1000 {
 			name = fmt.Sprintf("%s-%s-%d", svc.AppName, svc.InstanceName, i)
-			_, sterr := os.Stat(path.Join(DeploymentRunDir, name))
-			if err != nil && !os.IsNotExist(sterr) {
+			log.Printf("Trying new deployment name %s", name)
+			_, err := os.Stat(path.Join(DeploymentRunDir, name))
+			if err != nil && !os.IsNotExist(err) {
 				return nil, "", err
 			} else if err == nil {
 				// the deployment exists, try next integer
 				i = i + 1
+				name = ""
 				continue
 			} else {
 				break
 			}
+		}
+
+		if name == "" {
+			return nil, "", fmt.Errorf("Failed to find free deployment name")
 		}
 
 		log.Printf("Create a new deployment %s from %s", name, svc.BasePath)
