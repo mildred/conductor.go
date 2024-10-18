@@ -6,14 +6,16 @@ import (
 	"os"
 	"strings"
 
-	"github.com/mildred/conductor.go/src/deployment"
+	"github.com/mildred/conductor.go/src/deployment_internal"
+	"github.com/mildred/conductor.go/src/deployment_public"
 	"github.com/mildred/conductor.go/src/install"
-	"github.com/mildred/conductor.go/src/service"
+	"github.com/mildred/conductor.go/src/service_internal"
+	"github.com/mildred/conductor.go/src/service_public"
 )
 
 var version = "dev"
 
-func service_start(usage func(), name []string, args []string) error {
+func private_service_start(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, func() {
 		usage()
 		fmt.Fprintf(flag.CommandLine.Output(), "\n"+
@@ -23,58 +25,58 @@ func service_start(usage func(), name []string, args []string) error {
 	})
 	flag.Parse(args)
 
-	return service.StartOrRestart()
+	return service_internal.StartOrRestart(false)
 }
 
-func service_restart(usage func(), name []string, args []string) error {
+func private_service_restart(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
 	flag.Parse(args)
 
-	return service.StartOrRestart()
+	return service_internal.StartOrRestart(true)
 }
 
-func service_stop(usage func(), name []string, args []string) error {
+func private_service_stop(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
 	flag.Parse(args)
 
-	return service.Stop()
+	return service_internal.Stop()
 }
 
-func service_cleanup(usage func(), name []string, args []string) error {
+func private_service_cleanup(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
 	flag.Parse(args)
 
-	return service.Cleanup()
+	return service_internal.Cleanup()
 }
 
-func service_register(usage func(), name []string, args []string) error {
+func private_service_register(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
 	flag.Parse(args)
 
-	return service.CaddyRegister(true, ".")
+	return service_internal.CaddyRegister(true, ".")
 }
 
-func service_deregister(usage func(), name []string, args []string) error {
+func private_service_deregister(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
 	flag.Parse(args)
 
-	return service.CaddyRegister(false, ".")
+	return service_internal.CaddyRegister(false, ".")
 }
 
 func private_service(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
 
 	return run_subcommand(name, args, flag, map[string]Subcommand{
-		"start":      {service_start, "", "Start a service"},
-		"restart":    {service_restart, "", "Restart a service"},
-		"stop":       {service_stop, "", "Stop a service"},
-		"cleanup":    {service_cleanup, "", "Clean up service after it has stopped"},
-		"register":   {service_register, "", "Register service to load balancer"},
-		"deregister": {service_deregister, "", "Deregister service from load balancer"},
+		"start":      {private_service_start, "", "Start a service"},
+		"restart":    {private_service_restart, "", "Restart a service"},
+		"stop":       {private_service_stop, "", "Stop a service"},
+		"cleanup":    {private_service_cleanup, "", "Clean up service after it has stopped"},
+		"register":   {private_service_register, "", "Register service to load balancer"},
+		"deregister": {private_service_deregister, "", "Deregister service from load balancer"},
 	})
 }
 
-func service_declare(usage func(), name []string, args []string) error {
+func service_start(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
 	flag.Parse(args)
 
@@ -82,69 +84,69 @@ func service_declare(usage func(), name []string, args []string) error {
 		return fmt.Errorf("Command %s must take a single service definition as argument", strings.Join(name, " "))
 	}
 
-	return service.Declare(flag.Arg(0))
+	return service_public.Start(flag.Arg(0))
 }
 
 func cmd_service(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
 
 	return run_subcommand(name, args, flag, map[string]Subcommand{
-		"declare": {service_declare, "", "Declare a service"},
+		"start": {service_start, "", "Declare and start a service"},
 	})
 }
 
-func deployment_prepare(usage func(), name []string, args []string) error {
+func private_deployment_prepare(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
 	flag.Parse(args)
 
-	return deployment.Prepare()
+	return deployment_internal.Prepare()
 }
 
-func deployment_start(usage func(), name []string, args []string) error {
+func private_deployment_start(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
 	flag.Parse(args)
 
-	return deployment.Start()
+	return deployment_internal.Start()
 }
 
-func deployment_stop(usage func(), name []string, args []string) error {
+func private_deployment_stop(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
 	flag.Parse(args)
 
-	return deployment.Stop()
+	return deployment_internal.Stop()
 }
 
-func deployment_cleanup(usage func(), name []string, args []string) error {
+func private_deployment_cleanup(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
 	flag.Parse(args)
 
-	return deployment.Cleanup()
+	return deployment_internal.Cleanup()
 }
 
-func deployment_register(usage func(), name []string, args []string) error {
+func private_deployment_register(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
 	flag.Parse(args)
 
-	return deployment.CaddyRegister(true, ".")
+	return deployment_internal.CaddyRegister(true, ".")
 }
 
-func deployment_deregister(usage func(), name []string, args []string) error {
+func private_deployment_deregister(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
 	flag.Parse(args)
 
-	return deployment.CaddyRegister(false, ".")
+	return deployment_internal.CaddyRegister(false, ".")
 }
 
 func private_deployment(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
 
 	return run_subcommand(name, args, flag, map[string]Subcommand{
-		"prepare":    {deployment_prepare, "", "Prepare a deployment before starting it"},
-		"start":      {deployment_start, "", "Start a deployment"},
-		"stop":       {deployment_stop, "", "Stop a deployment"},
-		"cleanup":    {deployment_cleanup, "", "Clean up deployment after it has stopped"},
-		"register":   {deployment_register, "", "Register deployment to load balancer"},
-		"deregister": {deployment_deregister, "", "Deregister deployment from load balancer"},
+		"prepare":    {private_deployment_prepare, "", "Prepare a deployment before starting it"},
+		"start":      {private_deployment_start, "", "Start a deployment"},
+		"stop":       {private_deployment_stop, "", "Stop a deployment"},
+		"cleanup":    {private_deployment_cleanup, "", "Clean up deployment after it has stopped"},
+		"register":   {private_deployment_register, "", "Register deployment to load balancer"},
+		"deregister": {private_deployment_deregister, "", "Deregister deployment from load balancer"},
 	})
 }
 
@@ -152,14 +154,14 @@ func cmd_deployment_ls(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
 	flag.Parse(args)
 
-	return deployment.PrintList()
+	return deployment_public.PrintList()
 }
 
 func cmd_deployment_inspect(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
 	flag.Parse(args)
 
-	return deployment.PrintInspect(flag.Args()...)
+	return deployment_public.PrintInspect(flag.Args()...)
 }
 
 func cmd_deployment(usage func(), name []string, args []string) error {
@@ -188,7 +190,7 @@ func cmd_reload(usage func(), name []string, args []string) error {
 	})
 	flag.Parse(args)
 
-	return service.Reload()
+	return service_public.Reload()
 }
 
 func cmd_system_install(usage func(), name []string, args []string) error {

@@ -1,4 +1,4 @@
-package deployment
+package deployment_internal
 
 import (
 	"encoding/json"
@@ -12,8 +12,9 @@ import (
 	"github.com/coreos/go-systemd/v22/unit"
 
 	"github.com/mildred/conductor.go/src/caddy"
-	"github.com/mildred/conductor.go/src/dirs"
 	"github.com/mildred/conductor.go/src/tmpl"
+
+	. "github.com/mildred/conductor.go/src/deployment"
 )
 
 // Note for deployment hooks, there could be different ways to hook:
@@ -24,8 +25,6 @@ import (
 // already scoped in the podman pod.
 //
 // - or as a HTTP query to the pod IP address with a retry mechanism
-
-var DeploymentRunDir = dirs.Join(dirs.SelfRuntimeDir, "deployments")
 
 func Prepare() error {
 	cwd, err := os.Getwd()

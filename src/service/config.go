@@ -9,6 +9,10 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"golang.org/x/crypto/sha3"
+
+	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
 )
 
 type PartialService struct {
@@ -32,6 +36,7 @@ type CaddyConfig struct {
 
 type Service struct {
 	BasePath            string
+	Id                  string
 	AppName             string            `json:"app_name",omitempty`              // my-app
 	InstanceName        string            `json:"instance_name",omitempty`         // staging
 	Config              map[string]string `json:"config",omitempty`                // key-value pairs for config and templating, CHANNEL=staging
@@ -51,6 +56,11 @@ func LoadServiceAndFillDefaults(path string, fix_paths bool) (*Service, error) {
 	}
 
 	err = service.FillDefaults()
+	if err != nil {
+		return nil, err
+	}
+
+	err = service.ComputeId()
 	if err != nil {
 		return nil, err
 	}
@@ -177,6 +187,33 @@ func (service *Service) FillDefaults() error {
 	if service.CaddyLoadBalancer.ApiEndpoint == "" {
 		service.CaddyLoadBalancer.ApiEndpoint = "http://localhost:2019"
 	}
+	return nil
+}
+
+func (service *Service) ComputeId() error {
+	data, err := json.Marshal(service)
+	if err != nil {
+		return err
+	}
+
+	canon, err := jsoncanonicalizer.Transform(data)
+	if err != nil {
+		return err
+	}
+
+	shake := sha3.NewShake256()
+	_, err = shake.Write(canon)
+	if err != nil {
+		return err
+	}
+
+	output := make([]byte, 16)
+	_, err = shake.Read(output)
+	if err != nil {
+		return err
+	}
+
+	service.Id = fmt.Sprintf("%x", output)
 	return nil
 }
 

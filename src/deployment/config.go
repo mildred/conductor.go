@@ -10,15 +10,20 @@ import (
 	"time"
 
 	"github.com/gandarez/go-realpath"
+
+	"github.com/mildred/conductor.go/src/dirs"
 	"github.com/mildred/conductor.go/src/service"
 	"github.com/mildred/conductor.go/src/tmpl"
 )
 
 const ConfigName = "conductor-deployment.json"
 
+var DeploymentRunDir = dirs.Join(dirs.SelfRuntimeDir, "deployments")
+
 type Deployment struct {
 	*service.Service
 	ServiceDir           string          `json:"service_dir"`
+	ServiceId            string          `json:"service_id"`
 	DeploymentName       string          `json:"conductor_deployment"`
 	PodName              string          `json:"pod_name"`
 	TemplatedPod         string          `json:"templated_pod"`
@@ -32,6 +37,7 @@ func NewDeploymentFromService(service *service.Service, deployment_name string) 
 	return &Deployment{
 		Service:              service,
 		ServiceDir:           service.BasePath,
+		ServiceId:            service.Id,
 		DeploymentName:       deployment_name,
 		PodName:              "conductor-" + deployment_name,
 		TemplatedPod:         "",
@@ -134,7 +140,8 @@ func LoadDeployment(fname string) (*Deployment, error) {
 	res := &Deployment{}
 	err = json.NewDecoder(f).Decode(res)
 
-	res.BasePath = res.ServiceDir
+	res.Service.BasePath = res.ServiceDir
+	res.Service.Id = res.ServiceId
 
 	log.Printf("Loaded deployment %s, service %s-%s\n", res.DeploymentName, res.AppName, res.InstanceName)
 	return res, err

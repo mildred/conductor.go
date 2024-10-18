@@ -1,10 +1,20 @@
 [Unit]
-Description=Register Conductor service at %f
+Description=Conductor service %f
+Wants=condictor-service-config-config@%f.service
 
 [Service]
-Type=oneshot
-ExecStart=/usr/local/bin/conductor service declare %f
-RemainAfterExit=true
+WorkingDirectory=%f
+TimeoutStartSec=0
+Restart=always
+Type=notify-reload
+NotifyAccess=all
+TimeoutSec=300
+# RemainAfterExit=yes
+
+ExecStart=/usr/local/bin/conductor _ service start
+ExecReload=/usr/local/bin/conductor _ service restart
+ExecStop=/usr/local/bin/conductor _ service stop
+ExecStopPost=/usr/local/bin/conductor _ service cleanup
 
 [Install]
 WantedBy=multi-user.target
