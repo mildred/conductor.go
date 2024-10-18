@@ -96,12 +96,20 @@ func cmd_service_inspect(usage func(), name []string, args []string) error {
 	return service_public.PrintInspect(!*original_paths, flag.Args()...)
 }
 
+func cmd_service_ls(usage func(), name []string, args []string) error {
+	flag := new_flag_set(name, usage)
+	flag.Parse(args)
+
+	return service_public.PrintList()
+}
+
 func cmd_service(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
 
 	return run_subcommand(name, args, flag, map[string]Subcommand{
 		"start":   {cmd_service_start, "", "Declare and start a service"},
 		"inspect": {cmd_service_inspect, "", "Inspect a service in current directory or on the command-line"},
+		"ls":      {cmd_service_ls, "", "List all services"},
 	})
 }
 
