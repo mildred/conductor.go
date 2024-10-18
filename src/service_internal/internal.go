@@ -1,10 +1,13 @@
 package service_internal
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
+	"os/exec"
 	"path"
+	"time"
 
 	"github.com/coreos/go-systemd/v22/daemon"
 
@@ -12,6 +15,8 @@ import (
 	"github.com/mildred/conductor.go/src/dirs"
 	"github.com/mildred/conductor.go/src/tmpl"
 
+	"github.com/mildred/conductor.go/src/deployment_public"
+	"github.com/mildred/conductor.go/src/deployment_util"
 	. "github.com/mildred/conductor.go/src/service"
 )
 
@@ -21,6 +26,8 @@ import (
 func StartOrRestart(restart bool) error {
 	var prefix string = "start"
 	var err error
+	var ctx = context.Background()
+	var dir = "."
 
 	//
 	// [restart] Notify systemd reload in progress
@@ -48,29 +55,62 @@ func StartOrRestart(restart bool) error {
 	}
 
 	//
-	// if there is a deployment starting or started with the identical config,
-	// use it and wait for it to be started, else:
-	//
-	//     find a free deployment Name
-	//
-	//     copy all the current service config over to the deployment, it should
-	//     appear in the list
-	//
-	//     start the deployment, wait for started
-	//
-	// [ if restarting ] if failing to start, exit uncleanly
-	// [ if starting ] if failing, stop all deployments and exit uncleanly
+	// Fetch service config
 	//
 
-	log.Printf("%s: Starting new deployment...\n", prefix)
-	// TODO
+	service, err := LoadServiceAndFillDefaults(path.Join(dir, ConfigName), true)
+	if err != nil {
+		return err
+	}
+
+	//
+	// Find or create a suitable deployment
+	//
+
+	depl, depl_status, err := deployment_util.StartNewOrExistingFromService(ctx, service)
+	if err != nil {
+		return err
+	}
+
+	if depl_status == "started" {
+		log.Printf("%s: Found started deployment %s", prefix, depl.DeploymentName)
+	} else if depl_status == "starting" {
+		log.Printf("%s: Found starting deployment %s, waiting to be started...", prefix, depl.DeploymentName)
+		err = exec.Command("systemctl", "start", fmt.Sprintf("conductor-deployment@%s.service", depl.DeploymentName)).Run()
+		if err != nil {
+			return err
+		}
+	} else {
+		log.Printf("%s: Starting new deployment %s...", prefix, depl.DeploymentName)
+		err = exec.Command("systemctl", "start", fmt.Sprintf("conductor-deployment@%s.service", depl.DeploymentName)).Run()
+		if err != nil {
+			return err
+		}
+	}
+
+	//
+	// TODO [ if restarting ] if failing to start, exit uncleanly
+	// TODO [ if starting ] if failing, stop all deployments and exit uncleanly
+	//
 
 	//
 	// Stop all deployments that are of older config version
 	//
 
 	log.Printf("%s: Stopping obsolete deployments...\n", prefix)
-	// TODO
+
+	deployments, err := deployment_util.List()
+	if err != nil {
+		return err
+	}
+
+	for _, d := range deployments {
+		if d.ServiceDir != service.BasePath || d.DeploymentName == depl.DeploymentName {
+			continue
+		}
+		log.Printf("%s: Stopping deployment %s...\n", prefix, d.DeploymentName)
+		deployment_public.Stop(d.DeploymentName)
+	}
 
 	//
 	// Notify systemd ready
@@ -91,13 +131,34 @@ func StartOrRestart(restart bool) error {
 		// (exit with an error if a deployment is missing)
 		//
 
-		// TODO
+		for {
+			deployments, err := deployment_util.List()
+			if err != nil {
+				return err
+			}
+
+			found := false
+			for _, d := range deployments {
+				if d.ServiceDir == service.BasePath && d.DeploymentName == depl.DeploymentName {
+					found = true
+					break
+				}
+			}
+
+			if !found {
+				return fmt.Errorf("Deployment has gone missing")
+			}
+
+			time.Sleep(30 * time.Second)
+		}
 
 	}
 	return err
 }
 
 func Stop() error {
+	var dir = "."
+
 	//
 	// Notify stop in progress
 	//
@@ -108,11 +169,32 @@ func Stop() error {
 	}
 
 	//
+	// Fetch service config
+	//
+
+	service, err := LoadServiceAndFillDefaults(path.Join(dir, ConfigName), true)
+	if err != nil {
+		return err
+	}
+
+	//
 	// Stop all deployments
 	//
 
 	log.Printf("stop: Stopping all deployments...\n")
-	// TODO
+
+	deployments, err := deployment_util.List()
+	if err != nil {
+		return err
+	}
+
+	for _, d := range deployments {
+		if d.ServiceDir != service.BasePath {
+			continue
+		}
+		log.Printf("stop: Stopping deployment %s...\n", d.DeploymentName)
+		deployment_public.Stop(d.DeploymentName)
+	}
 
 	log.Printf("stop: Stop sequence completed\n")
 	return nil

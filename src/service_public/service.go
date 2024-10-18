@@ -10,7 +10,7 @@ import (
 
 func Reload() error {
 	// TODO: reload services in well-known dirs
-	return nil
+	return fmt.Errorf("Not yet implemented")
 }
 
 func Start(definition_path string) error {
