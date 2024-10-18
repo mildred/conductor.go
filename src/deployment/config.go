@@ -27,6 +27,10 @@ func DeploymentConfigUnit(name string) string {
 	return fmt.Sprintf("conductor-deployment-config@%s.service", name)
 }
 
+func DeploymentDirByName(name string) string {
+	return path.Join(DeploymentRunDir, name)
+}
+
 type Deployment struct {
 	*service.Service
 	ServiceDir           string          `json:"service_dir"`
@@ -166,20 +170,26 @@ func (depl *Deployment) StartStopPod(start bool, dir string) error {
 		return err
 	}
 
+	var args []string
 	if start {
-		return exec.Command("podman", utils.Compact("kube", "play",
+		args = utils.Compact("kube", "play",
 			"--replace",
 			configmap_flag,
 			"--annotation="+fmt.Sprintf("conductor_deployment=%s", depl.DeploymentName),
 			"--annotation="+fmt.Sprintf("conductor_instance=%s", depl.InstanceName),
 			"--annotation="+fmt.Sprintf("conductor_app=%s", depl.AppName),
 			"--log-driver=journald",
-			path.Join(dir, "pod.yml"))...).Run()
+			path.Join(dir, "pod.yml"))
 	} else {
-		return exec.Command("podman", utils.Compact("kube", "down",
+		args = utils.Compact("kube", "down",
 			configmap_flag,
-			path.Join(dir, "pod.yml"))...).Run()
+			path.Join(dir, "pod.yml"))
 	}
+	fmt.Fprintf(os.Stderr, "+ podman %q\n", args)
+	cmd := exec.Command("podman", args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
 
 func (depl *Deployment) FindPodIPAddress() (string, error) {

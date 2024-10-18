@@ -145,10 +145,35 @@ func PrintInspect(deployments ...string) error {
 
 func Stop(deployment_name string) error {
 	fmt.Fprintf(os.Stderr, "+ systemctl stop %q\n", DeploymentUnit(deployment_name))
-	return exec.Command("systemctl", "stop", DeploymentUnit(deployment_name)).Run()
+	cmd := exec.Command("systemctl", "stop", DeploymentUnit(deployment_name))
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+func Remove(deployment_name string) error {
+	fmt.Fprintf(os.Stderr, "+ systemctl stop %q\n", DeploymentUnit(deployment_name))
+	cmd := exec.Command("systemctl", "stop", DeploymentUnit(deployment_name))
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	err := cmd.Run()
+	if err != nil {
+		return err
+	}
+
+	fmt.Fprintf(os.Stderr, "+ rm -rf %q\n", DeploymentDirByName(deployment_name))
+	err = os.RemoveAll(DeploymentDirByName(deployment_name))
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func Start(deployment_name string) error {
 	fmt.Fprintf(os.Stderr, "+ systemctl start %q\n", DeploymentUnit(deployment_name))
-	return exec.Command("systemctl", "start", DeploymentUnit(deployment_name)).Run()
+	cmd := exec.Command("systemctl", "start", DeploymentUnit(deployment_name))
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }

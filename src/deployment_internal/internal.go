@@ -130,6 +130,8 @@ func Start() error {
 	log.Printf("start: Adding deployment to load-balancer...\n")
 	fmt.Fprintf(os.Stderr, "+ systemctl start %q\n", DeploymentConfigUnit(depl.DeploymentName))
 	cmd := exec.Command("systemctl", "start", DeploymentConfigUnit(depl.DeploymentName))
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 	err = cmd.Run()
 	if err != nil {
 		return err
@@ -186,6 +188,8 @@ func Stop() error {
 	log.Printf("stop: Removing deployment from load-balancer...\n")
 	fmt.Fprintf(os.Stderr, "+ systemctl stop %q\n", DeploymentConfigUnit(depl.DeploymentName))
 	cmd := exec.Command("systemctl", "stop", DeploymentConfigUnit(depl.DeploymentName))
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 	err = cmd.Run()
 	if err != nil {
 		return err
@@ -234,17 +238,8 @@ func Cleanup() error {
 	// Remove deployment files
 	//
 
-	err = os.Chdir("/")
-	if err != nil {
-		return err
-	}
-
-	err = os.RemoveAll(cwd)
-	if err != nil {
-		return err
-	}
-
-	log.Printf("cleanup: Cleanup sequence completed\n", cwd)
+	log.Printf("cleanup: Files left behind in %q\n", cwd)
+	log.Printf("cleanup: Cleanup sequence completed (deployment removal is up to the service)\n")
 	return nil
 }
 
@@ -280,7 +275,10 @@ func CaddyRegister(register bool, dir string) error {
 		log.Printf("register: Ensure the service config %s is registered", unit_name)
 
 		fmt.Fprintf(os.Stderr, "+ systemctl start %q\n", unit_name)
-		err = exec.Command("systemctl", "start", unit_name).Run()
+		cmd := exec.Command("systemctl", "start", unit_name)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		err = cmd.Run()
 		if err != nil {
 			return err
 		}

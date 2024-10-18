@@ -76,7 +76,10 @@ func Reload(inclusive bool) error {
 
 	for _, unit := range stop_list {
 		fmt.Fprintf(os.Stderr, "+ systemctl disable --now %q\n", unit)
-		err = exec.Command("systemctl", "disable", "--now", unit).Run()
+		cmd := exec.Command("systemctl", "disable", "--now", unit)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		err = cmd.Run()
 		if err != nil {
 			return err
 		}
@@ -84,7 +87,10 @@ func Reload(inclusive bool) error {
 
 	for _, unit := range start_list {
 		fmt.Fprintf(os.Stderr, "+ systemctl enable --now %q\n", unit)
-		err = exec.Command("systemctl", "enable", "--now", unit).Run()
+		cmd := exec.Command("systemctl", "enable", "--now", unit)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		err = cmd.Run()
 		if err != nil {
 			return err
 		}
@@ -100,7 +106,10 @@ func Start(definition_path string) error {
 	}
 
 	fmt.Fprintf(os.Stderr, "+ systemctl start %q\n", unit)
-	return exec.Command("systemctl", "start", unit).Run()
+	cmd := exec.Command("systemctl", "start", unit)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
 
 func Stop(definition_path string) error {
@@ -110,7 +119,10 @@ func Stop(definition_path string) error {
 	}
 
 	fmt.Fprintf(os.Stderr, "+ systemctl stop %q\n", unit)
-	return exec.Command("systemctl", "stop", unit).Run()
+	cmd := exec.Command("systemctl", "stop", unit)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
 
 func Restart(definition_path string) error {
@@ -120,7 +132,10 @@ func Restart(definition_path string) error {
 	}
 
 	fmt.Fprintf(os.Stderr, "+ systemctl restart %q\n", unit)
-	return exec.Command("systemctl", "restart", unit).Run()
+	cmd := exec.Command("systemctl", "restart", unit)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
 
 type PrintListSettings struct {

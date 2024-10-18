@@ -29,24 +29,26 @@ func private_service_start(usage func(), name []string, args []string) error {
 			"correct configuration or by starting a new deployment. Once the\n"+
 			"deployment is started, old deployments for the service are stopped.\n\n")
 	})
+	max_deployment_index := flag.Int("max-deployment-index", 10, "Service will fail to deploy if it cannot find a deployment number below this")
 	flag.Parse(args)
 
 	if flag.NArg() != 1 {
 		return fmt.Errorf("Command %s must take a single service definition as argument", strings.Join(name, " "))
 	}
 
-	return service_internal.StartOrRestart(false, flag.Arg(0))
+	return service_internal.StartOrRestart(false, flag.Arg(0), *max_deployment_index)
 }
 
 func private_service_restart(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
+	max_deployment_index := flag.Int("max-deployment-index", 10, "Service will fail to deploy if it cannot find a deployment number below this")
 	flag.Parse(args)
 
 	if flag.NArg() != 1 {
 		return fmt.Errorf("Command %s must take a single service definition as argument", strings.Join(name, " "))
 	}
 
-	return service_internal.StartOrRestart(true, flag.Arg(0))
+	return service_internal.StartOrRestart(true, flag.Arg(0), *max_deployment_index)
 }
 
 func private_service_stop(usage func(), name []string, args []string) error {
@@ -283,6 +285,21 @@ func cmd_deployment_ls(usage func(), name []string, args []string) error {
 	})
 }
 
+func cmd_deployment_rm(usage func(), name []string, args []string) error {
+	flag := new_flag_set(name, usage)
+	flag.Parse(args)
+
+	log.Default().SetOutput(io.Discard)
+
+	for _, arg := range flag.Args() {
+		err := deployment_public.Remove(arg)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func cmd_deployment_inspect(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
 	flag.Parse(args)
@@ -346,9 +363,10 @@ func cmd_deployment(usage func(), name []string, args []string) error {
 
 	return run_subcommand(name, args, flag, map[string]Subcommand{
 		"ls":      {cmd_deployment_ls, "", "List all deployments"},
-		"inspect": {cmd_deployment_inspect, "", "Inspect deployment in current directory or on the command-line"},
-		"status":  {cmd_deployment_status, "", "Status from systemctl"},
-		"unit":    {cmd_deployment_unit, "", "Print systemd unit"},
+		"rm":      {cmd_deployment_rm, "[DEPLOYMENT...]", "Remove a deployment"},
+		"inspect": {cmd_deployment_inspect, "[DEPLOYMENT...]", "Inspect deployment in current directory or on the command-line"},
+		"status":  {cmd_deployment_status, "[DEPLOYMENT...]", "Status from systemctl"},
+		"unit":    {cmd_deployment_unit, "[DEPLOYMENT...]", "Print systemd unit"},
 	})
 }
 

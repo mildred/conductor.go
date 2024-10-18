@@ -33,7 +33,10 @@ func Install(destdir string) error {
 	}
 
 	fmt.Fprintf(os.Stderr, "+ systemctl daemon-reload\n")
-	err = exec.Command("systemctl", "daemon-reload").Run()
+	cmd := exec.Command("systemctl", "daemon-reload")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	err = cmd.Run()
 	if err != nil {
 		return err
 	}
@@ -61,7 +64,10 @@ func Uninstall(destdir string) error {
 	}
 
 	fmt.Fprintf(os.Stderr, "+ systemctl daemon-reload\n")
-	err = exec.Command("systemctl", "daemon-reload").Run()
+	cmd := exec.Command("systemctl", "daemon-reload")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	err = cmd.Run()
 	if err != nil {
 		return err
 	}

@@ -24,7 +24,7 @@ import (
 // Note for services: a linked proxy config is set up when the service itself is
 // enabled. The service depends on this proxy config
 
-func StartOrRestart(restart bool, service_name string) error {
+func StartOrRestart(restart bool, service_name string, max_deployment_index int) error {
 	var prefix string = "start"
 	var err error
 	var ctx = context.Background()
@@ -69,24 +69,30 @@ func StartOrRestart(restart bool, service_name string) error {
 
 	log.Printf("%s: Loaded service, find new or existing deployments...\n", prefix)
 
-	depl, depl_status, err := deployment_util.StartNewOrExistingFromService(ctx, service)
+	depl, depl_status, err := deployment_util.StartNewOrExistingFromService(ctx, service, max_deployment_index)
 	if err != nil {
 		return err
 	}
 
-	if depl_status == "started" {
+	if depl_status == "active" {
 		log.Printf("%s: Found started deployment %s", prefix, depl.DeploymentName)
-	} else if depl_status == "starting" {
-		log.Printf("%s: Found starting deployment %s, waiting to be started...", prefix, depl.DeploymentName)
-		fmt.Fprintf(os.Stderr, "+ systemctl start %q\n", prefix, deployment.DeploymentUnit(depl.DeploymentName))
-		err = exec.Command("systemctl", "start", deployment.DeploymentUnit(depl.DeploymentName)).Run()
+	} else if depl_status == "activating" || depl_status == "inactive" {
+		log.Printf("%s: Found %s deployment %s, waiting to be started...", prefix, depl_status, depl.DeploymentName)
+		fmt.Fprintf(os.Stderr, "+ systemctl start %q\n", deployment.DeploymentUnit(depl.DeploymentName))
+		cmd := exec.Command("systemctl", "start", deployment.DeploymentUnit(depl.DeploymentName))
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		err = cmd.Run()
 		if err != nil {
 			return err
 		}
 	} else {
 		log.Printf("%s: Starting new deployment %s...", prefix, depl.DeploymentName)
-		fmt.Fprintf(os.Stderr, "+ systemctl start %q\n", prefix, deployment.DeploymentUnit(depl.DeploymentName))
-		err = exec.Command("systemctl", "start", deployment.DeploymentUnit(depl.DeploymentName)).Run()
+		fmt.Fprintf(os.Stderr, "+ systemctl start %q\n", deployment.DeploymentUnit(depl.DeploymentName))
+		cmd := exec.Command("systemctl", "start", deployment.DeploymentUnit(depl.DeploymentName))
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		err = cmd.Run()
 		if err != nil {
 			return err
 		}
@@ -101,7 +107,7 @@ func StartOrRestart(restart bool, service_name string) error {
 	// Stop all deployments that are of older config version
 	//
 
-	log.Printf("%s: Stopping obsolete deployments...\n", prefix)
+	log.Printf("%s: Removing obsolete deployments...\n", prefix)
 
 	deployments, err := deployment_util.List()
 	if err != nil {
@@ -112,8 +118,11 @@ func StartOrRestart(restart bool, service_name string) error {
 		if d.ServiceDir != service.BasePath || d.DeploymentName == depl.DeploymentName {
 			continue
 		}
-		log.Printf("%s: Stopping deployment %s...\n", prefix, d.DeploymentName)
-		deployment_public.Stop(d.DeploymentName)
+		log.Printf("%s: Removing deployment %s...\n", prefix, d.DeploymentName)
+		err = deployment_public.Remove(d.DeploymentName)
+		if err != nil {
+			log.Printf("%s: ERROR removing deployment %s (but continuing): %v", prefix, d.DeploymentName, err)
+		}
 	}
 
 	//

@@ -32,7 +32,7 @@ func List() ([]*Deployment, error) {
 	return res, nil
 }
 
-func StartNewOrExistingFromService(ctx context.Context, svc *service.Service) (*Deployment, string, error) {
+func StartNewOrExistingFromService(ctx context.Context, svc *service.Service, max_deployment_index int) (*Deployment, string, error) {
 	sd, err := dbus.NewWithContext(ctx)
 	if err != nil {
 		return nil, "", err
@@ -40,6 +40,7 @@ func StartNewOrExistingFromService(ctx context.Context, svc *service.Service) (*
 
 	var started_deployments []*Deployment
 	var starting_deployments []*Deployment
+	var stopped_deployments []*Deployment
 	var deployment_units []string
 	deployments, err := List()
 	if err != nil {
@@ -59,7 +60,17 @@ func StartNewOrExistingFromService(ctx context.Context, svc *service.Service) (*
 	}
 
 	for _, depl := range deployments {
-		if depl.ServiceDir != svc.BasePath || depl.ServiceId != svc.Id {
+		should_match := depl.AppName == svc.AppName && depl.InstanceName == svc.InstanceName
+		if depl.ServiceDir != svc.BasePath {
+			if should_match {
+				log.Printf("Deployment %s do not match (service %q != %q)", depl.DeploymentName, depl.ServiceDir, svc.BasePath)
+			}
+			continue
+		}
+		if depl.ServiceId != svc.Id {
+			if should_match {
+				log.Printf("Deployment %s do not match (id %q != %q)", depl.DeploymentName, depl.ServiceId, svc.Id)
+			}
 			continue
 		}
 		var stat dbus.UnitStatus
@@ -69,11 +80,18 @@ func StartNewOrExistingFromService(ctx context.Context, svc *service.Service) (*
 				break
 			}
 		}
-		if stat.Name == "started" {
+		if stat.ActiveState == "active" {
 			started_deployments = append(started_deployments, depl)
-		} else if stat.Name == "starting" {
+		} else if stat.ActiveState == "activating" {
 			starting_deployments = append(starting_deployments, depl)
+		} else if stat.ActiveState == "inactive" {
+			stopped_deployments = append(stopped_deployments, depl)
+		} else {
+			log.Printf("Deployment %s do not match (state is %s / %s)", depl.DeploymentName, stat.ActiveState, stat.SubState)
+			continue
 		}
+
+		log.Printf("Deployment %s (%s / %s) is considered to reuse", depl.DeploymentName, stat.ActiveState, stat.SubState)
 	}
 
 	//
@@ -82,11 +100,14 @@ func StartNewOrExistingFromService(ctx context.Context, svc *service.Service) (*
 	//
 
 	if len(started_deployments) > 0 {
-		log.Printf("found started deployment %q", started_deployments[0])
-		return started_deployments[0], "started", nil
+		log.Printf("found started deployment %q", started_deployments[0].DeploymentName)
+		return started_deployments[0], "active", nil
 	} else if len(starting_deployments) > 0 {
-		log.Printf("found starting deployment %q", started_deployments[0])
-		return starting_deployments[0], "starting", nil
+		log.Printf("found starting deployment %q", starting_deployments[0].DeploymentName)
+		return starting_deployments[0], "activating", nil
+	} else if len(stopped_deployments) > 0 {
+		log.Printf("found stopped deployment %q", stopped_deployments[0].DeploymentName)
+		return stopped_deployments[0], "inactive", nil
 	} else {
 
 		//
@@ -95,7 +116,7 @@ func StartNewOrExistingFromService(ctx context.Context, svc *service.Service) (*
 
 		var name string
 		var i = 1
-		for i < 1000 {
+		for i <= max_deployment_index {
 			name = fmt.Sprintf("%s-%s-%d", svc.AppName, svc.InstanceName, i)
 			log.Printf("Trying new deployment name %s", name)
 			_, err := os.Stat(path.Join(DeploymentRunDir, name))
