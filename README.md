@@ -21,11 +21,17 @@ Conductor will handle all of this for you with a few core concepts:
   time (as normal) or multiple times (to provide parallelism or handle
   version updates in deployments)
 
+The idea is that the Conductor configuration is static on all machines, and
+conditionals (to be implemented) control which services run where. CGI scripts
+can be then used to control communication between the machines if needed and a
+global replicated static configuration allows every service to know where each
+other service resides (no need of etcd when the data store never changes).
+
 Installation
 ------------
 
 Download the executable, place it in your `PATH` and run `conductor system
-install`. you should have systemd and podman on your server. It also expects to
+install`. You should have systemd and podman on your server. It also expects to
 be able to connect to the Caddy via the standard API endpoint on port 2019. The
 Caddy server should be described in `caddy.service` (others units depends on
 it).
@@ -177,3 +183,15 @@ Roadmap:
   requests on a single keep alive connection
 - [ ] Let Conductor handle socket activation for the multiple requests use case,
   and let Conductor handle preloading of the CGI executable.
+
+Actions
+-------
+
+It should be possible to declare actions in the services. For example an action
+could perform a data migration, another could enter a console program to debug
+the application.
+
+It should be as simple as running `conductor action run SERVICE db:migrate ...`.
+
+It should be easy to declare an action to be accessible remotely via a CGI
+script, security should prevent unauthorized access.
