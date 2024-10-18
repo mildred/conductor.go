@@ -128,6 +128,7 @@ func Start() error {
 	//
 
 	log.Printf("start: Adding deployment to load-balancer...\n")
+	fmt.Fprintf(os.Stderr, "+ systemctl start %q\n", DeploymentConfigUnit(depl.DeploymentName))
 	cmd := exec.Command("systemctl", "start", DeploymentConfigUnit(depl.DeploymentName))
 	err = cmd.Run()
 	if err != nil {
@@ -183,6 +184,7 @@ func Stop() error {
 	//
 
 	log.Printf("stop: Removing deployment from load-balancer...\n")
+	fmt.Fprintf(os.Stderr, "+ systemctl stop %q\n", DeploymentConfigUnit(depl.DeploymentName))
 	cmd := exec.Command("systemctl", "stop", DeploymentConfigUnit(depl.DeploymentName))
 	err = cmd.Run()
 	if err != nil {
@@ -277,6 +279,7 @@ func CaddyRegister(register bool, dir string) error {
 		unit_name := fmt.Sprintf(service.ServiceConfigUnit(depl.ServiceDir))
 		log.Printf("register: Ensure the service config %s is registered", unit_name)
 
+		fmt.Fprintf(os.Stderr, "+ systemctl start %q\n", unit_name)
 		err = exec.Command("systemctl", "start", unit_name).Run()
 		if err != nil {
 			return err

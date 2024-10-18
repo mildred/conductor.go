@@ -2,6 +2,7 @@ package deployment_public
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 
@@ -45,9 +46,11 @@ func PrintInspect(deployments ...string) error {
 }
 
 func Stop(deployment_name string) error {
+	fmt.Fprintf(os.Stderr, "+ systemctl stop %q\n", DeploymentUnit(deployment_name))
 	return exec.Command("systemctl", "stop", DeploymentUnit(deployment_name)).Run()
 }
 
 func Start(deployment_name string) error {
+	fmt.Fprintf(os.Stderr, "+ systemctl start %q\n", DeploymentUnit(deployment_name))
 	return exec.Command("systemctl", "start", DeploymentUnit(deployment_name)).Run()
 }

@@ -2,7 +2,7 @@ package service_public
 
 import (
 	"context"
-	"log"
+	"fmt"
 	"os"
 	"os/exec"
 	"path"
@@ -68,7 +68,7 @@ func Reload(inclusive bool) error {
 	}
 
 	for _, unit := range stop_list {
-		log.Printf("+ systemctl disable --now %q", unit)
+		fmt.Fprintf(os.Stderr, "+ systemctl disable --now %q\n", unit)
 		err = exec.Command("systemctl", "disable", "--now", unit).Run()
 		if err != nil {
 			return err
@@ -76,7 +76,7 @@ func Reload(inclusive bool) error {
 	}
 
 	for _, unit := range start_list {
-		log.Printf("+ systemctl enable --now %q", unit)
+		fmt.Fprintf(os.Stderr, "+ systemctl enable --now %q\n", unit)
 		err = exec.Command("systemctl", "enable", "--now", unit).Run()
 		if err != nil {
 			return err
@@ -92,5 +92,6 @@ func Start(definition_path string) error {
 		return err
 	}
 
+	fmt.Fprintf(os.Stderr, "+ systemctl start %q\n", ServiceUnit(path))
 	return exec.Command("systemctl", "start", ServiceUnit(path)).Run()
 }

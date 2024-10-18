@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"os/exec"
 	"path"
 	"time"
@@ -77,12 +78,14 @@ func StartOrRestart(restart bool) error {
 		log.Printf("%s: Found started deployment %s", prefix, depl.DeploymentName)
 	} else if depl_status == "starting" {
 		log.Printf("%s: Found starting deployment %s, waiting to be started...", prefix, depl.DeploymentName)
+		fmt.Fprintf(os.Stderr, "+ systemctl start %q\n", prefix, deployment.DeploymentUnit(depl.DeploymentName))
 		err = exec.Command("systemctl", "start", deployment.DeploymentUnit(depl.DeploymentName)).Run()
 		if err != nil {
 			return err
 		}
 	} else {
 		log.Printf("%s: Starting new deployment %s...", prefix, depl.DeploymentName)
+		fmt.Fprintf(os.Stderr, "+ systemctl start %q\n", prefix, deployment.DeploymentUnit(depl.DeploymentName))
 		err = exec.Command("systemctl", "start", deployment.DeploymentUnit(depl.DeploymentName)).Run()
 		if err != nil {
 			return err
