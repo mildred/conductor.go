@@ -1,6 +1,6 @@
 [Unit]
 Description=Conductor service %f
-Wants=condictor-service-config-config@%f.service
+Wants=conductor-service-config-config@%f.service
 
 [Service]
 WorkingDirectory=%f

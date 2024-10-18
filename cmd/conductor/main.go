@@ -4,8 +4,13 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
+	"path"
 	"strings"
 
+	"github.com/gandarez/go-realpath"
+
+	"github.com/mildred/conductor.go/src/deployment"
 	"github.com/mildred/conductor.go/src/deployment_internal"
 	"github.com/mildred/conductor.go/src/deployment_public"
 	"github.com/mildred/conductor.go/src/install"
@@ -98,9 +103,48 @@ func cmd_service_inspect(usage func(), name []string, args []string) error {
 
 func cmd_service_ls(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
+	unit := flag.Bool("unit", false, "Show systemd unit column")
 	flag.Parse(args)
 
-	return service_public.PrintList()
+	return service_public.PrintList(service_public.PrintListSettings{
+		Unit: *unit,
+	})
+}
+
+func cmd_service_unit(usage func(), name []string, args []string) error {
+	flag := new_flag_set(name, usage)
+	flag.Parse(args)
+
+	for _, arg := range flag.Args() {
+		path, err := realpath.Realpath(arg)
+		if err != nil {
+			return err
+		}
+
+		fmt.Println(service.ServiceUnit(path))
+	}
+	return nil
+}
+
+func cmd_service_status(usage func(), name []string, args []string) error {
+	flag := new_flag_set(name, usage)
+	flag.Parse(args)
+
+	var cli []string = []string{"status"}
+	for _, arg := range flag.Args() {
+		path, err := realpath.Realpath(arg)
+		if err != nil {
+			return err
+		}
+		cli = append(cli, service.ServiceUnit(path))
+	}
+
+	cmd := exec.Command("systemctl", cli...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	return cmd.Run()
 }
 
 func cmd_service(usage func(), name []string, args []string) error {
@@ -110,6 +154,8 @@ func cmd_service(usage func(), name []string, args []string) error {
 		"start":   {cmd_service_start, "", "Declare and start a service"},
 		"inspect": {cmd_service_inspect, "", "Inspect a service in current directory or on the command-line"},
 		"ls":      {cmd_service_ls, "", "List all services"},
+		"status":  {cmd_service_status, "", "Status from systemctl"},
+		"unit":    {cmd_service_unit, "", "Print systemd unit"},
 	})
 }
 
@@ -170,9 +216,13 @@ func private_deployment(usage func(), name []string, args []string) error {
 
 func cmd_deployment_ls(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
+	unit := flag.Bool("unit", false, "Show systemd units column")
 	flag.Parse(args)
 
-	return deployment_public.PrintList()
+	return deployment_public.PrintList(deployment_public.PrintListSettings{
+		Unit:        *unit,
+		ServiceUnit: *unit,
+	})
 }
 
 func cmd_deployment_inspect(usage func(), name []string, args []string) error {
@@ -182,12 +232,59 @@ func cmd_deployment_inspect(usage func(), name []string, args []string) error {
 	return deployment_public.PrintInspect(flag.Args()...)
 }
 
+func cmd_deployment_unit(usage func(), name []string, args []string) error {
+	flag := new_flag_set(name, usage)
+	flag.Parse(args)
+
+	ids := flag.Args()
+	if len(ids) == 0 {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+		ids = append(ids, path.Base(cwd))
+	}
+
+	for _, id := range ids {
+		fmt.Println(deployment.DeploymentUnit(id))
+	}
+	return nil
+}
+
+func cmd_deployment_status(usage func(), name []string, args []string) error {
+	flag := new_flag_set(name, usage)
+	flag.Parse(args)
+
+	ids := flag.Args()
+	if len(ids) == 0 {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+		ids = append(ids, path.Base(cwd))
+	}
+
+	var cli []string = []string{"status"}
+	for _, id := range ids {
+		cli = append(cli, deployment.DeploymentUnit(id))
+	}
+
+	cmd := exec.Command("systemctl", cli...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	return cmd.Run()
+}
+
 func cmd_deployment(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
 
 	return run_subcommand(name, args, flag, map[string]Subcommand{
 		"ls":      {cmd_deployment_ls, "", "List all deployments"},
 		"inspect": {cmd_deployment_inspect, "", "Inspect deployment in current directory or on the command-line"},
+		"status":  {cmd_deployment_status, "", "Status from systemctl"},
+		"unit":    {cmd_deployment_unit, "", "Print systemd unit"},
 	})
 }
 

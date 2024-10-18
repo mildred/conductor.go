@@ -17,7 +17,12 @@ import (
 	. "github.com/mildred/conductor.go/src/deployment_util"
 )
 
-func PrintList() error {
+type PrintListSettings struct {
+	Unit        bool
+	ServiceUnit bool
+}
+
+func PrintList(settings PrintListSettings) error {
 	var ctx = context.Background()
 	sd, err := dbus.NewWithContext(ctx)
 	if err != nil {
@@ -79,10 +84,16 @@ func PrintList() error {
 	extra_depl_cols = utils.Compact(extra_depl_cols...)
 
 	row := []interface{}{"App", "Instance", "Enabled", "Active"}
+	if settings.ServiceUnit {
+		row = append(row, "Service")
+	}
 	for _, col := range extra_service_cols {
 		row = append(row, col)
 	}
 	row = append(row, "Deployment", "Active", "State")
+	if settings.Unit {
+		row = append(row, "Unit")
+	}
 	for _, col := range extra_depl_cols {
 		row = append(row, col)
 	}
@@ -94,10 +105,16 @@ func PrintList() error {
 		ds := list_depl_status[i]
 
 		row := []interface{}{s.AppName, s.InstanceName, ss.LoadState, ss.ActiveState}
+		if settings.ServiceUnit {
+			row = append(row, ss.Name)
+		}
 		for _, col := range extra_service_cols {
 			row = append(row, s.Config[col])
 		}
 		row = append(row, depl.DeploymentName, ds.ActiveState, ds.SubState)
+		if settings.Unit {
+			row = append(row, ds.Name)
+		}
 		for _, col := range extra_depl_cols {
 			row = append(row, depl.Config[col])
 		}

@@ -99,7 +99,11 @@ func Start(definition_path string) error {
 	return exec.Command("systemctl", "start", ServiceUnit(path)).Run()
 }
 
-func PrintList() error {
+type PrintListSettings struct {
+	Unit bool
+}
+
+func PrintList(settings PrintListSettings) error {
 	var ctx = context.Background()
 	sd, err := dbus.NewWithContext(ctx)
 	if err != nil {
@@ -139,6 +143,9 @@ func PrintList() error {
 	extra_cols = utils.Compact(extra_cols...)
 
 	row := []interface{}{"App", "Instance", "Enabled", "Active", "State"}
+	if settings.Unit {
+		row = append(row, "Unit")
+	}
 	for _, col := range extra_cols {
 		row = append(row, col)
 	}
@@ -148,6 +155,9 @@ func PrintList() error {
 		u := list_status[i]
 
 		row = []interface{}{service.AppName, service.InstanceName, u.LoadState, u.ActiveState, u.SubState}
+		if settings.Unit {
+			row = append(row, u.Name)
+		}
 		for _, col := range extra_cols {
 			row = append(row, service.Config[col])
 		}

@@ -194,7 +194,6 @@ func LoadService(path string, fix_paths bool, base *Service) (*Service, error) {
 }
 
 func merge_hooks(layer1 []*Hook, layer2 []*Hook) []*Hook {
-	log.Printf("merge: %+v\nwith: %+v\n", layer1, layer2)
 	var result []*Hook = append([]*Hook{}, layer1...)
 	for _, layered_hook := range layer2 {
 		var i = -1
