@@ -16,7 +16,7 @@ import (
 
 func List() ([]*Deployment, error) {
 	entries, err := os.ReadDir(DeploymentRunDir)
-	if err != nil {
+	if err != nil && !os.IsNotExist(err) {
 		return nil, err
 	}
 
@@ -50,7 +50,7 @@ func StartNewOrExistingFromService(ctx context.Context, svc *service.Service) (*
 		if depl.ServiceDir != svc.BasePath || depl.ServiceId != svc.Id {
 			continue
 		}
-		deployment_units = append(deployment_units, fmt.Sprintf("conductor-deployment@%s.service", depl.DeploymentName))
+		deployment_units = append(deployment_units, DeploymentUnit(depl.DeploymentName))
 	}
 
 	statuses, err := sd.ListUnitsByNamesContext(ctx, deployment_units)
@@ -64,7 +64,7 @@ func StartNewOrExistingFromService(ctx context.Context, svc *service.Service) (*
 		}
 		var stat dbus.UnitStatus
 		for _, st := range statuses {
-			if st.Name == fmt.Sprintf("conductor-deployment@%s.service", depl.DeploymentName) {
+			if st.Name == DeploymentUnit(depl.DeploymentName) {
 				stat = st
 				break
 			}

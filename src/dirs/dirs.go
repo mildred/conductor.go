@@ -58,10 +58,10 @@ func init_dirs(root_dirs []string, xdg_varname string, xdg_dirs []string, xdg_ho
 	}
 }
 
-func MultiJoin(base string, dirs ...string) []string {
+func MultiJoin(ext string, dirs ...string) []string {
 	var res []string
 	for _, dir := range dirs {
-		res = append(res, path.Join(base, dir))
+		res = append(res, path.Join(dir, ext))
 	}
 	return res
 }

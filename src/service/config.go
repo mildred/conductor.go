@@ -10,9 +10,11 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/coreos/go-systemd/v22/unit"
+	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
 	"golang.org/x/crypto/sha3"
 
-	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
+	"github.com/mildred/conductor.go/src/dirs"
 )
 
 type PartialService struct {
@@ -48,6 +50,26 @@ type Service struct {
 }
 
 const ConfigName = "conductor-service.json"
+
+var ServiceDirs = dirs.MultiJoin("services", append([]string{dirs.SelfRuntimeDir}, append(dirs.SelfConfigDirs, dirs.SelfDataDirs...)...)...)
+
+func ServiceUnit(path string) string {
+	return fmt.Sprintf("conductor-service@%s.service", unit.UnitNamePathEscape(path))
+}
+
+func ServiceConfigUnit(path string) string {
+	return fmt.Sprintf("conductor-service-config@%s.service", unit.UnitNamePathEscape(path))
+}
+
+func ServiceDirFromUnit(u string) string {
+	s := strings.TrimSuffix(u, ".service")
+	splits := strings.SplitN(s, "@", 2)
+	if len(splits) < 2 {
+		return ""
+	} else {
+		return unit.UnitNamePathUnescape(splits[1])
+	}
+}
 
 func LoadServiceAndFillDefaults(path string, fix_paths bool) (*Service, error) {
 	service, err := LoadService(path, fix_paths, nil)

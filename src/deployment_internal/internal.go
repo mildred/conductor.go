@@ -9,9 +9,9 @@ import (
 	"path"
 
 	"github.com/coreos/go-systemd/v22/daemon"
-	"github.com/coreos/go-systemd/v22/unit"
 
 	"github.com/mildred/conductor.go/src/caddy"
+	"github.com/mildred/conductor.go/src/service"
 	"github.com/mildred/conductor.go/src/tmpl"
 
 	. "github.com/mildred/conductor.go/src/deployment"
@@ -128,7 +128,7 @@ func Start() error {
 	//
 
 	log.Printf("start: Adding deployment to load-balancer...\n")
-	cmd := exec.Command("systemctl", "start", "conductor-deployment-config@"+depl.DeploymentName+".service")
+	cmd := exec.Command("systemctl", "start", DeploymentConfigUnit(depl.DeploymentName))
 	err = cmd.Run()
 	if err != nil {
 		return err
@@ -183,7 +183,7 @@ func Stop() error {
 	//
 
 	log.Printf("stop: Removing deployment from load-balancer...\n")
-	cmd := exec.Command("systemctl", "stop", "conductor-deployment-config@"+depl.DeploymentName+".service")
+	cmd := exec.Command("systemctl", "stop", DeploymentConfigUnit(depl.DeploymentName))
 	err = cmd.Run()
 	if err != nil {
 		return err
@@ -274,7 +274,7 @@ func CaddyRegister(register bool, dir string) error {
 	}
 
 	if register {
-		unit_name := fmt.Sprintf("conductor-service-config@%s.service", unit.UnitNamePathEscape(depl.ServiceDir))
+		unit_name := fmt.Sprintf(service.ServiceConfigUnit(depl.ServiceDir))
 		log.Printf("register: Ensure the service config %s is registered", unit_name)
 
 		err = exec.Command("systemctl", "start", unit_name).Run()

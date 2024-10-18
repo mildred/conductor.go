@@ -15,6 +15,7 @@ import (
 	"github.com/mildred/conductor.go/src/dirs"
 	"github.com/mildred/conductor.go/src/tmpl"
 
+	"github.com/mildred/conductor.go/src/deployment"
 	"github.com/mildred/conductor.go/src/deployment_public"
 	"github.com/mildred/conductor.go/src/deployment_util"
 	. "github.com/mildred/conductor.go/src/service"
@@ -76,13 +77,13 @@ func StartOrRestart(restart bool) error {
 		log.Printf("%s: Found started deployment %s", prefix, depl.DeploymentName)
 	} else if depl_status == "starting" {
 		log.Printf("%s: Found starting deployment %s, waiting to be started...", prefix, depl.DeploymentName)
-		err = exec.Command("systemctl", "start", fmt.Sprintf("conductor-deployment@%s.service", depl.DeploymentName)).Run()
+		err = exec.Command("systemctl", "start", deployment.DeploymentUnit(depl.DeploymentName)).Run()
 		if err != nil {
 			return err
 		}
 	} else {
 		log.Printf("%s: Starting new deployment %s...", prefix, depl.DeploymentName)
-		err = exec.Command("systemctl", "start", fmt.Sprintf("conductor-deployment@%s.service", depl.DeploymentName)).Run()
+		err = exec.Command("systemctl", "start", deployment.DeploymentUnit(depl.DeploymentName)).Run()
 		if err != nil {
 			return err
 		}

@@ -2,11 +2,9 @@ package deployment_public
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"os/exec"
 
-	"github.com/coreos/go-systemd/v22/unit"
 	"github.com/rodaine/table"
 
 	. "github.com/mildred/conductor.go/src/deployment"
@@ -47,11 +45,9 @@ func PrintInspect(deployments ...string) error {
 }
 
 func Stop(deployment_name string) error {
-	unit := fmt.Sprintf("conductor-deployment@%s.service", unit.UnitNameEscape(deployment_name))
-	return exec.Command("systemctl", "stop", unit).Run()
+	return exec.Command("systemctl", "stop", DeploymentUnit(deployment_name)).Run()
 }
 
 func Start(deployment_name string) error {
-	unit := fmt.Sprintf("conductor-deployment@%s.service", unit.UnitNameEscape(deployment_name))
-	return exec.Command("systemctl", "start", unit).Run()
+	return exec.Command("systemctl", "start", DeploymentUnit(deployment_name)).Run()
 }

@@ -9,6 +9,7 @@ import (
 	"path"
 	"time"
 
+	"github.com/coreos/go-systemd/v22/unit"
 	"github.com/gandarez/go-realpath"
 
 	"github.com/mildred/conductor.go/src/dirs"
@@ -19,6 +20,14 @@ import (
 const ConfigName = "conductor-deployment.json"
 
 var DeploymentRunDir = dirs.Join(dirs.SelfRuntimeDir, "deployments")
+
+func DeploymentUnit(name string) string {
+	return fmt.Sprintf("conductor-deployment@%s.service", unit.UnitNameEscape(name))
+}
+
+func DeploymentConfigUnit(name string) string {
+	return fmt.Sprintf("conductor-deployment-config@%s.service", unit.UnitNameEscape(name))
+}
 
 type Deployment struct {
 	*service.Service
@@ -48,7 +57,9 @@ func NewDeploymentFromService(service *service.Service, deployment_name string) 
 
 func ReadDeployment(dir, deployment_id string) (*Deployment, error) {
 	_, err := os.Stat(path.Join(dir, ConfigName))
-	if err != nil {
+	if err != nil && !os.IsNotExist(err) {
+		return nil, err
+	} else if err != nil {
 		service_file, err := realpath.Realpath(path.Join(dir, service.ConfigName))
 		if err != nil {
 			return nil, err

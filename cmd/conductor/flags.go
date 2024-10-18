@@ -13,19 +13,21 @@ type Subcommand = struct {
 }
 
 func new_flag_set(name []string, usage func()) *flag.FlagSet {
-	flag := flag.NewFlagSet(strings.Join(name, " "), flag.ContinueOnError)
-	flag.Usage = func() {
+	fl := flag.NewFlagSet(strings.Join(name, " "), flag.ContinueOnError)
+	fl.Usage = func() {
 		if usage != nil {
 			usage()
 		} else {
-			fmt.Fprintf(flag.Output(), "Usage of %s:\nversion %s\n\n", name[0], version)
+			fmt.Fprintf(fl.Output(), "Usage of %s:\nversion %s\n\n", name[0], version)
 		}
-		if flag.NFlag() > 0 {
-			fmt.Fprintf(flag.Output(), "Options for %s:\n", strings.Join(name, " "))
-			flag.PrintDefaults()
+		has_flags := false
+		fl.VisitAll(func(_ *flag.Flag) { has_flags = true })
+		if has_flags {
+			fmt.Fprintf(fl.Output(), "Options for %s:\n", strings.Join(name, " "))
+			fl.PrintDefaults()
 		}
 	}
-	return flag
+	return fl
 }
 
 func run_subcommand(name []string, args0 []string, flag *flag.FlagSet, subcommands map[string]Subcommand) error {

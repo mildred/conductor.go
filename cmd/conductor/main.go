@@ -9,6 +9,7 @@ import (
 	"github.com/mildred/conductor.go/src/deployment_internal"
 	"github.com/mildred/conductor.go/src/deployment_public"
 	"github.com/mildred/conductor.go/src/install"
+	"github.com/mildred/conductor.go/src/service"
 	"github.com/mildred/conductor.go/src/service_internal"
 	"github.com/mildred/conductor.go/src/service_public"
 )
@@ -186,11 +187,17 @@ func cmd_reload(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, func() {
 		usage()
 		fmt.Fprintf(flag.CommandLine.Output(), "\n"+
-			"Reload and start services in well-known directories\n\n")
+			"Reload and start services in well-known directories:\n")
+		for _, dir := range service.ServiceDirs {
+			fmt.Fprintf(flag.CommandLine.Output(), "  - "+dir+"\n")
+		}
+		fmt.Fprintf(flag.CommandLine.Output(), "\n")
 	})
+
+	inclusive := flag.Bool("inclusive", false, "Allow services from other directories (do not stop them)")
 	flag.Parse(args)
 
-	return service_public.Reload()
+	return service_public.Reload(*inclusive)
 }
 
 func cmd_system_install(usage func(), name []string, args []string) error {
