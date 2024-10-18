@@ -128,3 +128,35 @@ Basic How-To
   declared
 
 
+CGI / Serverless
+----------------
+
+It is not yet implemented, but the general ideas are there. A CGI script or
+serverless lambda would be implemented using systemd socket activation, with the
+socket tied to a route in the reverse proxy. Upon activation, something like
+[`cgi-adapter`](https://github.com/mildred/cgi-adapter) could be used to
+translate the HTTP request to CGI and back to HTTP.
+
+If systemd socket activation is not enough for CGI, perhaps Conductor should
+take the socket activation in its own hands. This would be necessary in order to
+pre-provision CGI scripts to get faster response times.
+
+It should also be possible to declare such functions as daemons that could be
+pre-provisioned or scaled down to zero depending on the configuration.
+
+Basically, there are three modes of operations possible:
+
+- single shot (CGI): each request calls a single executable that is started for
+  the request and ends with the request. This is standard systemd socket
+  activation with `Accept=yes`. Pre-provisioning could be difficult if sticking
+  with the CGI interface and systemd cannot handle it.
+
+- multi-shot: each executable can handle multiple requests but not in parallel.
+  After a configurable number of requests, the executable can be recycled. This
+  could be an HTTP/1.1 connection with keep-alive. Systemd to my knowledge is
+  not able to pre-provision such services.
+
+- parallel: a single executable can handle all requests, like a daemon, but it
+  can scale down to zero in the absence of requests and be reloaded when a
+  connection arrives. Systemd can handle this with standard socket activation
+  (Accept=no)
