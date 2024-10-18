@@ -160,3 +160,20 @@ Basically, there are three modes of operations possible:
   can scale down to zero in the absence of requests and be reloaded when a
   connection arrives. Systemd can handle this with standard socket activation
   (Accept=no)
+
+Roadmap:
+
+- [ ] A service pod should be optional in which case it does not generate a
+  deployment
+- [ ] A service can declare CGI functions, each function is then started as a
+  systemd socket and service that executes the CGI script via cgi-adapter (to be
+  included in conductor)
+- [ ] The proxy config template should be called for the CGI functions too, and
+  be given the service unique ID as variable
+- [ ] Add socket activation to pod (allow multiple unix sockets for a single
+  pod).
+- [ ] Allow multiple pods in a single service
+- [ ] Allow raw HTTP CGI scripts with Accept=yes that can handle multiple
+  requests on a single keep alive connection
+- [ ] Let Conductor handle socket activation for the multiple requests use case,
+  and let Conductor handle preloading of the CGI executable.
