@@ -56,12 +56,12 @@ To declare a service, just put a JSON file in
     {
       "id": "my-start-hook",
       "when": "post-start",
-      exec: ["./post-start.hook"]
+      "exec": ["./post-start.hook"]
     },
     {
       "id": "my-stop-hook",
       "when": "pre-stop",
-      exec: ["./pre-stop.hook"]
+      "exec": ["./pre-stop.hook"]
     }
   ],
   "display_service_config": ["BEAUTIFUL_APP_ENV", "DOCKER_TAG"],
