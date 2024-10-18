@@ -244,6 +244,11 @@ func Cleanup() error {
 }
 
 func CaddyRegister(register bool, dir string) error {
+	var prefix = "register"
+	if !register {
+		prefix = "deregister"
+	}
+
 	depl, err := LoadDeployment(ConfigName)
 	if err != nil {
 		return err
@@ -272,7 +277,7 @@ func CaddyRegister(register bool, dir string) error {
 
 	if register {
 		unit_name := fmt.Sprintf(service.ServiceConfigUnit(depl.ServiceDir))
-		log.Printf("register: Ensure the service config %s is registered", unit_name)
+		log.Printf("%s: Ensure the service config %s is registered", prefix, unit_name)
 
 		fmt.Fprintf(os.Stderr, "+ systemctl start %q\n", unit_name)
 		cmd := exec.Command("systemctl", "start", unit_name)
@@ -283,10 +288,25 @@ func CaddyRegister(register bool, dir string) error {
 			return err
 		}
 
-		log.Printf("register: Register pod IP %s", depl.PodIpAddress)
+		log.Printf("register: Registering pod IP %s", depl.PodIpAddress)
 	} else {
-		log.Printf("register: Deregister pod IP %s", depl.PodIpAddress)
+		log.Printf("deregister: Deregistering pod IP %s", depl.PodIpAddress)
 	}
 
-	return caddy.Register(register, configs)
+	err = caddy.Register(register, configs)
+	if err != nil {
+		return err
+	}
+
+	log.Printf("%s: Completed", prefix)
+	return nil
+}
+
+func Template(dir string, template string) error {
+	depl, err := LoadDeployment(path.Join(dir, ConfigName))
+	if err != nil {
+		return err
+	}
+
+	return tmpl.RunTemplateStdout(template, depl.Vars())
 }

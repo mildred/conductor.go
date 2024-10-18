@@ -20,8 +20,9 @@ type ConfigSnip struct {
 }
 
 type ConfigItem struct {
-	Id     string          `json:"id"`
-	Config json.RawMessage `json:"config"`
+	Id           string          `json:"id"`
+	Config       json.RawMessage `json:"config"`
+	RegisterOnly bool            `json:"register_only"`
 }
 
 func NewClient(endpoint string) (*CaddyClient, error) {
@@ -38,21 +39,33 @@ func (client *CaddyClient) Register(register bool, configs []ConfigItem) error {
 		slices.Reverse(configs)
 	}
 
+	var num = 0
+
 	for _, config := range configs {
+		if register {
+			log.Printf("caddy: Register configuration for %s", config.Id)
+		} else {
+			log.Printf("caddy: Deregister configuration for %s", config.Id)
+		}
 		var cfg ConfigSnip
+
 		err := json.Unmarshal(config.Config, &cfg)
 		if err != nil {
-			return err
+			if config.RegisterOnly {
+				log.Printf("caddy: Failed to detect @id property on JSON: %v", err)
+			} else {
+				return err
+			}
 		}
 
-		if cfg.Id == "" {
+		if !config.RegisterOnly && cfg.Id == "" {
 			return fmt.Errorf("Cannot detect @id for Caddy configuration")
 		}
 
 		var config_id string
 		if register {
 			config_id = config.Id
-		} else {
+		} else if !config.RegisterOnly {
 			config_id = cfg.Id + "/"
 		}
 
@@ -68,7 +81,8 @@ func (client *CaddyClient) Register(register bool, configs []ConfigItem) error {
 				return err
 			}
 			log.Printf("caddy: POST /id/%s (create %q): %s\n", config_id, cfg.Id, res.Status)
-		} else {
+			num = num + 1
+		} else if !config.RegisterOnly {
 			req, err := http.NewRequest(http.MethodDelete, url.String(), nil)
 			if err != nil {
 				return err
@@ -79,6 +93,10 @@ func (client *CaddyClient) Register(register bool, configs []ConfigItem) error {
 				return err
 			}
 			log.Printf("caddy: DELETE /id/%s (delete in %s): %s\n", config_id, config.Id, res.Status)
+			num = num + 1
+		} else {
+			log.Printf("caddy: Do not deregister %q in %s (register_only)\n", cfg.Id, config.Id)
+			continue
 		}
 
 		if res.StatusCode < 200 || res.StatusCode >= 300 {
@@ -90,5 +108,12 @@ func (client *CaddyClient) Register(register bool, configs []ConfigItem) error {
 			return fmt.Errorf("cannot update Caddy config; HTTP error %s: %s", res.Status, string(body))
 		}
 	}
+
+	if register {
+		log.Printf("caddy: Register %d config snippets", num)
+	} else {
+		log.Printf("caddy: Deregister %d config snippets", num)
+	}
+
 	return nil
 }

@@ -12,12 +12,12 @@ import (
 	"github.com/coreos/go-systemd/v22/daemon"
 
 	"github.com/mildred/conductor.go/src/caddy"
-	"github.com/mildred/conductor.go/src/dirs"
-	"github.com/mildred/conductor.go/src/tmpl"
-
 	"github.com/mildred/conductor.go/src/deployment"
 	"github.com/mildred/conductor.go/src/deployment_public"
 	"github.com/mildred/conductor.go/src/deployment_util"
+	"github.com/mildred/conductor.go/src/dirs"
+	"github.com/mildred/conductor.go/src/tmpl"
+
 	. "github.com/mildred/conductor.go/src/service"
 )
 
@@ -225,6 +225,11 @@ func Cleanup(service_name string) error {
 var LookupPaths []string = dirs.MultiJoin("services", append(append([]string{dirs.SelfRuntimeDir}, dirs.SelfConfigDirs...), dirs.SelfDataDirs...)...)
 
 func CaddyRegister(register bool, service_name string) error {
+	var prefix = "register"
+	if !register {
+		prefix = "deregister"
+	}
+
 	service, err := LoadServiceByName(service_name)
 	if err != nil {
 		return err
@@ -252,10 +257,25 @@ func CaddyRegister(register bool, service_name string) error {
 	}
 
 	if register {
-		log.Printf("register: Register service")
+		log.Printf("register: Registering service...")
 	} else {
-		log.Printf("register: Deregister service")
+		log.Printf("deregister: Deregistering service...")
 	}
 
-	return caddy.Register(register, configs)
+	err = caddy.Register(register, configs)
+	if err != nil {
+		return err
+	}
+
+	log.Printf("%s: Completed", prefix)
+	return nil
+}
+
+func Template(service_name string, template string) error {
+	service, err := LoadServiceByName(service_name)
+	if err != nil {
+		return err
+	}
+
+	return tmpl.RunTemplateStdout(template, service.Vars())
 }

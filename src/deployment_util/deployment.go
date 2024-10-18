@@ -80,13 +80,17 @@ func StartNewOrExistingFromService(ctx context.Context, svc *service.Service, ma
 				break
 			}
 		}
-		if stat.ActiveState == "active" {
+		if stat.ActiveState == "failed" {
+			log.Printf("Deployment %s do not match (state is %s / %s)", depl.DeploymentName, stat.ActiveState, stat.SubState)
+			continue
+		} else if stat.ActiveState == "active" {
 			started_deployments = append(started_deployments, depl)
 		} else if stat.ActiveState == "activating" {
 			starting_deployments = append(starting_deployments, depl)
 		} else if stat.ActiveState == "inactive" {
 			stopped_deployments = append(stopped_deployments, depl)
 		} else {
+			// TODO: consider for reuse
 			log.Printf("Deployment %s do not match (state is %s / %s)", depl.DeploymentName, stat.ActiveState, stat.SubState)
 			continue
 		}

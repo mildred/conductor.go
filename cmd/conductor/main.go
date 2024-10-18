@@ -95,6 +95,17 @@ func private_service_deregister(usage func(), name []string, args []string) erro
 	return service_internal.CaddyRegister(false, flag.Arg(0))
 }
 
+func private_service_template(usage func(), name []string, args []string) error {
+	flag := new_flag_set(name, usage)
+	flag.Parse(args)
+
+	if flag.NArg() != 2 {
+		return fmt.Errorf("Command %s must take a service definition and a template", strings.Join(name, " "))
+	}
+
+	return service_internal.Template(flag.Arg(0), flag.Arg(1))
+}
+
 func private_service(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
 
@@ -105,6 +116,7 @@ func private_service(usage func(), name []string, args []string) error {
 		"cleanup":    {private_service_cleanup, "SERVICE", "Clean up service after it has stopped"},
 		"register":   {private_service_register, "SERVICE", "Register service to load balancer"},
 		"deregister": {private_service_deregister, "SERVICE", "Deregister service from load balancer"},
+		"template":   {private_service_template, "SERVICE TEMPLATE", "Run a template in the context of a service"},
 	})
 }
 
@@ -203,6 +215,28 @@ func cmd_service_status(usage func(), name []string, args []string) error {
 	return cmd.Run()
 }
 
+func cmd_service_env(usage func(), name []string, args []string) error {
+	flag := new_flag_set(name, usage)
+	flag.Parse(args)
+
+	log.Default().SetOutput(io.Discard)
+
+	if flag.NArg() != 1 {
+		return fmt.Errorf("Command %s must take a single service definition as argument", strings.Join(name, " "))
+	}
+
+	service, err := service.LoadServiceByName(flag.Arg(0))
+	if err != nil {
+		return err
+	}
+
+	for _, v := range service.Vars() {
+		fmt.Printf("%s\n", v)
+	}
+
+	return nil
+}
+
 func cmd_service(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
 
@@ -214,6 +248,7 @@ func cmd_service(usage func(), name []string, args []string) error {
 		"ls":      {cmd_service_ls, "", "List all services"},
 		"status":  {cmd_service_status, "", "Status from systemctl"},
 		"unit":    {cmd_service_unit, "", "Print systemd unit"},
+		"env":     {cmd_service_env, "SERVICE", "Print service template environment variables"},
 	})
 }
 
@@ -259,6 +294,17 @@ func private_deployment_deregister(usage func(), name []string, args []string) e
 	return deployment_internal.CaddyRegister(false, ".")
 }
 
+func private_deployment_template(usage func(), name []string, args []string) error {
+	flag := new_flag_set(name, usage)
+	flag.Parse(args)
+
+	if flag.NArg() != 1 {
+		return fmt.Errorf("Command %s must take a template", strings.Join(name, " "))
+	}
+
+	return deployment_internal.Template(".", flag.Arg(0))
+}
+
 func private_deployment(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
 
@@ -269,6 +315,7 @@ func private_deployment(usage func(), name []string, args []string) error {
 		"cleanup":    {private_deployment_cleanup, "", "Clean up deployment after it has stopped"},
 		"register":   {private_deployment_register, "", "Register deployment to load balancer"},
 		"deregister": {private_deployment_deregister, "", "Deregister deployment from load balancer"},
+		"template":   {private_deployment_template, "TEMPLATE", "Run a template in the current deployment context"},
 	})
 }
 
@@ -358,6 +405,32 @@ func cmd_deployment_status(usage func(), name []string, args []string) error {
 	return cmd.Run()
 }
 
+func cmd_deployment_env(usage func(), name []string, args []string) error {
+	flag := new_flag_set(name, usage)
+	flag.Parse(args)
+
+	log.Default().SetOutput(io.Discard)
+
+	ids := flag.Args()
+	if len(ids) == 0 {
+		ids = append(ids, ".")
+	}
+	if len(ids) != 1 {
+		return fmt.Errorf("Command %s must take a single deployment", strings.Join(name, " "))
+	}
+
+	depl, err := deployment.LoadDeploymentDir(ids[0])
+	if err != nil {
+		return err
+	}
+
+	for _, v := range depl.Vars() {
+		fmt.Printf("%s\n", v)
+	}
+
+	return nil
+}
+
 func cmd_deployment(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
 
@@ -367,6 +440,7 @@ func cmd_deployment(usage func(), name []string, args []string) error {
 		"inspect": {cmd_deployment_inspect, "[DEPLOYMENT...]", "Inspect deployment in current directory or on the command-line"},
 		"status":  {cmd_deployment_status, "[DEPLOYMENT...]", "Status from systemctl"},
 		"unit":    {cmd_deployment_unit, "[DEPLOYMENT...]", "Print systemd unit"},
+		"env":     {cmd_deployment_env, "[DEPLOYMENT]", "Print templating environment variables"},
 	})
 }
 

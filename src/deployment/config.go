@@ -138,6 +138,10 @@ func (depl *Deployment) Save(fname string) error {
 	return json.NewEncoder(f).Encode(depl)
 }
 
+func LoadDeploymentDir(dir string) (*Deployment, error) {
+	return LoadDeployment(path.Join(dir, ConfigName))
+}
+
 func LoadDeployment(fname string) (*Deployment, error) {
 	log.Printf("Read file %s\n", fname)
 	f, err := os.Open(fname)
