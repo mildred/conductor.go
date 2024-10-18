@@ -77,7 +77,7 @@ func private_service(usage func(), name []string, args []string) error {
 	})
 }
 
-func service_start(usage func(), name []string, args []string) error {
+func cmd_service_start(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
 	flag.Parse(args)
 
@@ -88,11 +88,20 @@ func service_start(usage func(), name []string, args []string) error {
 	return service_public.Start(flag.Arg(0))
 }
 
+func cmd_service_inspect(usage func(), name []string, args []string) error {
+	flag := new_flag_set(name, usage)
+	original_paths := flag.Bool("original-paths", true, "Paths are relative to the service directory")
+	flag.Parse(args)
+
+	return service_public.PrintInspect(!*original_paths, flag.Args()...)
+}
+
 func cmd_service(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
 
 	return run_subcommand(name, args, flag, map[string]Subcommand{
-		"start": {service_start, "", "Declare and start a service"},
+		"start":   {cmd_service_start, "", "Declare and start a service"},
+		"inspect": {cmd_service_inspect, "", "Inspect a service in current directory or on the command-line"},
 	})
 }
 

@@ -15,6 +15,7 @@ import (
 	"github.com/mildred/conductor.go/src/dirs"
 	"github.com/mildred/conductor.go/src/service"
 	"github.com/mildred/conductor.go/src/tmpl"
+	"github.com/mildred/conductor.go/src/utils"
 )
 
 const ConfigName = "conductor-deployment.json"
@@ -174,7 +175,7 @@ func (depl *Deployment) StartStopPod(start bool, dir string) error {
 	}
 
 	if start {
-		return exec.Command("podman", compact("kube", "play",
+		return exec.Command("podman", utils.Compact("kube", "play",
 			"--replace",
 			configmap_flag,
 			"--annotation="+fmt.Sprintf("conductor_deployment=%s", depl.DeploymentName),
@@ -183,7 +184,7 @@ func (depl *Deployment) StartStopPod(start bool, dir string) error {
 			"--log-driver=journald",
 			path.Join(dir, "pod.yml"))...).Run()
 	} else {
-		return exec.Command("podman", compact("kube", "down",
+		return exec.Command("podman", utils.Compact("kube", "down",
 			configmap_flag,
 			path.Join(dir, "pod.yml"))...).Run()
 	}
@@ -243,16 +244,6 @@ func (depl *Deployment) FindPodIPAddress() (string, error) {
 	}
 
 	return "", fmt.Errorf("could not find pod IP address")
-}
-
-func compact(args ...string) []string {
-	var res []string
-	for _, s := range args {
-		if s != "" {
-			res = append(res, s)
-		}
-	}
-	return res
 }
 
 func (depl *Deployment) RunHooks(when string) error {

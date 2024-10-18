@@ -37,16 +37,18 @@ type CaddyConfig struct {
 }
 
 type Service struct {
-	BasePath            string
-	Id                  string
-	AppName             string            `json:"app_name",omitempty`              // my-app
-	InstanceName        string            `json:"instance_name",omitempty`         // staging
-	Config              map[string]string `json:"config",omitempty`                // key-value pairs for config and templating, CHANNEL=staging
-	PodTemplate         string            `json:"pod_template",omitempty`          // Template file for pod
-	ConfigMapTemplate   string            `json:"config_map_template",omitempty`   // ConfigMap template file
-	ProxyConfigTemplate string            `json:"proxy_config_template",omitempty` // Template file for the load-balancer config
-	Hooks               []*Hook           `json:"hooks",omitempty`
-	CaddyLoadBalancer   CaddyConfig       `json:"caddy_load_balancer"`
+	BasePath                string
+	Id                      string
+	AppName                 string            `json:"app_name",omitempty`              // my-app
+	InstanceName            string            `json:"instance_name",omitempty`         // staging
+	Config                  map[string]string `json:"config",omitempty`                // key-value pairs for config and templating, CHANNEL=staging
+	PodTemplate             string            `json:"pod_template",omitempty`          // Template file for pod
+	ConfigMapTemplate       string            `json:"config_map_template",omitempty`   // ConfigMap template file
+	ProxyConfigTemplate     string            `json:"proxy_config_template",omitempty` // Template file for the load-balancer config
+	Hooks                   []*Hook           `json:"hooks",omitempty`
+	CaddyLoadBalancer       CaddyConfig       `json:"caddy_load_balancer"`
+	DisplayServiceConfig    []string          `json:"display_service_config"`
+	DisplayDeploymentConfig []string          `json:"display_deployment_config"`
 }
 
 const ConfigName = "conductor-service.json"
@@ -69,6 +71,10 @@ func ServiceDirFromUnit(u string) string {
 	} else {
 		return unit.UnitNamePathUnescape(splits[1])
 	}
+}
+
+func LoadServiceDir(dir string, fix_paths bool) (*Service, error) {
+	return LoadServiceAndFillDefaults(filepath.Join(dir, ConfigName), fix_paths)
 }
 
 func LoadServiceAndFillDefaults(path string, fix_paths bool) (*Service, error) {
@@ -115,7 +121,22 @@ func LoadService(path string, fix_paths bool, base *Service) (*Service, error) {
 
 	if len(partial.Inherit) > 0 {
 		for _, inherit := range partial.Inherit {
-			inherit = join_paths(dir, inherit)
+			may_fail := strings.HasPrefix(inherit, "-")
+			inherit = join_paths(dir, strings.TrimPrefix(inherit, "-"))
+
+			if strings.HasSuffix(inherit, "/") {
+				inherit = filepath.Join(inherit, ConfigName)
+			}
+
+			if may_fail {
+				_, err = os.Stat(inherit)
+				if err != nil && os.IsNotExist(err) {
+					log.Printf("service: %s could inherit from %s (not found)", dir, inherit)
+					continue
+				} else if err != nil {
+					return nil, err
+				}
+			}
 
 			log.Printf("service: %s inherit from %s", dir, inherit)
 			service, err = LoadService(inherit, true, service)
