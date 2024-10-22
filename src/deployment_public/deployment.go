@@ -18,8 +18,10 @@ import (
 )
 
 type PrintListSettings struct {
-	Unit        bool
-	ServiceUnit bool
+	Unit             bool
+	ServiceUnit      bool
+	FilterServiceDir string
+	QuietServiceInfo bool
 }
 
 func PrintList(settings PrintListSettings) error {
@@ -34,7 +36,9 @@ func PrintList(settings PrintListSettings) error {
 		return err
 	}
 
-	deployments, err := List()
+	deployments, err := List(ListOpts{
+		FilterServiceDir: settings.FilterServiceDir,
+	})
 	if err != nil {
 		return err
 	}
@@ -83,20 +87,24 @@ func PrintList(settings PrintListSettings) error {
 	extra_service_cols = utils.Compact(extra_service_cols...)
 	extra_depl_cols = utils.Compact(extra_depl_cols...)
 
-	row := []interface{}{"App", "Instance", "Enabled", "Active"}
-	if settings.ServiceUnit {
-		row = append(row, "Service")
+	row := []interface{}{}
+	if !settings.QuietServiceInfo {
+		row = append(row, "App", "Instance", "Enabled", "Active")
+		if settings.ServiceUnit {
+			row = append(row, "Service")
+		}
+		for _, col := range extra_service_cols {
+			row = append(row, col)
+		}
 	}
-	for _, col := range extra_service_cols {
-		row = append(row, col)
-	}
-	row = append(row, "Deployment", "Active", "State")
+	row = append(row, "Deployment", "Active", "State", "IP")
 	if settings.Unit {
 		row = append(row, "Unit")
 	}
 	for _, col := range extra_depl_cols {
 		row = append(row, col)
 	}
+
 	tbl := table.New(row...)
 
 	for i, depl := range list_depl {
@@ -104,14 +112,17 @@ func PrintList(settings PrintListSettings) error {
 		ss := list_service_status[i]
 		ds := list_depl_status[i]
 
-		row := []interface{}{s.AppName, s.InstanceName, ss.LoadState, ss.ActiveState}
-		if settings.ServiceUnit {
-			row = append(row, ss.Name)
+		row := []interface{}{}
+		if !settings.QuietServiceInfo {
+			row = append(row, s.AppName, s.InstanceName, ss.LoadState, ss.ActiveState)
+			if settings.ServiceUnit {
+				row = append(row, ss.Name)
+			}
+			for _, col := range extra_service_cols {
+				row = append(row, s.Config[col])
+			}
 		}
-		for _, col := range extra_service_cols {
-			row = append(row, s.Config[col])
-		}
-		row = append(row, depl.DeploymentName, ds.ActiveState, ds.SubState)
+		row = append(row, depl.DeploymentName, ds.ActiveState, ds.SubState, depl.PodIpAddress)
 		if settings.Unit {
 			row = append(row, ds.Name)
 		}
@@ -120,7 +131,10 @@ func PrintList(settings PrintListSettings) error {
 		}
 		tbl.AddRow(row...)
 	}
-	tbl.Print()
+	if len(list_depl) > 0 {
+		tbl.Print()
+	}
+	fmt.Printf("(%d deployments in %q)\n", len(list_depl), DeploymentRunDir)
 	return nil
 }
 

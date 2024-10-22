@@ -75,6 +75,7 @@ func (client *CaddyClient) Register(register bool, configs []ConfigItem) error {
 		}
 
 		var res *http.Response
+		var code_valid bool
 		if register {
 			res, err = http.Post(url.String(), "application/json", bytes.NewBuffer(config.Config))
 			if err != nil {
@@ -82,6 +83,8 @@ func (client *CaddyClient) Register(register bool, configs []ConfigItem) error {
 			}
 			log.Printf("caddy: POST /id/%s (create %q): %s\n", config_id, cfg.Id, res.Status)
 			num = num + 1
+
+			code_valid = res.StatusCode < 200 || res.StatusCode >= 300
 		} else if !config.RegisterOnly {
 			req, err := http.NewRequest(http.MethodDelete, url.String(), nil)
 			if err != nil {
@@ -94,12 +97,14 @@ func (client *CaddyClient) Register(register bool, configs []ConfigItem) error {
 			}
 			log.Printf("caddy: DELETE /id/%s (delete in %s): %s\n", config_id, config.Id, res.Status)
 			num = num + 1
+
+			code_valid = res.StatusCode < 200 || res.StatusCode >= 300 || res.StatusCode == 404
 		} else {
 			log.Printf("caddy: Do not deregister %q in %s (register_only)\n", cfg.Id, config.Id)
 			continue
 		}
 
-		if res.StatusCode < 200 || res.StatusCode >= 300 {
+		if code_valid {
 			body, err := io.ReadAll(res.Body)
 			if err != nil {
 				return err

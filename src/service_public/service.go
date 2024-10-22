@@ -12,6 +12,7 @@ import (
 	"github.com/coreos/go-systemd/v22/dbus"
 	"github.com/rodaine/table"
 
+	"github.com/mildred/conductor.go/src/deployment_public"
 	"github.com/mildred/conductor.go/src/utils"
 
 	. "github.com/mildred/conductor.go/src/service"
@@ -232,12 +233,18 @@ func PrintList(settings PrintListSettings) error {
 	for _, col := range extra_cols {
 		row = append(row, col)
 	}
+
 	tbl := table.New(row...)
 
 	for i, service := range list_services {
 		u := list_status[i]
 
-		row = []interface{}{service.Name, service.AppName, service.InstanceName, u.LoadState, u.ActiveState, u.SubState}
+		name := service.Name
+		if name == "" {
+			name = service.BasePath
+		}
+
+		row = []interface{}{name, service.AppName, service.InstanceName, u.LoadState, u.ActiveState, u.SubState}
 		if settings.Unit {
 			row = append(row, u.Name)
 		}
@@ -247,7 +254,68 @@ func PrintList(settings PrintListSettings) error {
 		tbl.AddRow(row...)
 	}
 
+	if len(list_services) > 0 {
+		tbl.Print()
+	}
+	fmt.Printf("(%d services)\n", len(list_services))
+
+	return nil
+}
+
+func PrintService(name string) error {
+	service, err := LoadServiceByName(name)
+	if err != nil {
+		return err
+	}
+
+	if service.Name != "" {
+		name = service.Name
+	}
+
+	tbl := table.New("Name", name)
+	tbl.AddRow("App", service.AppName)
+	tbl.AddRow("Instance", service.InstanceName)
+	tbl.AddRow("Path", service.BasePath)
+	tbl.AddRow("Filename", service.FileName)
+	tbl.AddRow("Id", service.Id)
+
+	var ctx = context.Background()
+	sd, err := dbus.NewWithContext(ctx)
+	if err != nil {
+		return err
+	}
+
+	units, err := sd.ListUnitsByPatternsContext(ctx, nil, []string{ServiceUnit(service.BasePath), ServiceConfigUnit(service.BasePath)})
+	if err != nil {
+		return err
+	}
+
+	for _, u := range units {
+		if u.Name == ServiceUnit(service.BasePath) {
+			tbl.AddRow("Service", u.Name)
+			tbl.AddRow("Service Enabled", u.LoadState)
+			tbl.AddRow("Service Started", fmt.Sprintf("%s (%s)", u.ActiveState, u.SubState))
+		} else if u.Name == ServiceConfigUnit(service.BasePath) {
+			tbl.AddRow("Reverse-Proxy config", u.Name)
+			tbl.AddRow("Reverse-Proxy config Enabled", u.LoadState)
+			tbl.AddRow("Reverse-Proxy config Started", fmt.Sprintf("%s (%s)", u.ActiveState, u.SubState))
+		}
+	}
+
+	for _, col := range service.DisplayServiceConfig {
+		tbl.AddRow(col, service.Config[col])
+	}
+
 	tbl.Print()
+
+	fmt.Println()
+
+	deployment_public.PrintList(deployment_public.PrintListSettings{
+		Unit:             true,
+		FilterServiceDir: service.BasePath,
+		QuietServiceInfo: true,
+	})
+
 	return nil
 }
 
@@ -267,5 +335,65 @@ func PrintInspect(services ...string) error {
 			return err
 		}
 	}
+	return nil
+}
+
+func ServiceSetConfig(filename string, config map[string]string) error {
+	var service = map[string]interface{}{}
+
+	//
+	// Read service file if it exists
+	//
+
+	f, err := os.Open(filename)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	} else if err == nil {
+		err = func() error {
+			defer f.Close()
+
+			err := json.NewDecoder(f).Decode(&service)
+			if err != nil {
+				return err
+			}
+
+			return nil
+		}()
+		if err != nil {
+			return err
+		}
+	}
+
+	//
+	// Add to Config
+	//
+
+	service_config_if, ok := service["config"]
+	if !ok {
+		service_config_if = map[string]interface{}{}
+		service["config"] = service_config_if
+	}
+
+	service_config, ok := service_config_if.(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("JSON key %q does not contain an object", "config")
+	}
+
+	for k, v := range config {
+		service_config[k] = v
+	}
+
+	f, err = os.OpenFile(filename, os.O_CREATE|os.O_WRONLY, os.ModePerm-0o111)
+	if err != nil {
+		return err
+	}
+
+	defer f.Close()
+
+	err = json.NewEncoder(f).Encode(service)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }

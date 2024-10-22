@@ -17,6 +17,7 @@ import (
 	"github.com/mildred/conductor.go/src/deployment_util"
 	"github.com/mildred/conductor.go/src/dirs"
 	"github.com/mildred/conductor.go/src/tmpl"
+	"github.com/mildred/conductor.go/src/utils"
 
 	. "github.com/mildred/conductor.go/src/service"
 )
@@ -74,28 +75,40 @@ func StartOrRestart(restart bool, service_name string, max_deployment_index int)
 		return err
 	}
 
-	if depl_status == "active" {
-		log.Printf("%s: Found started deployment %s", prefix, depl.DeploymentName)
-	} else if depl_status == "activating" || depl_status == "inactive" {
-		log.Printf("%s: Found %s deployment %s, waiting to be started...", prefix, depl_status, depl.DeploymentName)
-		fmt.Fprintf(os.Stderr, "+ systemctl start %q\n", deployment.DeploymentUnit(depl.DeploymentName))
-		cmd := exec.Command("systemctl", "start", deployment.DeploymentUnit(depl.DeploymentName))
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		err = cmd.Run()
-		if err != nil {
-			return err
+	ctx, cancel := context.WithCancel(context.Background())
+	go utils.ExtendTimeout(ctx, 60*time.Second)
+
+	err = func() error {
+		defer cancel()
+
+		if depl_status == "active" {
+			log.Printf("%s: Found started deployment %s", prefix, depl.DeploymentName)
+		} else if depl_status == "activating" || depl_status == "inactive" {
+			log.Printf("%s: Found %s deployment %s, waiting to be started...", prefix, depl_status, depl.DeploymentName)
+			fmt.Fprintf(os.Stderr, "+ systemctl start %q\n", deployment.DeploymentUnit(depl.DeploymentName))
+			cmd := exec.Command("systemctl", "start", deployment.DeploymentUnit(depl.DeploymentName))
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			err = cmd.Run()
+			if err != nil {
+				return err
+			}
+		} else {
+			log.Printf("%s: Starting new deployment %s...", prefix, depl.DeploymentName)
+			fmt.Fprintf(os.Stderr, "+ systemctl start %q\n", deployment.DeploymentUnit(depl.DeploymentName))
+			cmd := exec.Command("systemctl", "start", deployment.DeploymentUnit(depl.DeploymentName))
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			err = cmd.Run()
+			if err != nil {
+				return err
+			}
 		}
-	} else {
-		log.Printf("%s: Starting new deployment %s...", prefix, depl.DeploymentName)
-		fmt.Fprintf(os.Stderr, "+ systemctl start %q\n", deployment.DeploymentUnit(depl.DeploymentName))
-		cmd := exec.Command("systemctl", "start", deployment.DeploymentUnit(depl.DeploymentName))
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		err = cmd.Run()
-		if err != nil {
-			return err
-		}
+
+		return nil
+	}()
+	if err != nil {
+		return err
 	}
 
 	//
@@ -109,17 +122,27 @@ func StartOrRestart(restart bool, service_name string, max_deployment_index int)
 
 	log.Printf("%s: Removing obsolete deployments...\n", prefix)
 
-	deployments, err := deployment_util.List()
+	deployments, err := deployment_util.List(deployment_util.ListOpts{
+		FilterServiceDir: service.BasePath,
+	})
 	if err != nil {
 		return err
 	}
 
 	for _, d := range deployments {
-		if d.ServiceDir != service.BasePath || d.DeploymentName == depl.DeploymentName {
+		if d.DeploymentName == depl.DeploymentName {
 			continue
 		}
+
 		log.Printf("%s: Removing deployment %s...\n", prefix, d.DeploymentName)
-		err = deployment_public.Remove(d.DeploymentName)
+
+		ctx, cancel := context.WithCancel(context.Background())
+		go utils.ExtendTimeout(ctx, 60*time.Second)
+
+		err = func() error {
+			defer cancel()
+			return deployment_public.Remove(d.DeploymentName)
+		}()
 		if err != nil {
 			log.Printf("%s: ERROR removing deployment %s (but continuing): %v", prefix, d.DeploymentName, err)
 		}
@@ -145,20 +168,15 @@ func StartOrRestart(restart bool, service_name string, max_deployment_index int)
 		//
 
 		for {
-			deployments, err := deployment_util.List()
+			deployments, err := deployment_util.List(deployment_util.ListOpts{
+				FilterServiceDir: service.BasePath,
+				FilterServiceId:  service.Id,
+			})
 			if err != nil {
 				return err
 			}
 
-			found := false
-			for _, d := range deployments {
-				if d.ServiceDir == service.BasePath && d.DeploymentName == depl.DeploymentName {
-					found = true
-					break
-				}
-			}
-
-			if !found {
+			if len(deployments) == 0 {
 				return fmt.Errorf("Deployment has gone missing")
 			}
 
@@ -194,17 +212,23 @@ func Stop(service_name string) error {
 
 	log.Printf("stop: Stopping all deployments...\n")
 
-	deployments, err := deployment_util.List()
+	deployments, err := deployment_util.List(deployment_util.ListOpts{
+		FilterServiceDir: service.BasePath,
+	})
 	if err != nil {
 		return err
 	}
 
 	for _, d := range deployments {
-		if d.ServiceDir != service.BasePath {
-			continue
-		}
 		log.Printf("stop: Stopping deployment %s...\n", d.DeploymentName)
-		deployment_public.Stop(d.DeploymentName)
+
+		ctx, cancel := context.WithCancel(context.Background())
+		go utils.ExtendTimeout(ctx, 60*time.Second)
+
+		func() {
+			defer cancel()
+			deployment_public.Stop(d.DeploymentName)
+		}()
 	}
 
 	log.Printf("stop: Stop sequence completed\n")

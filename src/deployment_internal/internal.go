@@ -1,12 +1,14 @@
 package deployment_internal
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"os"
 	"os/exec"
 	"path"
+	"time"
 
 	"github.com/coreos/go-systemd/v22/daemon"
 
@@ -27,6 +29,7 @@ import (
 // - or as a HTTP query to the pod IP address with a retry mechanism
 
 func Prepare() error {
+	ctx := context.Background()
 	cwd, err := os.Getwd()
 	if err != nil {
 		return err
@@ -59,7 +62,8 @@ func Prepare() error {
 	// Run the pre-start hooks (via systemd-run specific scope)
 	//
 
-	err = depl.RunHooks("pre-start")
+	log.Printf("prepare: executing pre-start hooks...")
+	err = depl.RunHooks(ctx, "pre-start", 60*time.Second)
 	if err != nil {
 		return err
 	}
@@ -70,6 +74,7 @@ func Prepare() error {
 }
 
 func Start() error {
+	ctx := context.Background()
 	depl, err := LoadDeployment(ConfigName)
 	if err != nil {
 		return err
@@ -115,7 +120,13 @@ func Start() error {
 	//     this can also perform data migrations
 	//
 
-	err = depl.RunHooks("post-start")
+	_, err = daemon.SdNotify(false, "EXTEND_TIMEOUT_USEC=60000000") // 60s
+	if err != nil {
+		return err
+	}
+
+	log.Printf("start: executing post-start hooks...")
+	err = depl.RunHooks(ctx, "post-start", 60*time.Second)
 	if err != nil {
 		log.Printf("start: post-start hooks failed, continuing...")
 	}
@@ -147,6 +158,8 @@ func Start() error {
 }
 
 func Stop() error {
+	ctx := context.Background()
+
 	//
 	// Notify the deployment is stopping
 	//
@@ -176,7 +189,8 @@ func Stop() error {
 	//    (command inside the container or HTTP request)
 	//
 
-	err = depl.RunHooks("pre-stop")
+	log.Printf("stop: executing pre-stop hooks...")
+	err = depl.RunHooks(ctx, "pre-stop", 60*time.Second)
 	if err != nil {
 		log.Printf("stop: pre-stop hooks failed, continuing...")
 	}
@@ -191,10 +205,6 @@ func Stop() error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	err = cmd.Run()
-	if err != nil {
-		return err
-	}
-
 	if err != nil {
 		log.Printf("stop: ERROR when removing from the load-balancer: %v\n", err)
 	}
@@ -214,6 +224,8 @@ func Stop() error {
 }
 
 func Cleanup() error {
+	ctx := context.Background()
+
 	cwd, err := os.Getwd()
 	if err != nil {
 		return err
@@ -229,7 +241,8 @@ func Cleanup() error {
 		return err
 	}
 
-	err = depl.RunHooks("post-stop")
+	log.Printf("cleanup: executing post-stop hooks...")
+	err = depl.RunHooks(ctx, "post-stop", 60*time.Second)
 	if err != nil {
 		return err
 	}

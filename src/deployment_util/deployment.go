@@ -14,7 +14,13 @@ import (
 	. "github.com/mildred/conductor.go/src/deployment"
 )
 
-func List() ([]*Deployment, error) {
+type ListOpts struct {
+	FilterServiceDir     string
+	FilterDeploymentName string
+	FilterServiceId      string
+}
+
+func List(opts ListOpts) ([]*Deployment, error) {
 	entries, err := os.ReadDir(DeploymentRunDir)
 	if err != nil && !os.IsNotExist(err) {
 		return nil, err
@@ -26,6 +32,19 @@ func List() ([]*Deployment, error) {
 		if err != nil {
 			return nil, err
 		}
+
+		if opts.FilterServiceDir != "" && opts.FilterServiceDir != depl.ServiceDir {
+			continue
+		}
+
+		if opts.FilterDeploymentName != "" && opts.FilterDeploymentName != depl.DeploymentName {
+			continue
+		}
+
+		if opts.FilterServiceId != "" && opts.FilterServiceId != depl.ServiceId {
+			continue
+		}
+
 		res = append(res, depl)
 	}
 
@@ -42,15 +61,15 @@ func StartNewOrExistingFromService(ctx context.Context, svc *service.Service, ma
 	var starting_deployments []*Deployment
 	var stopped_deployments []*Deployment
 	var deployment_units []string
-	deployments, err := List()
+	deployments, err := List(ListOpts{
+		FilterServiceDir: svc.BasePath,
+		FilterServiceId:  svc.Id,
+	})
 	if err != nil {
 		return nil, "", err
 	}
 
 	for _, depl := range deployments {
-		if depl.ServiceDir != svc.BasePath || depl.ServiceId != svc.Id {
-			continue
-		}
 		deployment_units = append(deployment_units, DeploymentUnit(depl.DeploymentName))
 	}
 

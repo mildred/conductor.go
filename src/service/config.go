@@ -23,9 +23,10 @@ type PartialService struct {
 }
 
 type Hook struct {
-	Id   string   `json:"id"`
-	When string   `json:"when"`
-	Exec []string `json:"exec"`
+	Id         string   `json:"id"`
+	When       string   `json:"when"`
+	Exec       []string `json:"exec"`
+	TimeoutSec int64    `json:"timeout_sec"`
 }
 
 type CaddyMapping struct {
@@ -39,6 +40,7 @@ type CaddyConfig struct {
 
 type Service struct {
 	BasePath                string
+	FileName                string
 	Name                    string
 	Id                      string
 	AppName                 string            `json:"app_name",omitempty`              // my-app
@@ -319,6 +321,8 @@ func loadService(path string, fix_paths bool, base *Service) (*Service, error) {
 	service.Hooks = merge_hooks(last_hooks, service.Hooks)
 
 	service.BasePath = dir
+
+	service.FileName = path
 
 	if fix_paths {
 		if err := fix_path(dir, &service.PodTemplate, false); err != nil {
