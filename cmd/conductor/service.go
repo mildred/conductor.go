@@ -45,7 +45,7 @@ func cmd_service_restart(usage func(), name []string, args []string) error {
 		return fmt.Errorf("Command %s must take a single service definition as argument", strings.Join(name, " "))
 	}
 
-	return service_public.Restart(flag.Arg(0))
+	return service_public.Reload(flag.Arg(0))
 }
 
 func cmd_service_deploy(usage func(), name []string, args []string) error {
@@ -271,7 +271,7 @@ func cmd_service_config_set(usage func(), name []string, args []string) error {
 	//
 
 	if !*no_restart_flag {
-		return service_public.Restart(service_descr)
+		return service_public.Reload(service_descr)
 	}
 
 	return nil

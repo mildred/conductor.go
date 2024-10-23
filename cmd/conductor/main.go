@@ -35,7 +35,7 @@ func cmd_reload(usage func(), name []string, args []string) error {
 	inclusive := flag.Bool("inclusive", false, "Allow services from other directories (do not stop them)")
 	flag.Parse(args)
 
-	return service_public.Reload(*inclusive)
+	return service_public.ReloadServices(*inclusive)
 }
 
 func cmd_system_install(usage func(), name []string, args []string) error {

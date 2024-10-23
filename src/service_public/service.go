@@ -18,7 +18,7 @@ import (
 	. "github.com/mildred/conductor.go/src/service"
 )
 
-func Reload(inclusive bool) error {
+func ReloadServices(inclusive bool) error {
 	var ctx = context.Background()
 	sd, err := dbus.NewWithContext(ctx)
 	if err != nil {
@@ -126,14 +126,14 @@ func Stop(definition_path string) error {
 	return cmd.Run()
 }
 
-func Restart(definition_path string) error {
+func Reload(definition_path string) error {
 	unit, err := ServiceUnitByName(definition_path)
 	if err != nil {
 		return err
 	}
 
-	fmt.Fprintf(os.Stderr, "+ systemctl restart %q\n", unit)
-	cmd := exec.Command("systemctl", "restart", unit)
+	fmt.Fprintf(os.Stderr, "+ systemctl reload %q\n", unit)
+	cmd := exec.Command("systemctl", "reload", unit)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
