@@ -20,6 +20,7 @@ import (
 type PrintListSettings struct {
 	Unit             bool
 	ServiceUnit      bool
+	ConfigStatus     bool
 	FilterServiceDir string
 	QuietServiceInfo bool
 }
@@ -31,7 +32,7 @@ func PrintList(settings PrintListSettings) error {
 		return err
 	}
 
-	units, err := sd.ListUnitsByPatternsContext(ctx, nil, []string{"conductor-deployment@*.service", "conductor-service@*.service"})
+	units, err := sd.ListUnitsByPatternsContext(ctx, nil, []string{"conductor-deployment@*.service", "conductor-service@*.service", "conductor-deployment-config@*.service"})
 	if err != nil {
 		return err
 	}
@@ -47,14 +48,17 @@ func PrintList(settings PrintListSettings) error {
 	var list_depl []*Deployment
 	var list_service_status []dbus.UnitStatus
 	var list_depl_status []dbus.UnitStatus
+	var list_depl_config_status []dbus.UnitStatus
 	var extra_service_cols []string
 	var extra_depl_cols []string
 
 	for _, depl := range deployments {
-		var unit, service_unit dbus.UnitStatus
+		var unit, service_unit, config_unit dbus.UnitStatus
 		for _, u := range units {
 			if u.Name == DeploymentUnit(depl.DeploymentName) {
 				unit = u
+			} else if u.Name == DeploymentConfigUnit(depl.DeploymentName) {
+				config_unit = u
 			} else if u.Name == service.ServiceUnit(depl.ServiceDir) {
 				service_unit = u
 			}
@@ -70,6 +74,7 @@ func PrintList(settings PrintListSettings) error {
 		list_depl = append(list_depl, depl)
 		list_service_status = append(list_service_status, service_unit)
 		list_depl_status = append(list_depl_status, unit)
+		list_depl_config_status = append(list_depl_config_status, config_unit)
 
 		if extra_service_cols == nil {
 			extra_service_cols = depl.DisplayServiceConfig
@@ -101,6 +106,9 @@ func PrintList(settings PrintListSettings) error {
 	if settings.Unit {
 		row = append(row, "Unit")
 	}
+	if settings.ConfigStatus {
+		row = append(row, "Reverse-Proxy")
+	}
 	for _, col := range extra_depl_cols {
 		row = append(row, col)
 	}
@@ -111,6 +119,7 @@ func PrintList(settings PrintListSettings) error {
 		s := list_services[i]
 		ss := list_service_status[i]
 		ds := list_depl_status[i]
+		dcs := list_depl_config_status[i]
 
 		row := []interface{}{}
 		if !settings.QuietServiceInfo {
@@ -125,6 +134,9 @@ func PrintList(settings PrintListSettings) error {
 		row = append(row, depl.DeploymentName, ds.ActiveState, ds.SubState, depl.PodIpAddress)
 		if settings.Unit {
 			row = append(row, ds.Name)
+		}
+		if settings.ConfigStatus {
+			row = append(row, fmt.Sprintf("%s (%s)", dcs.ActiveState, dcs.SubState))
 		}
 		for _, col := range extra_depl_cols {
 			row = append(row, depl.Config[col])

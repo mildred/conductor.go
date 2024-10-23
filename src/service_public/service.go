@@ -313,6 +313,7 @@ func PrintService(name string) error {
 	deployment_public.PrintList(deployment_public.PrintListSettings{
 		Unit:             true,
 		FilterServiceDir: service.BasePath,
+		ConfigStatus:     true,
 		QuietServiceInfo: true,
 	})
 
