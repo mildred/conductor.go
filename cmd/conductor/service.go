@@ -237,7 +237,7 @@ func cmd_service_config_set(usage func(), name []string, args []string) error {
 
 	filename := *file_flag
 	if filename == "" {
-		filename = service.FileName
+		filename = service.ConfigSetFile
 	}
 
 	changed_args := map[string]string{}

@@ -120,7 +120,7 @@ func StartOrRestart(restart bool, service_name string, max_deployment_index int)
 	// Stop all deployments that are of older config version
 	//
 
-	log.Printf("%s: Removing obsolete deployments...\n", prefix)
+	log.Printf("%s: Removing obsolete deployments (except %s)...\n", prefix, depl.DeploymentName)
 
 	deployments, err := deployment_util.List(deployment_util.ListOpts{
 		FilterServiceDir: service.BasePath,

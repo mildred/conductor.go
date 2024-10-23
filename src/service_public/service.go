@@ -331,7 +331,27 @@ func PrintInspect(services ...string) error {
 			return err
 		}
 
-		err = json.NewEncoder(os.Stdout).Encode(service)
+		exported := struct {
+			*Service
+			Inherit       []*InheritFile `json:"inherit"`
+			BasePath      string         `json:"_base_path"`
+			FileName      string         `json:"_file_name"`
+			ConfigSetFile string         `json:"_config_set_file"`
+			Name          string         `json:"_name"`
+			Id            string         `json:"_id"`
+		}{
+			Service:       service,
+			Inherit:       service.Inherit.Inherit,
+			BasePath:      service.BasePath,
+			FileName:      service.FileName,
+			ConfigSetFile: service.ConfigSetFile,
+			Name:          service.Name,
+			Id:            service.Id,
+		}
+
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		err = enc.Encode(exported)
 		if err != nil {
 			return err
 		}

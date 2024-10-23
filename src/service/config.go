@@ -3,7 +3,6 @@ package service
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -17,10 +16,6 @@ import (
 
 	"github.com/mildred/conductor.go/src/dirs"
 )
-
-type PartialService struct {
-	Inherit []string `json:"inherit"` // path to the inherited file
-}
 
 type Hook struct {
 	Id         string   `json:"id"`
@@ -39,10 +34,12 @@ type CaddyConfig struct {
 }
 
 type Service struct {
-	BasePath                string
-	FileName                string
-	Name                    string
-	Id                      string
+	BasePath                string            `json:"-"`
+	FileName                string            `json:"-"`
+	ConfigSetFile           string            `json:"-"`
+	Name                    string            `json:"-"`
+	Id                      string            `json:"-"`
+	Inherit                 *InheritedFile    `json:"-"`
 	AppName                 string            `json:"app_name",omitempty`              // my-app
 	InstanceName            string            `json:"instance_name",omitempty`         // staging
 	Config                  map[string]string `json:"config",omitempty`                // key-value pairs for config and templating, CHANNEL=staging
@@ -227,9 +224,9 @@ func LoadServiceFile(path string) (*Service, error) {
 		return nil, err
 	}
 
-	service, err := loadService(path, true, nil)
+	service, err := loadService(path, true, nil, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("while loading service %q, %v", path, err)
 	}
 
 	err = service.FillDefaults()
@@ -251,52 +248,51 @@ func LoadServiceFile(path string) (*Service, error) {
 	return service, nil
 }
 
-func loadService(path string, fix_paths bool, base *Service) (*Service, error) {
+func loadService(path string, fix_paths bool, base *Service, inh *InheritFile) (*Service, error) {
 	dir := filepath.Dir(path)
-	f, err := os.Open(path)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
 
-	defer f.Close()
+	inherit, err := DecodeInherit(data, dir)
+	if err != nil {
+		return nil, fmt.Errorf("while reading %q, %v", path, err)
+	}
 
-	var partial *PartialService = &PartialService{}
 	var service *Service = base
 
 	if service == nil {
 		service = &Service{}
+		service.Inherit = inherit
 		service.Config = map[string]string{}
 		service.Hooks = []*Hook{}
+	} else if inh != nil {
+		inh.Inherit = inherit
 	}
 
-	err = json.NewDecoder(f).Decode(partial)
-	if err != nil {
-		return nil, err
-	}
+	if len(inherit.Inherit) > 0 {
+		has_config_set_file := service.ConfigSetFile != ""
 
-	if len(partial.Inherit) > 0 {
-		for _, inherit := range partial.Inherit {
-			may_fail := strings.HasPrefix(inherit, "-")
-			inherit = join_paths(dir, strings.TrimPrefix(inherit, "-"))
-
-			if strings.HasSuffix(inherit, "/") {
-				inherit = filepath.Join(inherit, ConfigName)
-			}
-
-			if may_fail {
-				_, err = os.Stat(inherit)
+		for _, inherit := range inherit.Inherit {
+			if inherit.IgnoreError {
+				_, err = os.Stat(inherit.Path)
 				if err != nil && os.IsNotExist(err) {
-					log.Printf("service: %s could inherit from %s (not found)", dir, inherit)
+					log.Printf("service: %s could inherit from %s (not found)", dir, inherit.Path)
 					continue
 				} else if err != nil {
 					return nil, err
 				}
 			}
 
-			log.Printf("service: %s inherit from %s", dir, inherit)
-			service, err = loadService(inherit, true, service)
+			log.Printf("service: %s inherit from %s", dir, inherit.Path)
+			service, err = loadService(inherit.Path, true, service, inherit)
 			if err != nil {
 				return nil, err
+			}
+
+			if !has_config_set_file && inherit.SetConfig {
+				service.ConfigSetFile = inherit.Path
 			}
 		}
 	}
@@ -305,15 +301,10 @@ func loadService(path string, fix_paths bool, base *Service) (*Service, error) {
 		service = &Service{}
 	}
 
-	_, err = f.Seek(0, io.SeekStart)
-	if err != nil {
-		return nil, err
-	}
-
 	last_hooks := service.Hooks
 	service.Hooks = []*Hook{}
 
-	err = json.NewDecoder(f).Decode(service)
+	err = json.Unmarshal(data, service)
 	if err != nil {
 		return nil, err
 	}
@@ -385,6 +376,9 @@ func (service *Service) FillDefaults() error {
 	}
 	if service.CaddyLoadBalancer.ApiEndpoint == "" {
 		service.CaddyLoadBalancer.ApiEndpoint = "http://localhost:2019"
+	}
+	if service.ConfigSetFile == "" {
+		service.ConfigSetFile = service.FileName
 	}
 	return nil
 }
