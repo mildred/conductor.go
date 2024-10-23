@@ -33,23 +33,34 @@ type CaddyConfig struct {
 	Mapping     []CaddyMapping `json:"mapping"`
 }
 
+type ServiceCommand struct {
+	Deployment           bool       `json:"deployment"`
+	Service              bool       `json:"service"`
+	ServiceAnyDeployment bool       `json:"service_any_deployment"`
+	Description          string     `json:"description"`
+	Exec                 []string   `json:"exec"`
+	HelpFlags            [][]string `json:"help_flags"`
+	HelpArgs             []string   `json:"help_args"`
+}
+
 type Service struct {
-	BasePath                string            `json:"-"`
-	FileName                string            `json:"-"`
-	ConfigSetFile           string            `json:"-"`
-	Name                    string            `json:"-"`
-	Id                      string            `json:"-"`
-	Inherit                 *InheritedFile    `json:"-"`
-	AppName                 string            `json:"app_name",omitempty`              // my-app
-	InstanceName            string            `json:"instance_name",omitempty`         // staging
-	Config                  map[string]string `json:"config",omitempty`                // key-value pairs for config and templating, CHANNEL=staging
-	PodTemplate             string            `json:"pod_template",omitempty`          // Template file for pod
-	ConfigMapTemplate       string            `json:"config_map_template",omitempty`   // ConfigMap template file
-	ProxyConfigTemplate     string            `json:"proxy_config_template",omitempty` // Template file for the load-balancer config
-	Hooks                   []*Hook           `json:"hooks",omitempty`
-	CaddyLoadBalancer       CaddyConfig       `json:"caddy_load_balancer"`
-	DisplayServiceConfig    []string          `json:"display_service_config"`
-	DisplayDeploymentConfig []string          `json:"display_deployment_config"`
+	BasePath                string                     `json:"-"`
+	FileName                string                     `json:"-"`
+	ConfigSetFile           string                     `json:"-"`
+	Name                    string                     `json:"-"`
+	Id                      string                     `json:"-"`
+	Inherit                 *InheritedFile             `json:"-"`
+	AppName                 string                     `json:"app_name",omitempty`              // my-app
+	InstanceName            string                     `json:"instance_name",omitempty`         // staging
+	Config                  map[string]string          `json:"config",omitempty`                // key-value pairs for config and templating, CHANNEL=staging
+	PodTemplate             string                     `json:"pod_template",omitempty`          // Template file for pod
+	ConfigMapTemplate       string                     `json:"config_map_template",omitempty`   // ConfigMap template file
+	ProxyConfigTemplate     string                     `json:"proxy_config_template",omitempty` // Template file for the load-balancer config
+	Hooks                   []*Hook                    `json:"hooks",omitempty`
+	CaddyLoadBalancer       CaddyConfig                `json:"caddy_load_balancer"`
+	DisplayServiceConfig    []string                   `json:"display_service_config"`
+	DisplayDeploymentConfig []string                   `json:"display_deployment_config"`
+	Commands                map[string]*ServiceCommand `json:"commands"`
 }
 
 const ConfigName = "conductor-service.json"
@@ -336,6 +347,15 @@ func loadService(path string, fix_paths bool, base *Service, inh *InheritFile) (
 				return nil, err
 			}
 		}
+
+		for _, command := range service.Commands {
+			if len(command.Exec) == 0 {
+				continue
+			}
+			if err := fix_path(dir, &command.Exec[0], true); err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	return service, nil
@@ -422,6 +442,9 @@ func (service *Service) Vars() []string {
 	var vars []string = []string{
 		"CONDUCTOR_APP=" + service.AppName,
 		"CONDUCTOR_INSTANCE=" + service.InstanceName,
+		"CONDUCTOR_SERVICE_DIR=" + service.BasePath,
+		"CONDUCTOR_SERVICE_UNIT=" + ServiceUnit(service.BasePath),
+		"CONDUCTOR_SERVICE_CONFIG_UNIT=" + ServiceConfigUnit(service.BasePath),
 	}
 	for k, v := range service.Config {
 		vars = append(vars, fmt.Sprintf("%s=%s", k, v))

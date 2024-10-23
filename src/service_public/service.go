@@ -132,8 +132,8 @@ func Reload(definition_path string) error {
 		return err
 	}
 
-	fmt.Fprintf(os.Stderr, "+ systemctl reload %q\n", unit)
-	cmd := exec.Command("systemctl", "reload", unit)
+	fmt.Fprintf(os.Stderr, "+ systemctl reload-or-restart %q\n", unit)
+	cmd := exec.Command("systemctl", "reload-or-restart", unit)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()

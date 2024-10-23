@@ -193,6 +193,13 @@ func Remove(deployment_name string) error {
 		return err
 	}
 
+	systemd_run_dir := "/run/systemd/system/" + DeploymentUnit(deployment_name) + ".d"
+	fmt.Fprintf(os.Stderr, "+ rm -rf %q\n", systemd_run_dir)
+	err = os.RemoveAll(systemd_run_dir)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 

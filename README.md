@@ -70,6 +70,15 @@ To declare a service, just put a JSON file in
       "exec": ["./pre-stop.hook"]
     }
   ],
+  "commands" {
+    "migrate": {
+      "service": true,
+      "service_any_deployment": false,
+      "deployment": false,
+      "description": "Run data migrations",
+      "exec": ["./migrate.cmd"]
+    }
+  },
   "display_service_config": ["BEAUTIFUL_APP_ENV", "DOCKER_TAG"],
   "display_deployment_config": ["DOCKER_VERSION"]
 }
@@ -78,6 +87,22 @@ To declare a service, just put a JSON file in
 ### Hooks
 
 Hooks are scripts executed with the config as environment variables.
+
+Additional variables for services and deployments:
+
+- `CONDUCTOR_APP`
+- `CONDUCTOR_INSTANCE`
+- `CONDUCTOR_SERVICE_DIR`
+- `CONDUCTOR_SERVICE_UNIT`
+- `CONDUCTOR_SERVICE_CONFIG_UNIT`
+
+Additional variables for deployments only:
+
+- `CONDUCTOR_DEPLOYMENT` contains the deployment name
+- `CONDUCTOR_DEPLOYMENT_UNIT`
+- `CONDUCTOR_DEPLOYMENT_CONFIG_UNIT`
+- `POD_NAME` contains the pod name
+- `POD_IP_ADDRESS` contains the pod IP address
 
 ### Templates
 
@@ -125,6 +150,30 @@ those services and deployments
 It is possible to inherit from a base configuration, in which case the path
 locations inherited from the base configuration will be adjusted to be relative
 to the file they were declared in.
+
+### Commands
+
+It is possible to declare commands that can be execute with `conductor run`.
+Each command must have an `exec` array to execute a script relative to the
+current file.
+
+The command must declare in what context it can be executed:
+
+- `"service": true` if the command is executed for a service globally
+- `"service_any_deployment": true` if the command is executed for a service in
+  which case it will be executed in the context of any active deployment, or
+  will fail if there is no compatible active deployment
+- `"deployment": true` if the command is executed in the context of a deployment
+
+The command can be executed for a service with `conductor run -s SERVICE_NAME`
+or for a deployment with `conductor run -d DEPLOYMENT_NAME`.
+
+The configuration is available as environment variables just as hooks, with the
+addition of:
+
+- `CONDUCTOR_COMMAND` contains the command name.
+- `CONDUCTOR_COMMAND_DIR` working directory of the invocation, the command
+itself run relative to the service or deployment directory.
 
 Basic How-To
 ------------

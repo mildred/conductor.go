@@ -59,6 +59,29 @@ func Prepare() error {
 	}
 
 	//
+	// Configure systemd deployment
+	//
+	//
+
+	// sd, err := dbus.NewWithContext(ctx)
+	// if err != nil {
+	// 	return err
+	// }
+
+	// var props []dbus.Property
+	// props = append(props, dbus.Property{"LogExtraFields", godbus.MakeVariant(fmt.Sprintf("CONDUCTOR_APP=%s", depl.AppName))})
+	// props = append(props, dbus.Property{"LogExtraFields", godbus.MakeVariant(fmt.Sprintf("CONDUCTOR_INSTANCE=%s", depl.InstanceName))})
+	// err = sd.SetUnitPropertiesContext(ctx, DeploymentUnit(depl.DeploymentName), false, props...)
+	// if err != nil {
+	// 	return err
+	// }
+
+	// err = sd.ReloadContext(ctx)
+	// if err != nil {
+	// 	return err
+	// }
+
+	//
 	// Run the pre-start hooks (via systemd-run specific scope)
 	//
 
@@ -214,7 +237,7 @@ func Stop() error {
 	//
 
 	log.Printf("stop: Stopping the containers...\n")
-	err = depl.StartStopPod(true, ".")
+	err = depl.StartStopPod(false, ".")
 	if err != nil {
 		return err
 	}

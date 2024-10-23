@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path"
 
 	"github.com/coreos/go-systemd/v22/dbus"
@@ -46,6 +47,46 @@ func List(opts ListOpts) ([]*Deployment, error) {
 		}
 
 		res = append(res, depl)
+	}
+
+	return res, nil
+}
+
+func ListUnitStatus(ctx context.Context, deployments []*Deployment, config_unit bool) ([]dbus.UnitStatus, error) {
+	sd, err := dbus.NewWithContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var deployment_units []string
+	for _, depl := range deployments {
+		if config_unit {
+			deployment_units = append(deployment_units, DeploymentConfigUnit(depl.DeploymentName))
+		} else {
+			deployment_units = append(deployment_units, DeploymentUnit(depl.DeploymentName))
+		}
+	}
+
+	statuses, err := sd.ListUnitsByNamesContext(ctx, deployment_units)
+	if err != nil {
+		return nil, err
+	}
+
+	var res []dbus.UnitStatus
+	for _, depl := range deployments {
+		var status dbus.UnitStatus
+
+		for _, st := range statuses {
+			if config_unit && st.Name == DeploymentConfigUnit(depl.DeploymentName) {
+				status = st
+				break
+			} else if !config_unit && st.Name == DeploymentUnit(depl.DeploymentName) {
+				status = st
+				break
+			}
+		}
+
+		res = append(res, status)
 	}
 
 	return res, nil
@@ -190,6 +231,38 @@ func CreateDeploymentFromService(name string, svc *service.Service) (string, err
 	err = os.Symlink(path.Join(svc.BasePath, service.ConfigName), path.Join(dir, service.ConfigName))
 	if err != nil {
 		return "", err
+	}
+
+	// var env string
+	// env += fmt.Sprintf("CONDUCTOR_APP=%s\n", svc.AppName)
+	// env += fmt.Sprintf("CONDUCTOR_INSTANCE=%s\n", svc.InstanceName)
+	// env += fmt.Sprintf("CONDUCTOR_SERVICE_DIR=%s\n", svc.BasePath)
+	// env += fmt.Sprintf("CONDUCTOR_DEPLOYMENT=%s\n", name)
+	// err = os.WriteFile(path.Join(dir, "conductor-deployment.env"), []byte(env), 0644)
+	// if err != nil {
+	// 	return "", err
+	// }
+
+	err = os.MkdirAll("/run/systemd/system/"+DeploymentUnit(name)+".d", 0755)
+	if err != nil {
+		return "", err
+	}
+
+	var conf string = "[Service]\n"
+	conf += fmt.Sprintf("LogExtraFields=CONDUCTOR_APP=%s\n", svc.AppName)
+	conf += fmt.Sprintf("LogExtraFields=CONDUCTOR_INSTANCE=%s\n", svc.InstanceName)
+	conf += fmt.Sprintf("LogExtraFields=CONDUCTOR_DEPLOYMENT=%s\n", name)
+	err = os.WriteFile("/run/systemd/system/"+DeploymentUnit(name)+".d/50-journal.conf", []byte(conf), 0644)
+	if err != nil {
+		return "", err
+	}
+
+	cmd := exec.Command("systemctl", "daemon-reload")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	err = cmd.Run()
+	if err != nil {
+		return "", fmt.Errorf("while running systemctl daemon-reload, %v", err)
 	}
 
 	return dir, nil

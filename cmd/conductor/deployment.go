@@ -121,7 +121,7 @@ func cmd_deployment_env(usage func(), name []string, args []string) error {
 		return fmt.Errorf("Command %s must take a single deployment", strings.Join(name, " "))
 	}
 
-	depl, err := deployment.LoadDeploymentDir(ids[0])
+	depl, err := deployment.ReadDeploymentByName(ids[0])
 	if err != nil {
 		return err
 	}

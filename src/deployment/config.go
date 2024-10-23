@@ -58,6 +58,10 @@ func NewDeploymentFromService(service *service.Service, deployment_name string) 
 	}
 }
 
+func ReadDeploymentByName(name string) (*Deployment, error) {
+	return ReadDeployment(DeploymentDirByName(name), name)
+}
+
 func ReadDeployment(dir, deployment_id string) (*Deployment, error) {
 	_, err := os.Stat(path.Join(dir, ConfigName))
 	if err != nil && !os.IsNotExist(err) {
@@ -125,6 +129,8 @@ func (depl *Deployment) Vars() []string {
 		"CONDUCTOR_DEPLOYMENT="+depl.DeploymentName,
 		"POD_NAME="+depl.PodName,
 		"POD_IP_ADDRESS="+depl.PodIpAddress,
+		"CONDUCTOR_DEPLOYMENT_UNIT="+DeploymentUnit(depl.DeploymentName),
+		"CONDUCTOR_DEPLOYMENT_CONFIG_UNIT="+DeploymentConfigUnit(depl.DeploymentName),
 	)
 }
 
