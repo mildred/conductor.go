@@ -39,13 +39,16 @@ func cmd_service_stop(usage func(), name []string, args []string) error {
 
 func cmd_service_restart(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
+	no_block := flag.Bool("no-block", false, "Do not block while restarting")
 	flag.Parse(args)
 
 	if flag.NArg() != 1 {
 		return fmt.Errorf("Command %s must take a single service definition as argument", strings.Join(name, " "))
 	}
 
-	return service_public.Reload(flag.Arg(0))
+	return service_public.Reload(flag.Arg(0), service_public.ReloadOpts{
+		NoBlock: *no_block,
+	})
 }
 
 func cmd_service_deploy(usage func(), name []string, args []string) error {
@@ -96,15 +99,126 @@ func cmd_service_inspect(usage func(), name []string, args []string) error {
 	return service_public.PrintInspect(flag.Args()...)
 }
 
+type strlist []string
+
+// String is an implementation of the flag.Value interface
+func (l *strlist) String() string {
+	return fmt.Sprintf("%v", *l)
+}
+
+// Set is an implementation of the flag.Value interface
+func (l *strlist) Set(value string) error {
+	*l = append(*l, value)
+	return nil
+}
+
+type configlist map[string][]service_public.Selector
+
+// String is an implementation of the flag.Value interface
+func (c *configlist) String() string {
+	return ""
+}
+
+// Set is an implementation of the flag.Value interface
+func (c *configlist) Set(value string) error {
+	if !strings.Contains(value, "=") {
+		return fmt.Errorf("configuration filter must contain a key and value separated by '='")
+	}
+	splits := strings.SplitN(value, "=", 2)
+	if len(splits) != 2 || len(splits[0]) < 1 {
+		return fmt.Errorf("invalid configuration filter")
+	}
+	key := splits[0]
+	selector := service_public.Selector{
+		Selector: "=",
+		Value:    splits[1],
+	}
+	if key = strings.TrimSuffix(key, "="); key != splits[0] {
+		// ensure "==" does not match any fancy selector
+		selector.Selector = "="
+	} else if key = strings.TrimSuffix(key, "!"); key != splits[0] {
+		selector.Selector = "="
+		selector.Negate = true
+	} else if key = strings.TrimSuffix(key, "*"); key != splits[0] {
+		selector.Selector = "*="
+	} else if key = strings.TrimSuffix(key, "~json"); key != splits[0] {
+		selector.Selector = "~json="
+	} else if key = strings.TrimSuffix(key, "~jsonpath"); key != splits[0] {
+		selector.Selector = "~jsonpath="
+	} else if key = strings.TrimSuffix(key, "~"); key != splits[0] {
+		selector.Selector = "~="
+	} else if key = strings.TrimSuffix(key, "^"); key != splits[0] {
+		selector.Selector = "^="
+	} else if key = strings.TrimSuffix(key, "$"); key != splits[0] {
+		selector.Selector = "$="
+	}
+
+	if selector.Selector != "=" {
+		// do not allow "!≃="
+		key0 := key
+		if key = strings.TrimSuffix(key, "!"); key != key0 {
+			selector.Negate = true
+		}
+	}
+
+	(*c)[key] = append((*c)[key], selector)
+	return nil
+}
+
 func cmd_service_ls(usage func(), name []string, args []string) error {
+	c := configlist{}
+	filter_jsonpaths := strlist{}
+
 	flag := new_flag_set(name, usage)
+	app_flag := flag.String("app", "", "Filter by app name")
+	json_flag := flag.Bool("json", false, "Return a JSON array")
+	jsons_flag := flag.Bool("jsons", false, "Return a list of JSON objects")
 	unit := flag.Bool("unit", false, "Show systemd unit column")
+	flag.Var(&c, "c", "Filter by configuration, same key multiple times is an OR, allowes selectors: '=', '~=', `~json=`, '*=', '^=', '$='")
+	flag.Var(&filter_jsonpaths, "filter-jsonpath", "Filter by JSONPath returning boolean, multiple filteres are ORed")
+	csv := flag.Bool("csv", false, "Print as CSV")
+	csv_sep := flag.String("csv-sep", ",", "CSV separator")
+	stop_b := flag.String("stop-before", "", "Stop list before this item as specified by JSONPath returning boolean")
+	stop_a := flag.String("stop-after", "", "Stop list after this item as specified by JSONPath returning boolean")
+	resume_b := flag.String("resume-before", "", "Resume list before this item as specified by JSONPath returning boolean")
+	resume_a := flag.String("resume-after", "", "Resume list after this item as specified by JSONPath returning boolean")
+	jsonpath := flag.String("jsonpath", "", "Evaluate this JSONPath for each row")
 	flag.Parse(args)
 
 	log.Default().SetOutput(io.Discard)
 
+	if *csv_sep == "\\t" {
+		*csv_sep = "\t"
+	}
+
+	var resume_before, resume_after, stop_before, stop_after *service_public.Selector
+	if *resume_b != "" {
+		resume_before = &service_public.Selector{Selector: "jsonpath", Value: *resume_b}
+	}
+	if *resume_a != "" {
+		resume_after = &service_public.Selector{Selector: "jsonpath", Value: *resume_a}
+	}
+	if *stop_b != "" {
+		stop_before = &service_public.Selector{Selector: "jsonpath", Value: *stop_b}
+	}
+	if *stop_a != "" {
+		stop_after = &service_public.Selector{Selector: "jsonpath", Value: *stop_a}
+	}
+
 	return service_public.PrintList(service_public.PrintListSettings{
-		Unit: *unit,
+		Unit:              *unit,
+		FilterApplication: *app_flag,
+		FilterConfig:      c,
+		FilterJSONPaths:   filter_jsonpaths,
+		JSON:              *json_flag,
+		JSONs:             *jsons_flag,
+		CSV:               *csv,
+		CSVSeparator:      *csv_sep,
+		ResumeBefore:      resume_before,
+		ResumeAfter:       resume_after,
+		StopBefore:        stop_before,
+		StopAfter:         stop_after,
+		JSONPath:          *jsonpath,
 	})
 }
 
@@ -221,6 +335,7 @@ func cmd_service_config_set(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
 	file_flag := flag.String("f", "", "Write in this file instead of the service file")
 	no_restart_flag := flag.Bool("n", false, "Do not restart service")
+	no_block_flag := flag.Bool("no-block", false, "Do not block while restarting")
 	flag.Parse(args)
 
 	log.Default().SetOutput(io.Discard)
@@ -271,7 +386,9 @@ func cmd_service_config_set(usage func(), name []string, args []string) error {
 	//
 
 	if !*no_restart_flag {
-		return service_public.Reload(service_descr)
+		return service_public.Reload(service_descr, service_public.ReloadOpts{
+			NoBlock: *no_block_flag,
+		})
 	}
 
 	return nil

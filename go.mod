@@ -12,6 +12,8 @@ require (
 )
 
 require (
+	github.com/PaesslerAG/gval v1.0.0 // indirect
+	github.com/PaesslerAG/jsonpath v0.1.1 // indirect
 	github.com/godbus/dbus/v5 v5.0.4 // indirect
 	golang.org/x/sys v0.26.0 // indirect
 )
