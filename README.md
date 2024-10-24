@@ -233,6 +233,36 @@ Roadmap:
 - [ ] Let Conductor handle socket activation for the multiple requests use case,
   and let Conductor handle preloading of the CGI executable.
 
+### Security
+
+Security can be handled using Caddy reverse_proxy rewrite handlers. See:
+
+- https://caddyserver.com/docs/caddyfile/directives/forward_auth
+- https://caddyserver.com/docs/json/apps/http/servers/routes/handle/reverse_proxy/#rewrite
+- https://caddyserver.com/docs/json/apps/http/servers/routes/handle/reverse_proxy/handle_response/routes/handle/headers/
+
+For CGI/lanbdas, the reverse proxy should be configured to forward a copy of the
+request to the authentication service which can then decide if the request is
+authorized (is the API token authorized or not).
+
+The key here is to have two handlers: the first a reverse proxy to the auth
+service with the rewrite configuration. In this first handler the
+handle_response block is configured to use upon auth success the `headers`
+handler to copy the headers to the request, and upon failure a handler can
+respond with an unauthorized message. Then the second handler follows the first
+with the rewrite and forwards to the legitimate upstream if the auth succeeds.
+
+Conductor should setup such an auth service which can detect a list of bearer
+tokens to authorize CGI functions. CGI functions can be associated with
+policies, and policies can specify a number of rules.
+
+The policy could contain :
+- a list of static bearer tokens accepted
+- a list of JWT public keys accepted (RS*, ES*)
+
+Services making use of these tokens will have to have the tokens or JWT private
+keys configured
+
 Actions
 -------
 
