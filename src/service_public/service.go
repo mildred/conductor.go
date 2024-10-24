@@ -678,7 +678,7 @@ func ServiceSetConfig(filename string, config map[string]string) error {
 		service_config[k] = v
 	}
 
-	f, err = os.OpenFile(filename, os.O_CREATE|os.O_WRONLY, os.ModePerm-0o111)
+	f, err = os.OpenFile(filename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.ModePerm-0o111)
 	if err != nil {
 		return err
 	}

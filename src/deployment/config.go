@@ -193,7 +193,6 @@ func (depl *Deployment) StartStopPod(start bool, dir string) error {
 			path.Join(dir, "pod.yml"))
 	} else {
 		args = utils.Compact("kube", "down",
-			configmap_flag,
 			path.Join(dir, "pod.yml"))
 	}
 	fmt.Fprintf(os.Stderr, "+ podman %q\n", args)
