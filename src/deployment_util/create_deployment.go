@@ -2,6 +2,7 @@ package deployment_util
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -15,84 +16,7 @@ import (
 	. "github.com/mildred/conductor.go/src/deployment"
 )
 
-type ListOpts struct {
-	FilterServiceDir     string
-	FilterDeploymentName string
-	FilterServiceId      string
-}
-
-func List(opts ListOpts) ([]*Deployment, error) {
-	entries, err := os.ReadDir(DeploymentRunDir)
-	if err != nil && !os.IsNotExist(err) {
-		return nil, err
-	}
-
-	var res []*Deployment
-	for _, ent := range entries {
-		depl, err := ReadDeployment(path.Join(DeploymentRunDir, ent.Name()), ent.Name())
-		if err != nil {
-			return nil, err
-		}
-
-		if opts.FilterServiceDir != "" && opts.FilterServiceDir != depl.ServiceDir {
-			continue
-		}
-
-		if opts.FilterDeploymentName != "" && opts.FilterDeploymentName != depl.DeploymentName {
-			continue
-		}
-
-		if opts.FilterServiceId != "" && opts.FilterServiceId != depl.ServiceId {
-			continue
-		}
-
-		res = append(res, depl)
-	}
-
-	return res, nil
-}
-
-func ListUnitStatus(ctx context.Context, deployments []*Deployment, config_unit bool) ([]dbus.UnitStatus, error) {
-	sd, err := dbus.NewWithContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	var deployment_units []string
-	for _, depl := range deployments {
-		if config_unit {
-			deployment_units = append(deployment_units, DeploymentConfigUnit(depl.DeploymentName))
-		} else {
-			deployment_units = append(deployment_units, DeploymentUnit(depl.DeploymentName))
-		}
-	}
-
-	statuses, err := sd.ListUnitsByNamesContext(ctx, deployment_units)
-	if err != nil {
-		return nil, err
-	}
-
-	var res []dbus.UnitStatus
-	for _, depl := range deployments {
-		var status dbus.UnitStatus
-
-		for _, st := range statuses {
-			if config_unit && st.Name == DeploymentConfigUnit(depl.DeploymentName) {
-				status = st
-				break
-			} else if !config_unit && st.Name == DeploymentUnit(depl.DeploymentName) {
-				status = st
-				break
-			}
-		}
-
-		res = append(res, status)
-	}
-
-	return res, nil
-}
-
-func StartNewOrExistingFromService(ctx context.Context, svc *service.Service, max_deployment_index int) (*Deployment, string, error) {
+func StartNewOrExistingFromService(ctx context.Context, svc *service.Service, seed *DeploymentSeed, max_deployment_index int) (*Deployment, string, error) {
 	sd, err := dbus.NewWithContext(ctx)
 	if err != nil {
 		return nil, "", err
@@ -181,7 +105,7 @@ func StartNewOrExistingFromService(ctx context.Context, svc *service.Service, ma
 		var name string
 		var i = 1
 		for i <= max_deployment_index {
-			name = fmt.Sprintf("%s-%s-%d", svc.AppName, svc.InstanceName, i)
+			name = fmt.Sprintf("%s-%s-%s%d", svc.AppName, svc.InstanceName, seed.Prefix(), i)
 			log.Printf("Trying new deployment name %s", name)
 			_, err := os.Stat(path.Join(DeploymentRunDir, name))
 			if err != nil && !os.IsNotExist(err) {
@@ -206,7 +130,7 @@ func StartNewOrExistingFromService(ctx context.Context, svc *service.Service, ma
 		// Symlink the service config over to the deployment directory
 		//
 
-		dir, err := CreateDeploymentFromService(name, svc)
+		dir, err := CreateDeploymentFromService(name, svc, seed)
 		if err != nil {
 			return nil, "", err
 		}
@@ -220,7 +144,7 @@ func StartNewOrExistingFromService(ctx context.Context, svc *service.Service, ma
 	}
 }
 
-func CreateDeploymentFromService(name string, svc *service.Service) (string, error) {
+func CreateDeploymentFromService(name string, svc *service.Service, seed *DeploymentSeed) (string, error) {
 	dir := path.Join(DeploymentRunDir, name)
 
 	err := os.MkdirAll(dir, 0755)
@@ -229,6 +153,16 @@ func CreateDeploymentFromService(name string, svc *service.Service) (string, err
 	}
 
 	err = os.Symlink(path.Join(svc.BasePath, service.ConfigName), path.Join(dir, service.ConfigName))
+	if err != nil {
+		return "", err
+	}
+
+	seed_data, err := json.Marshal(seed)
+	if err != nil {
+		return "", err
+	}
+
+	err = os.WriteFile(path.Join(svc.BasePath, SeedName), seed_data, 0644)
 	if err != nil {
 		return "", err
 	}

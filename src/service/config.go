@@ -24,13 +24,8 @@ type Hook struct {
 	TimeoutSec int64    `json:"timeout_sec"`
 }
 
-type CaddyMapping struct {
-	Port int `json:"port"`
-}
-
 type CaddyConfig struct {
-	ApiEndpoint string         `json:"api_endpoint"`
-	Mapping     []CaddyMapping `json:"mapping"`
+	ApiEndpoint string `json:"api_endpoint"`
 }
 
 type ServiceCommand struct {
@@ -50,13 +45,12 @@ type Service struct {
 	Name                    string                     `json:"-"`
 	Id                      string                     `json:"-"`
 	Inherit                 *InheritedFile             `json:"-"`
-	AppName                 string                     `json:"app_name",omitempty`              // my-app
-	InstanceName            string                     `json:"instance_name",omitempty`         // staging
-	Config                  map[string]string          `json:"config",omitempty`                // key-value pairs for config and templating, CHANNEL=staging
-	PodTemplate             string                     `json:"pod_template",omitempty`          // Template file for pod
-	ConfigMapTemplate       string                     `json:"config_map_template",omitempty`   // ConfigMap template file
-	ProxyConfigTemplate     string                     `json:"proxy_config_template",omitempty` // Template file for the load-balancer config
-	Hooks                   []*Hook                    `json:"hooks",omitempty`
+	AppName                 string                     `json:"app_name,omitempty"`              // my-app
+	InstanceName            string                     `json:"instance_name,omitempty"`         // staging
+	Config                  map[string]string          `json:"config,omitempty"`                // key-value pairs for config and templating, CHANNEL=staging
+	ProxyConfigTemplate     string                     `json:"proxy_config_template,omitempty"` // Template file for the load-balancer config
+	Pods                    *ServicePods               `json:"pods,omitempty"`
+	Hooks                   []*Hook                    `json:"hooks,omitempty"`
 	CaddyLoadBalancer       CaddyConfig                `json:"caddy_load_balancer"`
 	DisplayServiceConfig    []string                   `json:"display_service_config"`
 	DisplayDeploymentConfig []string                   `json:"display_deployment_config"`
@@ -132,32 +126,6 @@ func ServiceRealpath(service_dir string) (string, error) {
 	}
 	return filepath.Dir(service_file), nil
 }
-
-// func ValidateServiceNameFromDir(service_dir, name_hint string) (string, error) {
-// 	stat, err := os.Stat(filepath.Join(service_dir, ConfigName))
-// 	if err != nil {
-// 		return "", err
-// 	}
-//
-// 	for _, services_dir := range ServiceDirs {
-// 		dir := filepath.Join(services_dir, name_hint)
-// 		st, err := os.Stat(filepath.Join(dir, ConfigName))
-// 		if err != nil && !os.IsNotExist(err) {
-// 			return "", err
-// 		} else if err != nil {
-// 			// ignore error, this is not a valid service dir
-// 			continue
-// 		}
-//
-// 		if os.SameFile(stat, st) {
-// 			return name_hint, nil
-// 		} else {
-// 			return "", nil
-// 		}
-// 	}
-//
-// 	return "", nil
-// }
 
 func ServiceNameFromFile(service_file string) (string, error) {
 	stat, err := os.Stat(service_file)
@@ -327,11 +295,7 @@ func loadService(path string, fix_paths bool, base *Service, inh *InheritFile) (
 	service.FileName = path
 
 	if fix_paths {
-		if err := fix_path(dir, &service.PodTemplate, false); err != nil {
-			return nil, err
-		}
-
-		if err := fix_path(dir, &service.ConfigMapTemplate, false); err != nil {
+		if err := service.Pods.FixPaths(dir); err != nil {
 			return nil, err
 		}
 
@@ -388,11 +352,9 @@ func fix_path(dir string, path *string, is_executable bool) error {
 }
 
 func (service *Service) FillDefaults() error {
-	if service.PodTemplate == "" {
-		service.PodTemplate = filepath.Join(service.BasePath, "pod.template")
-	}
+	service.Pods.FillDefaults(service)
 	if service.ProxyConfigTemplate == "" {
-		service.PodTemplate = filepath.Join(service.BasePath, "proxy-config.template")
+		service.ProxyConfigTemplate = filepath.Join(service.BasePath, "proxy-config.template")
 	}
 	if service.CaddyLoadBalancer.ApiEndpoint == "" {
 		service.CaddyLoadBalancer.ApiEndpoint = "http://localhost:2019"
@@ -455,4 +417,15 @@ func (service *Service) Vars() []string {
 		vars = append(vars, fmt.Sprintf("%s=%s", k, v))
 	}
 	return vars
+}
+
+func (service *Service) Parts() ([]string, error) {
+	var res []string
+	for _, pod := range *service.Pods {
+		if slices.Contains(res, pod.Name) {
+			return nil, fmt.Errorf("duplicated part %s in service", pod.Name)
+		}
+		res = append(res, pod.Name)
+	}
+	return res, nil
 }

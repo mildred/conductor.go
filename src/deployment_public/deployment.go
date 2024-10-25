@@ -131,7 +131,11 @@ func PrintList(settings PrintListSettings) error {
 				row = append(row, s.Config[col])
 			}
 		}
-		row = append(row, depl.DeploymentName, ds.ActiveState, ds.SubState, depl.PodIpAddress)
+		var ip_addr string
+		if depl.Pod != nil {
+			ip_addr = depl.Pod.IPAddress
+		}
+		row = append(row, depl.DeploymentName, ds.ActiveState, ds.SubState, ip_addr)
 		if settings.Unit {
 			row = append(row, ds.Name)
 		}

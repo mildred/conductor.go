@@ -53,6 +53,8 @@ func cmd_service_restart(usage func(), name []string, args []string) error {
 
 func cmd_service_deploy(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
+	part := flag.String("part", "", "Service part to deploy")
+	max_index := flag.Int("max-deployment-index", 10, "max deployment index to use before erroring out")
 	flag.Parse(args)
 
 	if flag.NArg() > 2 || flag.NArg() < 1 {
@@ -64,13 +66,18 @@ func cmd_service_deploy(usage func(), name []string, args []string) error {
 		return err
 	}
 
+	seed, err := deployment.SeedFromService(service, *part)
+	if err != nil {
+		return err
+	}
+
 	var depl_name string
 	if flag.NArg() == 2 {
 		depl_name = flag.Arg(1)
 	}
 
 	if depl_name == "" {
-		depl, status, err := deployment_util.StartNewOrExistingFromService(context.Background(), service, 10)
+		depl, status, err := deployment_util.StartNewOrExistingFromService(context.Background(), service, seed, *max_index)
 		if err != nil {
 			return err
 		}
@@ -79,7 +86,7 @@ func cmd_service_deploy(usage func(), name []string, args []string) error {
 		fmt.Printf("You can start it with: systemctl start %s\n", deployment.DeploymentUnit(depl.DeploymentName))
 		return nil
 	} else {
-		dir, err := deployment_util.CreateDeploymentFromService(depl_name, service)
+		dir, err := deployment_util.CreateDeploymentFromService(depl_name, service, seed)
 		if err != nil {
 			return err
 		}

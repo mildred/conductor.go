@@ -34,27 +34,40 @@ func DeploymentDirByName(name string) string {
 
 type Deployment struct {
 	*service.Service
+	Seed                 *DeploymentSeed `json:"-"`
 	ServiceDir           string          `json:"service_dir"`
 	ServiceId            string          `json:"service_id"`
 	DeploymentName       string          `json:"conductor_deployment"`
+	PartName             string          `json:"part_name"`
 	PodName              string          `json:"pod_name"`
 	TemplatedPod         string          `json:"templated_pod"`
 	TemplatedConfigMap   string          `json:"templated_config_map"`
 	TemplatedProxyConfig json.RawMessage `json:"templated_proxy_config"`
-	PodIpAddress         string          `json:"pod_ip_address"`
+	Pod                  *DeploymentPod  `json:"pod,omitempty"`
 }
 
-func NewDeploymentFromService(service *service.Service, deployment_name string) *Deployment {
+func NewDeploymentFromService(service *service.Service, deployment_name string, seed *DeploymentSeed) *Deployment {
 	log.Printf("prepare: Set up deployment %q from service %q-%q\n", deployment_name, service.AppName, service.InstanceName)
+	var pod *DeploymentPod
+
+	if service_pod := service.Pods.FindPod(seed.PartName); service_pod != nil {
+		pod = &DeploymentPod{
+			ServicePod: service_pod,
+		}
+	}
+
 	return &Deployment{
+		Seed:                 seed,
 		Service:              service,
 		ServiceDir:           service.BasePath,
 		ServiceId:            service.Id,
 		DeploymentName:       deployment_name,
+		PartName:             seed.PartName,
 		PodName:              "conductor-" + deployment_name,
 		TemplatedPod:         "",
 		TemplatedConfigMap:   "",
 		TemplatedProxyConfig: nil,
+		Pod:                  pod,
 	}
 }
 
@@ -72,6 +85,11 @@ func ReadDeployment(dir, deployment_id string) (*Deployment, error) {
 			return nil, err
 		}
 
+		seed, err := ReadSeed(path.Join(dir, SeedName))
+		if err != nil {
+			return nil, err
+		}
+
 		if deployment_id == "" {
 			cwd, err := os.Getwd()
 			if err != nil {
@@ -80,29 +98,12 @@ func ReadDeployment(dir, deployment_id string) (*Deployment, error) {
 			deployment_id = path.Base(cwd)
 		}
 
-		depl := NewDeploymentFromService(service, deployment_id)
+		depl := NewDeploymentFromService(service, deployment_id, seed)
 
 		return depl, nil
 	} else {
 		return LoadDeployment(path.Join(dir, ConfigName))
 	}
-}
-
-func (depl *Deployment) TemplatePod() error {
-	log.Printf("prepare: Templating the pod\n")
-	res, err := tmpl.RunTemplate(depl.PodTemplate, depl.Vars())
-	if err != nil {
-		return err
-	}
-	depl.TemplatedPod = res
-
-	res, err = tmpl.RunTemplate(depl.ConfigMapTemplate, depl.Vars())
-	if err != nil {
-		return err
-	}
-	depl.TemplatedConfigMap = res
-
-	return nil
 }
 
 func (depl *Deployment) TemplateProxyConfig() error {
@@ -116,19 +117,26 @@ func (depl *Deployment) TemplateProxyConfig() error {
 }
 
 func (depl *Deployment) TemplateAll() error {
-	err := depl.TemplatePod()
-	if err != nil {
-		return err
+	if depl.Pod != nil {
+		err := depl.Pod.TemplatePod(depl)
+		if err != nil {
+			return err
+		}
 	}
 
 	return depl.TemplateProxyConfig()
 }
 
 func (depl *Deployment) Vars() []string {
+	var pod_ip_addr string
+	if depl.Pod != nil {
+		pod_ip_addr = depl.Pod.IPAddress
+	}
 	return append(depl.Service.Vars(),
+		"CONDUCTOR_SERVICE_PART="+depl.PartName,
 		"CONDUCTOR_DEPLOYMENT="+depl.DeploymentName,
 		"POD_NAME="+depl.PodName,
-		"POD_IP_ADDRESS="+depl.PodIpAddress,
+		"POD_IP_ADDRESS="+pod_ip_addr,
 		"CONDUCTOR_DEPLOYMENT_UNIT="+DeploymentUnit(depl.DeploymentName),
 		"CONDUCTOR_DEPLOYMENT_CONFIG_UNIT="+DeploymentConfigUnit(depl.DeploymentName),
 	)

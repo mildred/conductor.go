@@ -28,87 +28,13 @@ import (
 //
 // - or as a HTTP query to the pod IP address with a retry mechanism
 
-func Prepare() error {
-	ctx := context.Background()
-	cwd, err := os.Getwd()
-	if err != nil {
-		return err
-	}
-	deployment := path.Base(cwd)
-
-	log.Printf("prepare: Prepare deployment %s\n", cwd)
-
-	//
-	// Create deployment config from service and run the templates
-	//
-
-	depl, err := ReadDeployment(".", deployment)
-	if err != nil {
-		return err
-	}
-
-	err = depl.TemplateAll()
-	if err != nil {
-		return err
-	}
-
-	log.Printf("prepare: Saving deployment config %s\n", ConfigName)
-	err = depl.Save(ConfigName)
-	if err != nil {
-		return err
-	}
-
-	//
-	// Configure systemd deployment
-	//
-	//
-
-	// sd, err := dbus.NewWithContext(ctx)
-	// if err != nil {
-	// 	return err
-	// }
-
-	// var props []dbus.Property
-	// props = append(props, dbus.Property{"LogExtraFields", godbus.MakeVariant(fmt.Sprintf("CONDUCTOR_APP=%s", depl.AppName))})
-	// props = append(props, dbus.Property{"LogExtraFields", godbus.MakeVariant(fmt.Sprintf("CONDUCTOR_INSTANCE=%s", depl.InstanceName))})
-	// err = sd.SetUnitPropertiesContext(ctx, DeploymentUnit(depl.DeploymentName), false, props...)
-	// if err != nil {
-	// 	return err
-	// }
-
-	// err = sd.ReloadContext(ctx)
-	// if err != nil {
-	// 	return err
-	// }
-
-	//
-	// Run the pre-start hooks (via systemd-run specific scope)
-	//
-
-	log.Printf("prepare: executing pre-start hooks...")
-	err = depl.RunHooks(ctx, "pre-start", 60*time.Second)
-	if err != nil {
-		return err
-	}
-
-	log.Printf("prepare: Preparation sequence completed\n")
-
-	return nil
-}
-
-func Start() error {
-	ctx := context.Background()
-	depl, err := LoadDeployment(ConfigName)
-	if err != nil {
-		return err
-	}
-
+func StartPod(ctx context.Context, depl *Deployment) error {
 	//
 	// Start the pod or fail
 	//
 
 	log.Printf("start: Start the deployment pod\n")
-	err = depl.StartStopPod(true, ".")
+	err := depl.StartStopPod(true, ".")
 	if err != nil {
 		return err
 	}
@@ -124,7 +50,7 @@ func Start() error {
 	}
 	log.Printf("start: Found pod IP address: %s\n", addr)
 
-	depl.PodIpAddress = addr
+	depl.Pod.IPAddress = addr
 
 	err = depl.Save(ConfigName)
 	if err != nil {
@@ -180,27 +106,7 @@ func Start() error {
 	return err
 }
 
-func Stop() error {
-	ctx := context.Background()
-
-	//
-	// Notify the deployment is stopping
-	//
-
-	_, err := daemon.SdNotify(false, daemon.SdNotifyStopping)
-	if err != nil {
-		return err
-	}
-
-	//
-	// Load deployment configuration
-	//
-
-	depl, err := LoadDeployment(ConfigName)
-	if err != nil {
-		return err
-	}
-
+func StopPod(ctx context.Context, depl *Deployment) error {
 	//
 	// Run the pre-stop hooks (via systemd-run specific scope)
 	//
@@ -213,7 +119,7 @@ func Stop() error {
 	//
 
 	log.Printf("stop: executing pre-stop hooks...")
-	err = depl.RunHooks(ctx, "pre-stop", 60*time.Second)
+	err := depl.RunHooks(ctx, "pre-stop", 60*time.Second)
 	if err != nil {
 		log.Printf("stop: pre-stop hooks failed, continuing...")
 	}
@@ -246,48 +152,10 @@ func Stop() error {
 	return nil
 }
 
-func Cleanup() error {
-	ctx := context.Background()
-
-	cwd, err := os.Getwd()
-	if err != nil {
-		return err
-	}
-	log.Printf("cleanup: Cleaning up %s\n", cwd)
-
-	//
-	// Run the post-stop hooks (via systemd-run specific scope), just in case
-	//
-
-	depl, err := LoadDeployment(ConfigName)
-	if err != nil {
-		return err
-	}
-
-	log.Printf("cleanup: executing post-stop hooks...")
-	err = depl.RunHooks(ctx, "post-stop", 60*time.Second)
-	if err != nil {
-		return err
-	}
-
-	//
-	// Remove deployment files
-	//
-
-	log.Printf("cleanup: Files left behind in %q\n", cwd)
-	log.Printf("cleanup: Cleanup sequence completed (deployment removal is up to the service)\n")
-	return nil
-}
-
-func CaddyRegister(register bool, dir string) error {
+func CaddyRegisterPod(ctzz context.Context, depl *Deployment, register bool, dir string) error {
 	var prefix = "register"
 	if !register {
 		prefix = "deregister"
-	}
-
-	depl, err := LoadDeployment(ConfigName)
-	if err != nil {
-		return err
 	}
 
 	if depl.ProxyConfigTemplate == "" {
@@ -324,9 +192,9 @@ func CaddyRegister(register bool, dir string) error {
 			return err
 		}
 
-		log.Printf("register: Registering pod IP %s", depl.PodIpAddress)
+		log.Printf("register: Registering pod IP %s", depl.Pod.IPAddress)
 	} else {
-		log.Printf("deregister: Deregistering pod IP %s", depl.PodIpAddress)
+		log.Printf("deregister: Deregistering pod IP %s", depl.Pod.IPAddress)
 	}
 
 	err = caddy.Register(register, configs)

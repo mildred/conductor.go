@@ -99,6 +99,7 @@ Additional variables for services and deployments:
 
 Additional variables for deployments only:
 
+- `CONDUCTOR_SERVICE_PART` name of the pod in the service
 - `CONDUCTOR_DEPLOYMENT` contains the deployment name
 - `CONDUCTOR_DEPLOYMENT_UNIT`
 - `CONDUCTOR_DEPLOYMENT_CONFIG_UNIT`

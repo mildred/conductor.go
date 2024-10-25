@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"slices"
 	"time"
 
 	"github.com/coreos/go-systemd/v22/daemon"
@@ -68,47 +69,67 @@ func StartOrRestart(restart bool, service_name string, max_deployment_index int)
 	// Find or create a suitable deployment
 	//
 
-	log.Printf("%s: Loaded service, find new or existing deployments...\n", prefix)
-
-	depl, depl_status, err := deployment_util.StartNewOrExistingFromService(ctx, service, max_deployment_index)
+	parts, err := service.Parts()
 	if err != nil {
 		return err
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	go utils.ExtendTimeout(ctx, 60*time.Second)
+	var started_deployments []*deployment.Deployment
+	var depl_names []string
 
-	err = func() error {
-		defer cancel()
+	for _, part_name := range parts {
 
-		if depl_status == "active" {
-			log.Printf("%s: Found started deployment %s", prefix, depl.DeploymentName)
-		} else if depl_status == "activating" || depl_status == "inactive" {
-			log.Printf("%s: Found %s deployment %s, waiting to be started...", prefix, depl_status, depl.DeploymentName)
-			fmt.Fprintf(os.Stderr, "+ systemctl start %q\n", deployment.DeploymentUnit(depl.DeploymentName))
-			cmd := exec.Command("systemctl", "start", deployment.DeploymentUnit(depl.DeploymentName))
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			err = cmd.Run()
-			if err != nil {
-				return err
-			}
-		} else {
-			log.Printf("%s: Starting new deployment %s...", prefix, depl.DeploymentName)
-			fmt.Fprintf(os.Stderr, "+ systemctl start %q\n", deployment.DeploymentUnit(depl.DeploymentName))
-			cmd := exec.Command("systemctl", "start", deployment.DeploymentUnit(depl.DeploymentName))
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			err = cmd.Run()
-			if err != nil {
-				return err
-			}
+		log.Printf("%s: Loaded service, find new or existing deployments for part %q...\n", prefix, part_name)
+
+		seed, err := deployment.SeedFromService(service, part_name)
+		if err != nil {
+			return err
 		}
 
-		return nil
-	}()
-	if err != nil {
-		return err
+		depl, depl_status, err := deployment_util.StartNewOrExistingFromService(ctx, service, seed, max_deployment_index)
+		if err != nil {
+			return err
+		}
+
+		started_deployments = append(started_deployments, depl)
+		depl_names = append(depl_names, depl.DeploymentName)
+
+		ctx, cancel := context.WithCancel(context.Background())
+		go utils.ExtendTimeout(ctx, 60*time.Second)
+
+		err = func() error {
+			defer cancel()
+
+			if depl_status == "active" {
+				log.Printf("%s: Found started deployment %s", prefix, depl.DeploymentName)
+			} else if depl_status == "activating" || depl_status == "inactive" {
+				log.Printf("%s: Found %s deployment %s, waiting to be started...", prefix, depl_status, depl.DeploymentName)
+				fmt.Fprintf(os.Stderr, "+ systemctl start %q\n", deployment.DeploymentUnit(depl.DeploymentName))
+				cmd := exec.Command("systemctl", "start", deployment.DeploymentUnit(depl.DeploymentName))
+				cmd.Stdout = os.Stdout
+				cmd.Stderr = os.Stderr
+				err = cmd.Run()
+				if err != nil {
+					return err
+				}
+			} else {
+				log.Printf("%s: Starting new deployment %s...", prefix, depl.DeploymentName)
+				fmt.Fprintf(os.Stderr, "+ systemctl start %q\n", deployment.DeploymentUnit(depl.DeploymentName))
+				cmd := exec.Command("systemctl", "start", deployment.DeploymentUnit(depl.DeploymentName))
+				cmd.Stdout = os.Stdout
+				cmd.Stderr = os.Stderr
+				err = cmd.Run()
+				if err != nil {
+					return err
+				}
+			}
+
+			return nil
+		}()
+		if err != nil {
+			return err
+		}
+
 	}
 
 	//
@@ -120,7 +141,7 @@ func StartOrRestart(restart bool, service_name string, max_deployment_index int)
 	// Stop all deployments that are of older config version
 	//
 
-	log.Printf("%s: Removing obsolete deployments (except %s)...\n", prefix, depl.DeploymentName)
+	log.Printf("%s: Removing obsolete deployments (except %v)...\n", prefix, depl_names)
 
 	deployments, err := deployment_util.List(deployment_util.ListOpts{
 		FilterServiceDir: service.BasePath,
@@ -130,7 +151,7 @@ func StartOrRestart(restart bool, service_name string, max_deployment_index int)
 	}
 
 	for _, d := range deployments {
-		if d.DeploymentName == depl.DeploymentName {
+		if slices.Contains(depl_names, d.DeploymentName) {
 			continue
 		}
 
