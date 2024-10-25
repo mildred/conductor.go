@@ -439,9 +439,14 @@ func join_paths(base, path string) string {
 }
 
 func (service *Service) Vars() []string {
+	name := service.Name
+	if name == "" {
+		name = service.BasePath
+	}
 	var vars []string = []string{
 		"CONDUCTOR_APP=" + service.AppName,
 		"CONDUCTOR_INSTANCE=" + service.InstanceName,
+		"CONDUCTOR_SERVICE_NAME=" + name,
 		"CONDUCTOR_SERVICE_DIR=" + service.BasePath,
 		"CONDUCTOR_SERVICE_UNIT=" + ServiceUnit(service.BasePath),
 		"CONDUCTOR_SERVICE_CONFIG_UNIT=" + ServiceConfigUnit(service.BasePath),
