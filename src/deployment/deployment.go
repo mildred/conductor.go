@@ -86,7 +86,12 @@ func ReadDeployment(dir, deployment_id string) (*Deployment, error) {
 		}
 
 		seed, err := ReadSeed(path.Join(dir, SeedName))
-		if err != nil {
+		if err != nil && os.IsNotExist(err) {
+			// default seed if file is not present
+			seed = &DeploymentSeed{
+				ServiceDir: service.BasePath,
+			}
+		} else if err != nil {
 			return nil, err
 		}
 

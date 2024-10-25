@@ -162,7 +162,7 @@ func CreateDeploymentFromService(name string, svc *service.Service, seed *Deploy
 		return "", err
 	}
 
-	err = os.WriteFile(path.Join(svc.BasePath, SeedName), seed_data, 0644)
+	err = os.WriteFile(path.Join(dir, SeedName), seed_data, 0644)
 	if err != nil {
 		return "", err
 	}
