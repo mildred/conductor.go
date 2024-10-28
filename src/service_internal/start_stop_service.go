@@ -234,7 +234,7 @@ func StartOrRestart(restart bool, service_name string, max_deployment_index int)
 				part_found := false
 				for _, depl := range deployments {
 					if depl.ServiceId != service.Id {
-						diagnostics = append(diagnostics, fmt.Sprintf("part %q: deployment %s id %q is invalid", part, depl.DeploymentName), depl.ServiceId)
+						diagnostics = append(diagnostics, fmt.Sprintf("part %q: deployment %s id %q is invalid", part, depl.DeploymentName, depl.ServiceId))
 					} else {
 						diagnostics = append(diagnostics, fmt.Sprintf("part %q: deployment %s matches", part, depl.DeploymentName))
 						part_found = true

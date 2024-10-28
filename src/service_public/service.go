@@ -293,7 +293,7 @@ func PrintListFilter(service *Service, settings PrintListSettings) (bool, error)
 		for k, v := range settings.FilterConfig {
 			found := false
 			for _, sel := range v {
-				found, err = sel.Match(service.Config[k])
+				found, err = sel.Match(service.Config[k].String())
 				if err != nil {
 					return false, err
 				}

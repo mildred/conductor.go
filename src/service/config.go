@@ -46,7 +46,7 @@ type Service struct {
 	Inherit                 *InheritedFile             `json:"-"`
 	AppName                 string                     `json:"app_name,omitempty"`              // my-app
 	InstanceName            string                     `json:"instance_name,omitempty"`         // staging
-	Config                  map[string]string          `json:"config,omitempty"`                // key-value pairs for config and templating, CHANNEL=staging
+	Config                  map[string]*ConfigValue    `json:"config,omitempty"`                // key-value pairs for config and templating, CHANNEL=staging
 	ProxyConfigTemplate     string                     `json:"proxy_config_template,omitempty"` // Template file for the load-balancer config
 	Pods                    *ServicePods               `json:"pods,omitempty"`
 	Hooks                   []*Hook                    `json:"hooks,omitempty"`
@@ -243,7 +243,7 @@ func loadService(path string, fix_paths bool, base *Service, inh *InheritFile) (
 	if service == nil {
 		service = &Service{}
 		service.Inherit = inherit
-		service.Config = map[string]string{}
+		service.Config = map[string]*ConfigValue{}
 		service.Hooks = []*Hook{}
 	} else if inh != nil {
 		inh.Inherit = inherit

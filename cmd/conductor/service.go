@@ -386,7 +386,7 @@ func cmd_service_config_set(usage func(), name []string, args []string) error {
 		}
 
 		key, value := splits[0], splits[1]
-		if service.Config[key] != value {
+		if service.Config[key].String() != value {
 			changed_args[key] = value
 		}
 	}
