@@ -17,7 +17,7 @@ TimeoutSec=300
 # Type=notify-reload
 
 ExecStart=/bin/sh    -xc 'PID=$$$$; exec conductor _ service start   "$@"' - %f
-ExecReload=/bin/sh   -xc 'PID=$$$$; exec conductor _ service restart "$@"' - %f
+ExecReload=/bin/sh   -xc 'PID=$$$$; exec conductor _ service reload  "$@"' - %f
 ExecStop=/bin/sh     -xc 'PID=$$$$; exec conductor _ service stop    "$@"' - %f
 ExecStopPost=/bin/sh -xc 'PID=$$$$; exec conductor _ service cleanup "$@"' - %f
 

@@ -131,6 +131,31 @@ func Stop(definition_path string) error {
 	return cmd.Run()
 }
 
+type RestartOpts struct {
+	NoBlock bool
+}
+
+func Restart(definition_path string, opts RestartOpts) error {
+
+	unit, err := ServiceUnitByName(definition_path)
+	if err != nil {
+		return err
+	}
+
+	var args []string = []string{"restart"}
+	if opts.NoBlock {
+		args = append(args, "--no-block")
+
+	}
+	args = append(args, unit)
+
+	fmt.Fprintf(os.Stderr, "+ systemctl %s\n", strings.Join(args, " "))
+	cmd := exec.Command("systemctl", args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
 type ReloadOpts struct {
 	NoBlock bool
 }

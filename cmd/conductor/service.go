@@ -37,7 +37,7 @@ func cmd_service_stop(usage func(), name []string, args []string) error {
 	return service_public.Stop(flag.Arg(0))
 }
 
-func cmd_service_restart(usage func(), name []string, args []string) error {
+func cmd_service_reload(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
 	no_block := flag.Bool("no-block", false, "Do not block while restarting")
 	flag.Parse(args)
@@ -47,6 +47,20 @@ func cmd_service_restart(usage func(), name []string, args []string) error {
 	}
 
 	return service_public.Reload(flag.Arg(0), service_public.ReloadOpts{
+		NoBlock: *no_block,
+	})
+}
+
+func cmd_service_restart(usage func(), name []string, args []string) error {
+	flag := new_flag_set(name, usage)
+	no_block := flag.Bool("no-block", false, "Do not block while restarting")
+	flag.Parse(args)
+
+	if flag.NArg() != 1 {
+		return fmt.Errorf("Command %s must take a single service definition as argument", strings.Join(name, " "))
+	}
+
+	return service_public.Restart(flag.Arg(0), service_public.RestartOpts{
 		NoBlock: *no_block,
 	})
 }
@@ -343,8 +357,8 @@ func cmd_service_config_get(usage func(), name []string, args []string) error {
 func cmd_service_config_set(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
 	file_flag := flag.String("f", "", "Write in this file instead of the service file")
-	no_restart_flag := flag.Bool("n", false, "Do not restart service")
-	no_block_flag := flag.Bool("no-block", false, "Do not block while restarting")
+	no_reload_flag := flag.Bool("n", false, "Do not reload service")
+	no_block_flag := flag.Bool("no-block", false, "Do not block while reloading")
 	flag.Parse(args)
 
 	log.Default().SetOutput(io.Discard)
@@ -391,10 +405,10 @@ func cmd_service_config_set(usage func(), name []string, args []string) error {
 	}
 
 	//
-	// restart service
+	// reload service
 	//
 
-	if !*no_restart_flag {
+	if !*no_reload_flag {
 		return service_public.Reload(service_descr, service_public.ReloadOpts{
 			NoBlock: *no_block_flag,
 		})
@@ -441,6 +455,7 @@ func cmd_service(usage func(), name []string, args []string) error {
 	return run_subcommand(name, args, flag, map[string]Subcommand{
 		"start":   {cmd_service_start, "SERVICE", "Declare and start a service"},
 		"stop":    {cmd_service_stop, "SERVICE", "Stop a service"},
+		"reload":  {cmd_service_reload, "SERVICE", "Reload a service"},
 		"restart": {cmd_service_restart, "SERVICE", "Restart a service"},
 		"deploy":  {cmd_service_deploy, "SERVICE [DEPLOYMENT_NAME]", "Manually create a deployment, do not start it"},
 		"inspect": {cmd_service_inspect, "", "Inspect a service in current directory or on the command-line"},
