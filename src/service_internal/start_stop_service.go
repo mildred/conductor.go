@@ -8,6 +8,9 @@ import (
 	"os"
 	"os/exec"
 	"slices"
+	"strconv"
+	"strings"
+	"syscall"
 	"time"
 
 	"github.com/coreos/go-systemd/v22/daemon"
@@ -30,6 +33,7 @@ func StartOrRestart(restart bool, service_name string, max_deployment_index int)
 	var prefix string = "start"
 	var err error
 	var ctx = context.Background()
+	var deferred func() = func() {}
 
 	//
 	// [restart] Notify systemd reload in progress
@@ -44,17 +48,26 @@ func StartOrRestart(restart bool, service_name string, max_deployment_index int)
 			return err
 		}
 
-		if notified {
-			defer func() {
+		deferred = func() {
+			if notified {
+				log.Printf("restart: Notifying ready...")
 				_, er := daemon.SdNotify(false, daemon.SdNotifyReady)
 				if er != nil && err != nil {
 					err = fmt.Errorf("%v; additionally, there was an error notifying the end of the reloading process: %v", err, er)
 				} else if er != nil {
+					log.Printf("restart: Error notifying ready: %v", er)
 					err = er
+				} else {
+					log.Printf("restart: Notified ready, wait for systemd to catch up")
+					time.Sleep(5 * time.Second)
+					log.Printf("restart: dying")
 				}
-			}()
+			}
+			notified = false
 		}
 	}
+
+	defer deferred()
 
 	//
 	// Fetch service config
@@ -189,22 +202,59 @@ func StartOrRestart(restart bool, service_name string, max_deployment_index int)
 		//
 
 		for {
-			deployments, err := deployment_util.List(deployment_util.ListOpts{
-				FilterServiceDir: service.BasePath,
-				FilterServiceId:  service.Id,
-			})
+			// Reload service in case it changes its id
+			service, err = LoadServiceByName(service_name)
 			if err != nil {
 				return err
 			}
 
-			if len(deployments) == 0 {
-				return fmt.Errorf("Deployment has gone missing")
+			parts, err := service.Parts()
+			if err != nil {
+				return err
+			}
+
+			var diagnostics []string
+			all_parts_ok := true
+
+			for _, part := range parts {
+				deployments, err := deployment_util.List(deployment_util.ListOpts{
+					FilterServiceDir: service.BasePath,
+					FilterPartName:   &part,
+				})
+				if err != nil {
+					return err
+				}
+
+				if len(deployments) == 0 {
+					diagnostics = append(diagnostics, fmt.Sprintf("part %q: no deployment found", part))
+					all_parts_ok = false
+					continue
+				}
+
+				part_found := false
+				for _, depl := range deployments {
+					if depl.ServiceId != service.Id {
+						diagnostics = append(diagnostics, fmt.Sprintf("part %q: deployment %s id %q is invalid", part, depl.DeploymentName), depl.ServiceId)
+					} else {
+						diagnostics = append(diagnostics, fmt.Sprintf("part %q: deployment %s matches", part, depl.DeploymentName))
+						part_found = true
+					}
+				}
+				if !part_found {
+					all_parts_ok = false
+				}
+			}
+
+			if !all_parts_ok {
+				return fmt.Errorf("deployment has gone missing for service %q (id: %q):\n%s", service_name, service.Id, strings.Join(diagnostics, "\n"))
 			}
 
 			time.Sleep(30 * time.Second)
 		}
 
 	}
+
+	deferred() // execute without defer statement in case it cause an issue with the PID and systemd cannot attribute the notify message
 	return err
 }
 
@@ -225,6 +275,26 @@ func Stop(service_name string) error {
 	service, err := LoadServiceByName(service_name)
 	if err != nil {
 		return err
+	}
+
+	//
+	// Stop MAINPID monitoring
+	//
+
+	if mainpid := os.Getenv("MAINPID"); mainpid != "" {
+		log.Printf("stop: Sending SIGTERM to pid=%s\n", mainpid)
+		main_pid, err := strconv.ParseInt(mainpid, 10, 0)
+		if err != nil {
+			return fmt.Errorf("MAINPID=%s is not a PID number, %v", mainpid, err)
+		}
+		proc, err := os.FindProcess(int(main_pid))
+		if err != nil {
+			return err
+		}
+		err = proc.Signal(syscall.SIGTERM)
+		if err != nil {
+			return err
+		}
 	}
 
 	//

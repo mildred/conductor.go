@@ -3,7 +3,6 @@ package service
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"slices"
@@ -257,14 +256,14 @@ func loadService(path string, fix_paths bool, base *Service, inh *InheritFile) (
 			if inherit.IgnoreError {
 				_, err = os.Stat(inherit.Path)
 				if err != nil && os.IsNotExist(err) {
-					log.Printf("service: %s could inherit from %s (not found)", dir, inherit.Path)
+					// log.Printf("service: %s could inherit from %s (not found)", dir, inherit.Path)
 					continue
 				} else if err != nil {
 					return nil, err
 				}
 			}
 
-			log.Printf("service: %s inherit from %s", dir, inherit.Path)
+			// log.Printf("service: %s inherit from %s", dir, inherit.Path)
 			service, err = loadService(inherit.Path, true, service, inherit)
 			if err != nil {
 				return nil, err

@@ -136,12 +136,38 @@ type ReloadOpts struct {
 }
 
 func Reload(definition_path string, opts ReloadOpts) error {
+	var active bool
+
+	var ctx = context.Background()
+	sd, err := dbus.NewWithContext(ctx)
+	if err != nil {
+		return err
+	}
+
 	unit, err := ServiceUnitByName(definition_path)
 	if err != nil {
 		return err
 	}
 
-	var args []string = []string{"reload-or-restart"}
+	units, err := sd.ListUnitsByPatternsContext(ctx, nil, []string{unit})
+	if err != nil {
+		return err
+	}
+
+	for _, u := range units {
+		if u.Name != unit {
+			continue
+		}
+
+		active = u.ActiveState == "active"
+	}
+
+	var args []string
+	if active {
+		args = append(args, "reload")
+	} else {
+		args = append(args, "reload-or-restart")
+	}
 	if opts.NoBlock {
 		args = append(args, "--no-block")
 

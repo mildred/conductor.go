@@ -276,6 +276,7 @@ func cmd_service_status(usage func(), name []string, args []string) error {
 		cli = append(cli, unit)
 	}
 
+	fmt.Fprintf(os.Stderr, "+ systemctl %s\n", strings.Join(cli, " "))
 	cmd := exec.Command("systemctl", cli...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout

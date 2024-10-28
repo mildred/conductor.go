@@ -163,7 +163,7 @@ func LoadDeploymentDir(dir string) (*Deployment, error) {
 }
 
 func LoadDeployment(fname string) (*Deployment, error) {
-	log.Printf("Read file %s\n", fname)
+	// log.Printf("Read file %s\n", fname)
 	f, err := os.Open(fname)
 	if err != nil {
 		return nil, err
@@ -175,7 +175,7 @@ func LoadDeployment(fname string) (*Deployment, error) {
 	res.Service.BasePath = res.ServiceDir
 	res.Service.Id = res.ServiceId
 
-	log.Printf("Loaded deployment %s, service %s-%s\n", res.DeploymentName, res.AppName, res.InstanceName)
+	// log.Printf("Loaded deployment %s, service %s-%s\n", res.DeploymentName, res.AppName, res.InstanceName)
 	return res, err
 }
 

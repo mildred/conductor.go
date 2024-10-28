@@ -6,15 +6,20 @@ Wants=conductor-service-config@%i.service
 WorkingDirectory=%f
 TimeoutStartSec=0
 Restart=always
-Type=notify-reload
+Type=notify
 NotifyAccess=all
 TimeoutSec=300
 # RemainAfterExit=yes
 
-ExecStart=/usr/local/bin/conductor _ service start %f
-ExecReload=/usr/local/bin/conductor _ service restart %f
-ExecStop=/usr/local/bin/conductor _ service stop %f
-ExecStopPost=/usr/local/bin/conductor _ service cleanup %f
+# Do not use notify-reload as systemd cannot detect the ready signal at the end
+# of the reload because of a mismatching PID. Type=notify is enough, end of
+# reload is signaled by the exit of the reload process.
+# Type=notify-reload
+
+ExecStart=/bin/sh    -xc 'PID=$$$$; exec conductor _ service start   "$@"' - %f
+ExecReload=/bin/sh   -xc 'PID=$$$$; exec conductor _ service restart "$@"' - %f
+ExecStop=/bin/sh     -xc 'PID=$$$$; exec conductor _ service stop    "$@"' - %f
+ExecStopPost=/bin/sh -xc 'PID=$$$$; exec conductor _ service cleanup "$@"' - %f
 
 [Install]
 WantedBy=multi-user.target

@@ -97,6 +97,8 @@ func Start() error {
 		return err
 	}
 
+	log.Printf("start: Loaded deployment %s, service %s-%s\n", depl.DeploymentName, depl.AppName, depl.InstanceName)
+
 	if depl.Pod != nil {
 		return StartPod(ctx, depl)
 	} else {
@@ -125,6 +127,8 @@ func Stop() error {
 		return err
 	}
 
+	log.Printf("stop: Loaded deployment %s, service %s-%s\n", depl.DeploymentName, depl.AppName, depl.InstanceName)
+
 	if depl.Pod != nil {
 		return StopPod(ctx, depl)
 	} else {
@@ -150,6 +154,8 @@ func Cleanup() error {
 		return err
 	}
 
+	log.Printf("cleanup: Loaded deployment %s, service %s-%s\n", depl.DeploymentName, depl.AppName, depl.InstanceName)
+
 	log.Printf("cleanup: executing post-stop hooks...")
 	err = depl.RunHooks(ctx, "post-stop", 60*time.Second)
 	if err != nil {
@@ -167,11 +173,17 @@ func Cleanup() error {
 
 func CaddyRegister(register bool, dir string) error {
 	ctx := context.Background()
+	var prefix = "register"
+	if !register {
+		prefix = "deregister"
+	}
 
 	depl, err := LoadDeployment(ConfigName)
 	if err != nil {
 		return err
 	}
+
+	log.Printf("%s: Loaded deployment %s, service %s-%s\n", prefix, depl.DeploymentName, depl.AppName, depl.InstanceName)
 
 	if depl.Pod != nil {
 		return CaddyRegisterPod(ctx, depl, register, dir)

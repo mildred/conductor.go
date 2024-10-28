@@ -14,6 +14,7 @@ type ListOpts struct {
 	FilterServiceDir     string
 	FilterDeploymentName string
 	FilterServiceId      string
+	FilterPartName       *string
 }
 
 func List(opts ListOpts) ([]*Deployment, error) {
@@ -38,6 +39,10 @@ func List(opts ListOpts) ([]*Deployment, error) {
 		}
 
 		if opts.FilterServiceId != "" && opts.FilterServiceId != depl.ServiceId {
+			continue
+		}
+
+		if opts.FilterPartName != nil && *opts.FilterPartName != depl.PartName {
 			continue
 		}
 

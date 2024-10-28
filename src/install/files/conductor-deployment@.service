@@ -18,11 +18,11 @@ Environment=CONDUCTOR_SYSTEMD_UNIT=%n
 # LogExtraFields=CONDUCTOR_INSTANCE=${CONDUCTOR_INSTANCE}
 # LogExtraFields=CONDUCTOR_DEPLOYMENT=${CONDUCTOR_DEPLOYMENT}
 
-ExecStartPre=/usr/local/bin/conductor _ deployment prepare
-ExecStart=/usr/local/bin/conductor _ deployment start
+ExecStartPre=/bin/sh -xc 'PID=$$$$; exec conductor _ deployment prepare'
+ExecStart=/bin/sh    -xc 'PID=$$$$; exec conductor _ deployment start'
 
 TimeoutSec=300
 
-ExecStop=/usr/local/bin/conductor _ deployment stop
-ExecStopPost=/usr/local/bin/conductor _ deployment cleanup
+ExecStop=/bin/sh     -xc 'PID=$$$$; exec conductor _ deployment stop'
+ExecStopPost=/bin/sh -xc 'PID=$$$$; exec conductor _ deployment cleanup'
 

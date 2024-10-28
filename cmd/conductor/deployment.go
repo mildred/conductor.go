@@ -98,6 +98,7 @@ func cmd_deployment_systemd(cmd_name string) func(usage func(), name []string, a
 			cli = append(cli, deployment.DeploymentUnit(id))
 		}
 
+		fmt.Fprintf(os.Stderr, "+ systemctl %s\n", strings.Join(cli, " "))
 		cmd := exec.Command("systemctl", cli...)
 		cmd.Stdin = os.Stdin
 		cmd.Stdout = os.Stdout
