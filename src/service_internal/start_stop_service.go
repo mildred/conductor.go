@@ -29,7 +29,7 @@ import (
 // Note for services: a linked proxy config is set up when the service itself is
 // enabled. The service depends on this proxy config
 
-func StartOrRestart(restart bool, service_name string, max_deployment_index int) error {
+func StartOrReload(restart bool, service_name string, max_deployment_index int) error {
 	var prefix string = "start"
 	var err error
 	var ctx = context.Background()

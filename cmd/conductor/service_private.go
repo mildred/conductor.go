@@ -23,10 +23,10 @@ func private_service_start(usage func(), name []string, args []string) error {
 		return fmt.Errorf("Command %s must take a single service definition as argument", strings.Join(name, " "))
 	}
 
-	return service_internal.StartOrRestart(false, flag.Arg(0), *max_deployment_index)
+	return service_internal.StartOrReload(false, flag.Arg(0), *max_deployment_index)
 }
 
-func private_service_restart(usage func(), name []string, args []string) error {
+func private_service_reload(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
 	max_deployment_index := flag.Int("max-deployment-index", 10, "Service will fail to deploy if it cannot find a deployment number below this")
 	flag.Parse(args)
@@ -35,7 +35,7 @@ func private_service_restart(usage func(), name []string, args []string) error {
 		return fmt.Errorf("Command %s must take a single service definition as argument", strings.Join(name, " "))
 	}
 
-	return service_internal.StartOrRestart(true, flag.Arg(0), *max_deployment_index)
+	return service_internal.StartOrReload(true, flag.Arg(0), *max_deployment_index)
 }
 
 func private_service_stop(usage func(), name []string, args []string) error {
@@ -98,7 +98,7 @@ func private_service(usage func(), name []string, args []string) error {
 
 	return run_subcommand(name, args, flag, map[string]Subcommand{
 		"start":      {private_service_start, "SERVICE", "Start a service"},
-		"restart":    {private_service_restart, "SERVICE", "Restart a service"},
+		"reload":     {private_service_reload, "SERVICE", "Reload a service"},
 		"stop":       {private_service_stop, "SERVICE", "Stop a service"},
 		"cleanup":    {private_service_cleanup, "SERVICE", "Clean up service after it has stopped"},
 		"register":   {private_service_register, "SERVICE", "Register service to load balancer"},
