@@ -90,6 +90,7 @@ func cmd_service_restart(usage func(), name []string, args []string) error {
 func cmd_service_deploy(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
 	part := flag.String("part", "", "Service part to deploy")
+	start := flag.Bool("start", false, "Start deployment")
 	max_index := flag.Int("max-deployment-index", 10, "max deployment index to use before erroring out")
 	fresh := flag.Bool("fresh", false, "Do not reuse a started deployment is possible")
 	flag.Parse(args)
@@ -120,8 +121,7 @@ func cmd_service_deploy(usage func(), name []string, args []string) error {
 		}
 
 		fmt.Printf("Deployment (%s): %s\n", status, depl.DeploymentName)
-		fmt.Printf("You can start it with: systemctl start %s\n", deployment.DeploymentUnit(depl.DeploymentName))
-		return nil
+		depl_name = depl.DeploymentName
 	} else {
 		dir, err := deployment_util.CreateDeploymentFromService(depl_name, service, seed)
 		if err != nil {
@@ -129,9 +129,22 @@ func cmd_service_deploy(usage func(), name []string, args []string) error {
 		}
 
 		fmt.Printf("Deployment created in: %s\n", dir)
-		fmt.Printf("You can start it with: systemctl start %s\n", deployment.DeploymentUnit(depl_name))
-		return nil
 	}
+
+	if *start {
+		fmt.Fprintf(os.Stderr, "+ systemctl start %s\n", deployment.DeploymentUnit(depl_name))
+		cmd := exec.Command("systemctl", "start", deployment.DeploymentUnit(depl_name))
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		err := cmd.Run()
+		if err != nil {
+			return err
+		}
+	} else {
+		fmt.Printf("You can start it with: systemctl start %s\n", deployment.DeploymentUnit(depl_name))
+	}
+	return nil
 }
 
 func cmd_service_inspect(usage func(), name []string, args []string) error {
