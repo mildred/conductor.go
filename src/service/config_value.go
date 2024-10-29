@@ -20,6 +20,10 @@ type ConfigValue struct {
 }
 
 func (v *ConfigValue) String() string {
+	if v == nil {
+		return ""
+	}
+
 	return v.Str
 }
 
