@@ -23,11 +23,15 @@ func private_service_start(usage func(), name []string, args []string) error {
 		return fmt.Errorf("Command %s must take a single service definition as argument", strings.Join(name, " "))
 	}
 
-	return service_internal.StartOrReload(false, flag.Arg(0), *max_deployment_index)
+	return service_internal.StartOrReload(flag.Arg(0), service_internal.StartOrReloadOpts{
+		Restart:            false,
+		MaxDeploymentIndex: *max_deployment_index,
+	})
 }
 
 func private_service_reload(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
+	fresh := flag.Bool("fresh", false, "Do not reuse a started deployment is possible")
 	max_deployment_index := flag.Int("max-deployment-index", 10, "Service will fail to deploy if it cannot find a deployment number below this")
 	flag.Parse(args)
 
@@ -35,7 +39,11 @@ func private_service_reload(usage func(), name []string, args []string) error {
 		return fmt.Errorf("Command %s must take a single service definition as argument", strings.Join(name, " "))
 	}
 
-	return service_internal.StartOrReload(true, flag.Arg(0), *max_deployment_index)
+	return service_internal.StartOrReload(flag.Arg(0), service_internal.StartOrReloadOpts{
+		Restart:            true,
+		WantsFresh:         *fresh,
+		MaxDeploymentIndex: *max_deployment_index,
+	})
 }
 
 func private_service_stop(usage func(), name []string, args []string) error {

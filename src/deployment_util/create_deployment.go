@@ -16,7 +16,7 @@ import (
 	. "github.com/mildred/conductor.go/src/deployment"
 )
 
-func StartNewOrExistingFromService(ctx context.Context, svc *service.Service, seed *DeploymentSeed, max_deployment_index int) (*Deployment, string, error) {
+func StartNewOrExistingFromService(ctx context.Context, svc *service.Service, seed *DeploymentSeed, max_deployment_index int, wants_fresh bool) (*Deployment, string, error) {
 	sd, err := dbus.NewWithContext(ctx)
 	if err != nil {
 		return nil, "", err
@@ -87,7 +87,7 @@ func StartNewOrExistingFromService(ctx context.Context, svc *service.Service, se
 	// use it and wait for it to be started, else start a new deployment
 	//
 
-	if len(started_deployments) > 0 {
+	if len(started_deployments) > 0 && !wants_fresh {
 		log.Printf("found started deployment %q", started_deployments[0].DeploymentName)
 		return started_deployments[0], "active", nil
 	} else if len(starting_deployments) > 0 {
@@ -120,7 +120,10 @@ func StartNewOrExistingFromService(ctx context.Context, svc *service.Service, se
 			}
 		}
 
-		if name == "" {
+		if name == "" && len(started_deployments) > 0 {
+			log.Printf("Could not find free deployment name, but found started deployment %q", started_deployments[0].DeploymentName)
+			return started_deployments[0], "active", nil
+		} else if name == "" {
 			return nil, "", fmt.Errorf("Failed to find free deployment name")
 		}
 

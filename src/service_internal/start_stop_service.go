@@ -29,7 +29,19 @@ import (
 // Note for services: a linked proxy config is set up when the service itself is
 // enabled. The service depends on this proxy config
 
-func StartOrReload(restart bool, service_name string, max_deployment_index int) error {
+type StartOrReloadOpts struct {
+	Restart            bool
+	WantsFresh         bool
+	MaxDeploymentIndex int
+	StopTimeout        time.Duration
+	TermTimeout        time.Duration
+}
+
+func StartOrReload(service_name string, opts StartOrReloadOpts) error {
+	if opts.MaxDeploymentIndex == 0 {
+		opts.MaxDeploymentIndex = 10
+	}
+
 	var prefix string = "start"
 	var err error
 	var ctx = context.Background()
@@ -39,7 +51,7 @@ func StartOrReload(restart bool, service_name string, max_deployment_index int) 
 	// [restart] Notify systemd reload in progress
 	//
 
-	if restart {
+	if opts.Restart {
 		prefix = "restart"
 
 		var notified bool
@@ -99,7 +111,7 @@ func StartOrReload(restart bool, service_name string, max_deployment_index int) 
 			return err
 		}
 
-		depl, depl_status, err := deployment_util.StartNewOrExistingFromService(ctx, service, seed, max_deployment_index)
+		depl, depl_status, err := deployment_util.StartNewOrExistingFromService(ctx, service, seed, opts.MaxDeploymentIndex, opts.WantsFresh)
 		if err != nil {
 			return err
 		}
@@ -175,7 +187,7 @@ func StartOrReload(restart bool, service_name string, max_deployment_index int) 
 
 		err = func() error {
 			defer cancel()
-			return deployment_public.Remove(d.DeploymentName)
+			return deployment_public.RemoveTimeout(ctx, d.DeploymentName, opts.StopTimeout, opts.TermTimeout)
 		}()
 		if err != nil {
 			log.Printf("%s: ERROR removing deployment %s (but continuing): %v", prefix, d.DeploymentName, err)
@@ -183,79 +195,80 @@ func StartOrReload(restart bool, service_name string, max_deployment_index int) 
 	}
 
 	//
-	// Notify systemd ready
+	// [restart] Notify systemd ready and stop there
 	//
 
-	if restart {
+	if opts.Restart {
 		log.Printf("restart: Restart sequence completed\n")
-	} else {
+		deferred() // execute without defer statement in case it cause an issue with the PID and systemd cannot attribute the notify message
+		return err
+	}
 
-		_, err = daemon.SdNotify(false, daemon.SdNotifyReady)
+	//
+	// [start] Notify systemd ready and monitor deployments
+	//
+
+	_, err = daemon.SdNotify(false, daemon.SdNotifyReady)
+	if err != nil {
+		return err
+	}
+	log.Printf("start: Start sequence completed, start to monitor deployments\n")
+
+	//
+	// Keep running in the background, and monitor the deployments
+	// (exit with an error if a deployment is missing)
+	//
+
+	for {
+		// Reload service in case it changes its id
+		service, err = LoadServiceByName(service_name)
 		if err != nil {
 			return err
 		}
-		log.Printf("start: Start sequence completed, start to monitor deployments\n")
 
-		//
-		// Keep running in the background, and monitor the deployments
-		// (exit with an error if a deployment is missing)
-		//
-
-		for {
-			// Reload service in case it changes its id
-			service, err = LoadServiceByName(service_name)
-			if err != nil {
-				return err
-			}
-
-			parts, err := service.Parts()
-			if err != nil {
-				return err
-			}
-
-			var diagnostics []string
-			all_parts_ok := true
-
-			for _, part := range parts {
-				deployments, err := deployment_util.List(deployment_util.ListOpts{
-					FilterServiceDir: service.BasePath,
-					FilterPartName:   &part,
-				})
-				if err != nil {
-					return err
-				}
-
-				if len(deployments) == 0 {
-					diagnostics = append(diagnostics, fmt.Sprintf("part %q: no deployment found", part))
-					all_parts_ok = false
-					continue
-				}
-
-				part_found := false
-				for _, depl := range deployments {
-					if depl.ServiceId != service.Id {
-						diagnostics = append(diagnostics, fmt.Sprintf("part %q: deployment %s id %q is invalid", part, depl.DeploymentName, depl.ServiceId))
-					} else {
-						diagnostics = append(diagnostics, fmt.Sprintf("part %q: deployment %s matches", part, depl.DeploymentName))
-						part_found = true
-					}
-				}
-				if !part_found {
-					all_parts_ok = false
-				}
-			}
-
-			if !all_parts_ok {
-				return fmt.Errorf("deployment has gone missing for service %q (id: %q):\n%s", service_name, service.Id, strings.Join(diagnostics, "\n"))
-			}
-
-			time.Sleep(30 * time.Second)
+		parts, err := service.Parts()
+		if err != nil {
+			return err
 		}
 
-	}
+		var diagnostics []string
+		all_parts_ok := true
 
-	deferred() // execute without defer statement in case it cause an issue with the PID and systemd cannot attribute the notify message
-	return err
+		for _, part := range parts {
+			deployments, err := deployment_util.List(deployment_util.ListOpts{
+				FilterServiceDir: service.BasePath,
+				FilterPartName:   &part,
+			})
+			if err != nil {
+				return err
+			}
+
+			if len(deployments) == 0 {
+				diagnostics = append(diagnostics, fmt.Sprintf("part %q: no deployment found", part))
+				all_parts_ok = false
+				continue
+			}
+
+			part_found := false
+			for _, depl := range deployments {
+				if depl.ServiceId != service.Id {
+					diagnostics = append(diagnostics, fmt.Sprintf("part %q: deployment %s id %q is invalid", part, depl.DeploymentName, depl.ServiceId))
+				} else {
+					diagnostics = append(diagnostics, fmt.Sprintf("part %q: deployment %s matches", part, depl.DeploymentName))
+					part_found = true
+				}
+			}
+			if !part_found {
+				all_parts_ok = false
+			}
+		}
+
+		if !all_parts_ok {
+			return fmt.Errorf("deployment has gone missing for service %q (id: %q):\n%s", service_name, service.Id, strings.Join(diagnostics, "\n"))
+		}
+
+		time.Sleep(30 * time.Second)
+	}
 }
 
 func Stop(service_name string) error {

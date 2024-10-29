@@ -79,7 +79,13 @@ var cmd_deployment_kill = cmd_deployment_systemd("kill")
 
 func cmd_deployment_systemd(cmd_name string) func(usage func(), name []string, args []string) error {
 	return func(usage func(), name []string, args []string) error {
+		var signal *string
+
 		flag := new_flag_set(name, usage)
+		switch cmd_name {
+		case "kill":
+			signal = flag.String("signal", "", "Signal to send")
+		}
 		flag.Parse(args)
 
 		log.Default().SetOutput(io.Discard)
@@ -94,6 +100,9 @@ func cmd_deployment_systemd(cmd_name string) func(usage func(), name []string, a
 		}
 
 		var cli []string = []string{cmd_name}
+		if signal != nil && *signal != "" {
+			cli = append(cli, "--signal="+*signal)
+		}
 		for _, id := range ids {
 			cli = append(cli, deployment.DeploymentUnit(id))
 		}

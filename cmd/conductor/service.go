@@ -8,10 +8,12 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/mildred/conductor.go/src/deployment"
 	"github.com/mildred/conductor.go/src/deployment_util"
 	"github.com/mildred/conductor.go/src/service"
+	"github.com/mildred/conductor.go/src/service_internal"
 	"github.com/mildred/conductor.go/src/service_public"
 )
 
@@ -51,6 +53,26 @@ func cmd_service_reload(usage func(), name []string, args []string) error {
 	})
 }
 
+func cmd_service_rolling_restart(usage func(), name []string, args []string) error {
+	flag := new_flag_set(name, usage)
+	max_index := flag.Int("max-deployment-index", 10, "max deployment index to use before erroring out")
+	stop_timeout := flag.Duration("stop-timeout", 0, "max duration to wait for the stop to complete (0 to disable timeout)")
+	term_timeout := flag.Duration("term-timeout", 5*time.Second, "max duration to wait for the SIGTERM to kill (0 to disable timeout)")
+	flag.Parse(args)
+
+	if flag.NArg() != 1 {
+		return fmt.Errorf("Command %s must take a single service definition as argument", strings.Join(name, " "))
+	}
+
+	return service_internal.StartOrReload(flag.Arg(0), service_internal.StartOrReloadOpts{
+		Restart:            true,
+		WantsFresh:         true,
+		MaxDeploymentIndex: *max_index,
+		StopTimeout:        *stop_timeout,
+		TermTimeout:        *term_timeout,
+	})
+}
+
 func cmd_service_restart(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
 	no_block := flag.Bool("no-block", false, "Do not block while restarting")
@@ -69,6 +91,7 @@ func cmd_service_deploy(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
 	part := flag.String("part", "", "Service part to deploy")
 	max_index := flag.Int("max-deployment-index", 10, "max deployment index to use before erroring out")
+	fresh := flag.Bool("fresh", false, "Do not reuse a started deployment is possible")
 	flag.Parse(args)
 
 	if flag.NArg() > 2 || flag.NArg() < 1 {
@@ -91,7 +114,7 @@ func cmd_service_deploy(usage func(), name []string, args []string) error {
 	}
 
 	if depl_name == "" {
-		depl, status, err := deployment_util.StartNewOrExistingFromService(context.Background(), service, seed, *max_index)
+		depl, status, err := deployment_util.StartNewOrExistingFromService(context.Background(), service, seed, *max_index, *fresh)
 		if err != nil {
 			return err
 		}
@@ -453,17 +476,18 @@ func cmd_service(usage func(), name []string, args []string) error {
 	flag := new_flag_set(name, usage)
 
 	return run_subcommand(name, args, flag, map[string]Subcommand{
-		"start":   {cmd_service_start, "SERVICE", "Declare and start a service"},
-		"stop":    {cmd_service_stop, "SERVICE", "Stop a service"},
-		"reload":  {cmd_service_reload, "SERVICE", "Reload a service"},
-		"restart": {cmd_service_restart, "SERVICE", "Restart a service"},
-		"deploy":  {cmd_service_deploy, "SERVICE [DEPLOYMENT_NAME]", "Manually create a deployment, do not start it"},
-		"inspect": {cmd_service_inspect, "", "Inspect a service in current directory or on the command-line"},
-		"ls":      {cmd_service_ls, "", "List all services"},
-		"show":    {cmd_service_show, "SERVICE", "Show service"},
-		"status":  {cmd_service_status, "", "Status from systemctl"},
-		"unit":    {cmd_service_unit, "", "Print systemd unit"},
-		"config":  {cmd_service_config, "...", "Manage service configuration"},
-		"env":     {cmd_service_env, "SERVICE", "Print service template environment variables"},
+		"start":           {cmd_service_start, "SERVICE", "Declare and start a service"},
+		"stop":            {cmd_service_stop, "SERVICE", "Stop a service"},
+		"reload":          {cmd_service_reload, "SERVICE", "Reload a service"},
+		"rolling-restart": {cmd_service_rolling_restart, "SERVICE", "Restart a service by starting the new deployment before terminating the old one"},
+		"restart":         {cmd_service_restart, "SERVICE", "Restart a service"},
+		"deploy":          {cmd_service_deploy, "SERVICE [DEPLOYMENT_NAME]", "Manually create a deployment, do not start it"},
+		"inspect":         {cmd_service_inspect, "", "Inspect a service in current directory or on the command-line"},
+		"ls":              {cmd_service_ls, "", "List all services"},
+		"show":            {cmd_service_show, "SERVICE", "Show service"},
+		"status":          {cmd_service_status, "", "Status from systemctl"},
+		"unit":            {cmd_service_unit, "", "Print systemd unit"},
+		"config":          {cmd_service_config, "...", "Manage service configuration"},
+		"env":             {cmd_service_env, "SERVICE", "Print service template environment variables"},
 	})
 }
