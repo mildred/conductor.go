@@ -2,7 +2,6 @@ package deployment_internal
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -12,8 +11,6 @@ import (
 
 	"github.com/coreos/go-systemd/v22/daemon"
 
-	"github.com/mildred/conductor.go/src/caddy"
-	"github.com/mildred/conductor.go/src/service"
 	"github.com/mildred/conductor.go/src/tmpl"
 
 	. "github.com/mildred/conductor.go/src/deployment"
@@ -149,60 +146,6 @@ func StopPod(ctx context.Context, depl *Deployment) error {
 	}
 
 	log.Printf("stop: Stop sequence completed\n")
-	return nil
-}
-
-func CaddyRegisterPod(ctzz context.Context, depl *Deployment, register bool, dir string) error {
-	var prefix = "register"
-	if !register {
-		prefix = "deregister"
-	}
-
-	if depl.ProxyConfigTemplate == "" {
-		return nil
-	}
-
-	var configs []caddy.ConfigItem
-
-	caddy, err := caddy.NewClient(depl.CaddyLoadBalancer.ApiEndpoint)
-	if err != nil {
-		return err
-	}
-
-	config, err := tmpl.RunTemplate(depl.ProxyConfigTemplate, depl.Vars())
-	if err != nil {
-		return err
-	}
-
-	err = json.Unmarshal([]byte(config), &configs)
-	if err != nil {
-		return err
-	}
-
-	if register {
-		unit_name := fmt.Sprintf(service.ServiceConfigUnit(depl.ServiceDir))
-		log.Printf("%s: Ensure the service config %s is registered", prefix, unit_name)
-
-		fmt.Fprintf(os.Stderr, "+ systemctl start %q\n", unit_name)
-		cmd := exec.Command("systemctl", "start", unit_name)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		err = cmd.Run()
-		if err != nil {
-			return err
-		}
-
-		log.Printf("register: Registering pod IP %s", depl.Pod.IPAddress)
-	} else {
-		log.Printf("deregister: Deregistering pod IP %s", depl.Pod.IPAddress)
-	}
-
-	err = caddy.Register(register, configs)
-	if err != nil {
-		return err
-	}
-
-	log.Printf("%s: Completed", prefix)
 	return nil
 }
 

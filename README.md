@@ -55,8 +55,13 @@ To declare a service, just put a JSON file in
     "DOCKER_IMAGE": "example.org/beautiful/app",
     "DOCKER_TAG": "latest"
   },
-  "pod_template": "./pod.template",
-  "config_map_template": "./config-map.template",
+  "pods": [
+    {
+      "name": "",
+      "pod_template": "./pod.template",
+      "config_map_template": "./config-map.template",
+    }
+  ],
   "proxy_config_template": "./proxy-config.template",
   "hooks": [
     {
@@ -188,15 +193,51 @@ Basic How-To
 CGI / Serverless
 ----------------
 
-It is not yet implemented, but the general ideas are there. A CGI script or
-serverless lambda would be implemented using systemd socket activation, with the
-socket tied to a route in the reverse proxy. Upon activation, something like
-[`cgi-adapter`](https://github.com/mildred/cgi-adapter) could be used to
-translate the HTTP request to CGI and back to HTTP.
+There is an untested implementation. You can declare functions in your service:
+
+```json
+{
+  "functions": [
+    {
+      "name": "",
+      "format": "cgi",
+      "exec": ["./cgi-script.sh", "--cgi"],
+      "stderr_as_stdout": false,
+      "response_headers": [
+        "Content-Type: text/plain; charset=utf-8"
+      ],
+      "no_response_headers": false,
+      "path_info_strip": 2
+    }
+  ]
+}
+```
+
+When the deployment corresponding to the function is started, a systemd socket
+with Accept=yes is started and socket activation is used to start the script
+that will handle the request.
+
+The formats supported are:
+
+- `cgi`: a should be compatible CGI interface
+- `http-stdio`: the stdin contains a HTTP request and stdout should be replied
+  with the http response. This is just passthrough of the accepted socket.
+
+In the proxy config template, you can add this shell snippet to configure your
+functions:
+
+```bash
+if [[ -n "$CONDUCTOR_FUNCTION_ID" ]]; then
+  exec conductor function caddy-config
+fi
+```
+
+### Future developments ###
 
 If systemd socket activation is not enough for CGI, perhaps Conductor should
 take the socket activation in its own hands. This would be necessary in order to
-pre-provision CGI scripts to get faster response times.
+pre-provision functions to get faster response times (the CGI format would not
+work in this case).
 
 It should also be possible to declare such functions as daemons that could be
 pre-provisioned or scaled down to zero depending on the configuration.
@@ -220,22 +261,47 @@ Basically, there are three modes of operations possible:
 
 Roadmap:
 
-- [ ] A service pod should be optional in which case it does not generate a
+- [x] A service pod should be optional in which case it does not generate a
   deployment
-- [ ] A service can declare CGI functions, each function is then started as a
+- [x] A service can declare CGI functions, each function is then started as a
   systemd socket and service that executes the CGI script via cgi-adapter (to be
   included in conductor)
-- [ ] The proxy config template should be called for the CGI functions too, and
+- [x] The proxy config template should be called for the CGI functions too, and
   be given the service unique ID as variable
 - [ ] Add socket activation to pod (allow multiple unix sockets for a single
   pod).
-- [ ] Allow multiple pods in a single service
-- [ ] Allow raw HTTP CGI scripts with Accept=yes that can handle multiple
+- [x] Allow multiple pods in a single service
+- [x] Allow raw HTTP CGI scripts with Accept=yes that can handle multiple
   requests on a single keep alive connection
 - [ ] Let Conductor handle socket activation for the multiple requests use case,
   and let Conductor handle preloading of the CGI executable.
+    - Add conductor-fast-function@.service which will depend on
+    - conductor-fast-function-manager.service which will receive start and stop
+      signal from individual functions
+    - it will create the socket and manage the function execution either via
+      systemd-run (so it can pass around the socket) or by other means
+    - it can handle the equivalent of Accept=yes sockets and pre-provision the
+      function processes. This would improve over systemd socket activation by:
+          - pre-provisioning the process, no cold start
+          - ~the same process could be used for two separate clients that would
+            otherwise use separate connections and separate processes~ (wrong
+            because there is a single connection with Caddy, except that perhaps
+            Caddy does not maintain an open connection)
+      instead of using systemd-run, the conductor fast function manager could
+      listen on a socket A (bound to the reverse proxy) and manage a reverse
+      proxy to a socket B (managed by conductor-cgi-function@.socket). By
+      reverse-proxying, the manager could handle pre-provisioning by opening a
+      connection and not writing to it
+    - it can handle the equivalent of Accept=no sockets in which case the main
+      socket would have to be passed as a file descriptor. This would improve on
+      systemd socket activation by:
+          - pre-provisioning the process, no cold start
+          - because otherwise Conductor does not support socket activation yet
+- [ ] It should be possible to have commands accessible as functions with a sane
+  protocol and security
+- [ ] Handle security policies (see below)
 
-### Security
+### Security (not yet implemented) ###
 
 Security can be handled using Caddy reverse_proxy rewrite handlers. See:
 

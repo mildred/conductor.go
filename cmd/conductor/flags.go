@@ -54,7 +54,7 @@ func run_subcommand(name []string, args0 []string, flag *flag.FlagSet, subcomman
 
 	if subcommand, ok := subcommands[cmd]; ok {
 		return subcommand.F(usage, append(name, cmd), next_args)
-	} else {
+	} else if cmd != "" {
 		// Try with a prefix
 		var subcommand Subcommand
 		var nmatch = 0
@@ -70,5 +70,8 @@ func run_subcommand(name []string, args0 []string, flag *flag.FlagSet, subcomman
 			flag.Usage()
 			return fmt.Errorf("Unknown command %s %s", strings.Join(name, " "), cmd)
 		}
+	} else {
+		flag.Usage()
+		return nil
 	}
 }

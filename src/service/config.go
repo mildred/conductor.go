@@ -49,6 +49,7 @@ type Service struct {
 	Config                  map[string]*ConfigValue    `json:"config,omitempty"`                // key-value pairs for config and templating, CHANNEL=staging
 	ProxyConfigTemplate     string                     `json:"proxy_config_template,omitempty"` // Template file for the load-balancer config
 	Pods                    *ServicePods               `json:"pods,omitempty"`
+	Functions               *ServiceFunctions          `json:"functions,omitempty"`
 	Hooks                   []*Hook                    `json:"hooks,omitempty"`
 	CaddyLoadBalancer       CaddyConfig                `json:"caddy_load_balancer"`
 	DisplayServiceConfig    []string                   `json:"display_service_config"`
@@ -212,7 +213,7 @@ func LoadServiceFile(path string) (*Service, error) {
 		return nil, err
 	}
 
-	err = service.ComputeId()
+	service.Id, err = service.ComputeId("")
 	if err != nil {
 		return nil, err
 	}
@@ -298,6 +299,10 @@ func loadService(path string, fix_paths bool, base *Service, inh *InheritFile) (
 			return nil, err
 		}
 
+		if err := service.Functions.FixPaths(dir); err != nil {
+			return nil, err
+		}
+
 		if err := fix_path(dir, &service.ProxyConfigTemplate, false); err != nil {
 			return nil, err
 		}
@@ -352,6 +357,7 @@ func fix_path(dir string, path *string, is_executable bool) error {
 
 func (service *Service) FillDefaults() error {
 	service.Pods.FillDefaults(service)
+	service.Functions.FillDefaults(service)
 	if service.ProxyConfigTemplate == "" {
 		service.ProxyConfigTemplate = filepath.Join(service.BasePath, "proxy-config.template")
 	}
@@ -364,31 +370,30 @@ func (service *Service) FillDefaults() error {
 	return nil
 }
 
-func (service *Service) ComputeId() error {
+func (service *Service) ComputeId(extra string) (string, error) {
 	data, err := json.Marshal(service)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	canon, err := jsoncanonicalizer.Transform(data)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	shake := sha3.NewShake256()
-	_, err = shake.Write(canon)
+	_, err = shake.Write(append(canon, []byte(extra)...))
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	output := make([]byte, 16)
 	_, err = shake.Read(output)
 	if err != nil {
-		return err
+		return "", err
 	}
 
-	service.Id = fmt.Sprintf("%x", output)
-	return nil
+	return fmt.Sprintf("%x", output), nil
 }
 
 func join_paths(base, path string) string {
@@ -408,6 +413,7 @@ func (service *Service) Vars() []string {
 		"CONDUCTOR_APP=" + service.AppName,
 		"CONDUCTOR_INSTANCE=" + service.InstanceName,
 		"CONDUCTOR_SERVICE_NAME=" + name,
+		"CONDUCTOR_SERVICE_ID=" + service.Id,
 		"CONDUCTOR_SERVICE_DIR=" + service.BasePath,
 		"CONDUCTOR_SERVICE_UNIT=" + ServiceUnit(service.BasePath),
 		"CONDUCTOR_SERVICE_CONFIG_UNIT=" + ServiceConfigUnit(service.BasePath),
@@ -425,6 +431,12 @@ func (service *Service) Parts() ([]string, error) {
 			return nil, fmt.Errorf("duplicated part %s in service", pod.Name)
 		}
 		res = append(res, pod.Name)
+	}
+	for _, f := range *service.Functions {
+		if slices.Contains(res, f.Name) {
+			return nil, fmt.Errorf("duplicated part %s in service", f.Name)
+		}
+		res = append(res, f.Name)
 	}
 	return res, nil
 }

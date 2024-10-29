@@ -99,60 +99,77 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 		return err
 	}
 
-	var started_deployments []*deployment.Deployment
 	var depl_names []string
 
 	for _, part_name := range parts {
 
-		log.Printf("%s: Loaded service, find new or existing deployments for part %q...\n", prefix, part_name)
+		log.Printf("%s: Loaded service, configure socket for part %q...\n", prefix, part_name)
 
 		seed, err := deployment.SeedFromService(service, part_name)
 		if err != nil {
 			return err
 		}
 
-		depl, depl_status, err := deployment_util.StartNewOrExistingFromService(ctx, service, seed, opts.MaxDeploymentIndex, opts.WantsFresh)
+		depl, depl_status, err := deployment_util.StartNewOrExistingFromService(ctx, service, seed, deployment_util.StartNewOrExistingOpts{
+			MaxIndex:  opts.MaxDeploymentIndex,
+			WantFresh: opts.WantsFresh,
+		})
 		if err != nil {
 			return err
 		}
 
-		started_deployments = append(started_deployments, depl)
 		depl_names = append(depl_names, depl.DeploymentName)
 
-		ctx, cancel := context.WithCancel(context.Background())
-		go utils.ExtendTimeout(ctx, 60*time.Second)
+		if seed.IsPod {
 
-		err = func() error {
-			defer cancel()
+			ctx, cancel := context.WithCancel(context.Background())
+			go utils.ExtendTimeout(ctx, 60*time.Second)
 
-			if depl_status == "active" {
-				log.Printf("%s: Found started deployment %s", prefix, depl.DeploymentName)
-			} else if depl_status == "activating" || depl_status == "inactive" {
-				log.Printf("%s: Found %s deployment %s, waiting to be started...", prefix, depl_status, depl.DeploymentName)
-				fmt.Fprintf(os.Stderr, "+ systemctl start %q\n", deployment.DeploymentUnit(depl.DeploymentName))
-				cmd := exec.Command("systemctl", "start", deployment.DeploymentUnit(depl.DeploymentName))
-				cmd.Stdout = os.Stdout
-				cmd.Stderr = os.Stderr
-				err = cmd.Run()
-				if err != nil {
-					return err
+			err = func() error {
+				defer cancel()
+
+				if depl_status == "active" {
+					log.Printf("%s: Found started pod deployment %s", prefix, depl.DeploymentName)
+				} else if depl_status == "activating" || depl_status == "inactive" {
+					log.Printf("%s: Found %s pod deployment %s, waiting to be started...", prefix, depl_status, depl.DeploymentName)
+					fmt.Fprintf(os.Stderr, "+ systemctl start %q\n", deployment.DeploymentUnit(depl.DeploymentName))
+					cmd := exec.Command("systemctl", "start", deployment.DeploymentUnit(depl.DeploymentName))
+					cmd.Stdout = os.Stdout
+					cmd.Stderr = os.Stderr
+					err = cmd.Run()
+					if err != nil {
+						return err
+					}
+				} else {
+					log.Printf("%s: Starting new pod deployment %s...", prefix, depl.DeploymentName)
+					fmt.Fprintf(os.Stderr, "+ systemctl start %q\n", deployment.DeploymentUnit(depl.DeploymentName))
+					cmd := exec.Command("systemctl", "start", deployment.DeploymentUnit(depl.DeploymentName))
+					cmd.Stdout = os.Stdout
+					cmd.Stderr = os.Stderr
+					err = cmd.Run()
+					if err != nil {
+						return err
+					}
 				}
-			} else {
-				log.Printf("%s: Starting new deployment %s...", prefix, depl.DeploymentName)
-				fmt.Fprintf(os.Stderr, "+ systemctl start %q\n", deployment.DeploymentUnit(depl.DeploymentName))
-				cmd := exec.Command("systemctl", "start", deployment.DeploymentUnit(depl.DeploymentName))
-				cmd.Stdout = os.Stdout
-				cmd.Stderr = os.Stderr
-				err = cmd.Run()
-				if err != nil {
-					return err
-				}
+
+				return nil
+			}()
+			if err != nil {
+				return err
 			}
 
-			return nil
-		}()
-		if err != nil {
-			return err
+		} else if seed.IsFunction {
+
+			log.Printf("%s: Starting new CGI funcion deployment %s...", prefix, depl.DeploymentName)
+			fmt.Fprintf(os.Stderr, "+ systemctl start %q\n", deployment.CGIFunctionSocketUnit(depl.DeploymentName))
+			cmd := exec.Command("systemctl", "start", deployment.CGIFunctionSocketUnit(depl.DeploymentName))
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			err = cmd.Run()
+			if err != nil {
+				return err
+			}
+
 		}
 
 	}
@@ -187,7 +204,7 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 
 		err = func() error {
 			defer cancel()
-			return deployment_public.RemoveTimeout(ctx, d.DeploymentName, opts.StopTimeout, opts.TermTimeout)
+			return deployment_util.RemoveTimeout(ctx, d.DeploymentName, opts.StopTimeout, opts.TermTimeout)
 		}()
 		if err != nil {
 			log.Printf("%s: ERROR removing deployment %s (but continuing): %v", prefix, d.DeploymentName, err)

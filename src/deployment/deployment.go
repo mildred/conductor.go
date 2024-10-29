@@ -20,6 +20,14 @@ const ConfigName = "conductor-deployment.json"
 
 var DeploymentRunDir = dirs.Join(dirs.SelfRuntimeDir, "deployments")
 
+func CGIFunctionSocketUnit(name string) string {
+	return fmt.Sprintf("conductor-cgi-function-%s.socket", name)
+}
+
+func CGIFunctionServiceUnit(name string, instance string) string {
+	return fmt.Sprintf("conductor-cgi-function-%s@%s.service", name, instance)
+}
+
 func DeploymentUnit(name string) string {
 	return fmt.Sprintf("conductor-deployment@%s.service", name)
 }
@@ -28,31 +36,44 @@ func DeploymentConfigUnit(name string) string {
 	return fmt.Sprintf("conductor-deployment-config@%s.service", name)
 }
 
+func DeploymentSocketPath(name string) string {
+	return path.Join(DeploymentRunDir, name, "stream.socket")
+}
+
 func DeploymentDirByName(name string) string {
 	return path.Join(DeploymentRunDir, name)
 }
 
 type Deployment struct {
 	*service.Service
-	Seed                 *DeploymentSeed `json:"-"`
-	ServiceDir           string          `json:"service_dir"`
-	ServiceId            string          `json:"service_id"`
-	DeploymentName       string          `json:"conductor_deployment"`
-	PartName             string          `json:"part_name"`
-	PodName              string          `json:"pod_name"`
-	TemplatedPod         string          `json:"templated_pod"`
-	TemplatedConfigMap   string          `json:"templated_config_map"`
-	TemplatedProxyConfig json.RawMessage `json:"templated_proxy_config"`
-	Pod                  *DeploymentPod  `json:"pod,omitempty"`
+	Seed                 *DeploymentSeed     `json:"-"`
+	ServiceDir           string              `json:"service_dir"`
+	ServiceId            string              `json:"service_id"`
+	DeploymentName       string              `json:"conductor_deployment"`
+	PartName             string              `json:"part_name"`
+	PartId               string              `json:"part_id"`
+	PodName              string              `json:"pod_name"`
+	TemplatedPod         string              `json:"templated_pod"`
+	TemplatedConfigMap   string              `json:"templated_config_map"`
+	TemplatedProxyConfig json.RawMessage     `json:"templated_proxy_config"`
+	Pod                  *DeploymentPod      `json:"pod,omitempty"`
+	Function             *DeploymentFunction `json:"function,omitempty"`
 }
 
 func NewDeploymentFromService(service *service.Service, deployment_name string, seed *DeploymentSeed) *Deployment {
 	log.Printf("prepare: Set up deployment %q from service %q-%q\n", deployment_name, service.AppName, service.InstanceName)
 	var pod *DeploymentPod
+	var f *DeploymentFunction
 
 	if service_pod := service.Pods.FindPod(seed.PartName); service_pod != nil {
 		pod = &DeploymentPod{
 			ServicePod: service_pod,
+		}
+	}
+
+	if service_func := service.Functions.FindFunction(seed.PartName); service_func != nil {
+		f = &DeploymentFunction{
+			ServiceFunction: service_func,
 		}
 	}
 
@@ -63,11 +84,13 @@ func NewDeploymentFromService(service *service.Service, deployment_name string, 
 		ServiceId:            service.Id,
 		DeploymentName:       deployment_name,
 		PartName:             seed.PartName,
+		PartId:               seed.PartId,
 		PodName:              "conductor-" + deployment_name,
 		TemplatedPod:         "",
 		TemplatedConfigMap:   "",
 		TemplatedProxyConfig: nil,
 		Pod:                  pod,
+		Function:             f,
 	}
 }
 
@@ -133,18 +156,51 @@ func (depl *Deployment) TemplateAll() error {
 }
 
 func (depl *Deployment) Vars() []string {
-	var pod_ip_addr string
-	if depl.Pod != nil {
-		pod_ip_addr = depl.Pod.IPAddress
-	}
-	return append(depl.Service.Vars(),
+	var vars []string = append(depl.Service.Vars(),
 		"CONDUCTOR_SERVICE_PART="+depl.PartName,
 		"CONDUCTOR_DEPLOYMENT="+depl.DeploymentName,
-		"POD_NAME="+depl.PodName,
-		"POD_IP_ADDRESS="+pod_ip_addr,
+		"CONDUCTOR_DEPLOYMENT_SERVICE_ID="+depl.ServiceId,
 		"CONDUCTOR_DEPLOYMENT_UNIT="+DeploymentUnit(depl.DeploymentName),
 		"CONDUCTOR_DEPLOYMENT_CONFIG_UNIT="+DeploymentConfigUnit(depl.DeploymentName),
+		"CONDUCTOR_PART_ID="+depl.PartId,
 	)
+
+	if depl.Pod != nil {
+		vars = append(vars,
+			"CONDUCTOR_DEPLOYMENT_KIND=pod",
+			"POD_IP_ADDRESS="+depl.Pod.IPAddress,
+			"POD_NAME="+depl.PodName,
+			"CONDUCTOR_POD_IP_ADDRESS="+depl.Pod.IPAddress,
+			"CONDUCTOR_POD_NAME="+depl.PodName,
+			"CONDUCTOR_FUNCTION_FORMAT=",
+			"CONDUCTOR_FUNCTION_ID=",
+			"CONDUCTOR_FUNCTION_SOCKET=",
+		)
+	} else if depl.Function != nil {
+		vars = append(vars,
+			"CONDUCTOR_DEPLOYMENT_KIND=function",
+			"POD_IP_ADDRESS=",
+			"POD_NAME=",
+			"CONDUCTOR_POD_IP_ADDRESS=",
+			"CONDUCTOR_POD_NAME=",
+			"CONDUCTOR_FUNCTION_FORMAT="+depl.Function.Format,
+			"CONDUCTOR_FUNCTION_ID="+depl.PartId,
+			"CONDUCTOR_FUNCTION_SOCKET="+DeploymentSocketPath(depl.DeploymentName),
+		)
+	} else {
+		vars = append(vars,
+			"CONDUCTOR_DEPLOYMENT_KIND=",
+			"POD_IP_ADDRESS=",
+			"POD_NAME=",
+			"CONDUCTOR_POD_IP_ADDRESS=",
+			"CONDUCTOR_POD_NAME=",
+			"CONDUCTOR_FUNCTION_FORMAT=",
+			"CONDUCTOR_FUNCTION_ID=",
+			"CONDUCTOR_FUNCTION_SOCKET=",
+		)
+	}
+
+	return vars
 }
 
 func (depl *Deployment) Save(fname string) error {

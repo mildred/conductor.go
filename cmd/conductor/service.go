@@ -115,7 +115,11 @@ func cmd_service_deploy(usage func(), name []string, args []string) error {
 	}
 
 	if depl_name == "" {
-		depl, status, err := deployment_util.StartNewOrExistingFromService(context.Background(), service, seed, *max_index, *fresh)
+		ctx := context.Background()
+		depl, status, err := deployment_util.StartNewOrExistingFromService(ctx, service, seed, deployment_util.StartNewOrExistingOpts{
+			MaxIndex:  *max_index,
+			WantFresh: *fresh,
+		})
 		if err != nil {
 			return err
 		}

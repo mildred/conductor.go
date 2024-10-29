@@ -74,7 +74,7 @@ func (pods *ServicePods) UnmarshalJSON(data []byte) error {
 		}
 		err = json.Unmarshal(raw_pod, existing_pod)
 		if err != nil {
-			return fmt.Errorf("unmarshalling pod, %v", err)
+			return fmt.Errorf("unmarshalling pod %q, %v", pod_name.Name, err)
 		}
 	}
 

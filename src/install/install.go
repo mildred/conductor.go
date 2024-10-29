@@ -38,8 +38,28 @@ func Install(destdir string) error {
 		return err
 	}
 
-	fmt.Fprintf(os.Stderr, "+ touch %q\n", destdir+ConductorCGIFunctionServiceLocation)
-	err = os.WriteFile(destdir+ConductorCGIFunctionServiceLocation, []byte(ConductorCGIFunctionService), 0644)
+	/*
+		fmt.Fprintf(os.Stderr, "+ touch %q\n", destdir+ConductorFunctionSocketLocation)
+		err = os.WriteFile(destdir+ConductorFunctionSocketLocation, []byte(ConductorFunctionSocket), 0644)
+		if err != nil {
+			return err
+		}
+
+		fmt.Fprintf(os.Stderr, "+ touch %q\n", destdir+ConductorCGIFunctionServiceLocation)
+		err = os.WriteFile(destdir+ConductorCGIFunctionServiceLocation, []byte(ConductorCGIFunctionService), 0644)
+		if err != nil {
+			return err
+		}
+	*/
+
+	fmt.Fprintf(os.Stderr, "+ rm -f %q\n", destdir+ConductorFunctionSocketLocation)
+	err = os.Remove(destdir + ConductorFunctionSocketLocation)
+	if err != nil {
+		return err
+	}
+
+	fmt.Fprintf(os.Stderr, "+ rm -f %q\n", destdir+ConductorCGIFunctionServiceLocation)
+	err = os.Remove(destdir + ConductorCGIFunctionServiceLocation)
 	if err != nil {
 		return err
 	}
@@ -77,6 +97,12 @@ func Uninstall(destdir string) error {
 
 	fmt.Fprintf(os.Stderr, "+ rm -f %q\n", destdir+ConductorDeploymentConfigServiceLocation)
 	err = os.Remove(destdir + ConductorDeploymentConfigServiceLocation)
+	if err != nil {
+		return err
+	}
+
+	fmt.Fprintf(os.Stderr, "+ rm -f %q\n", destdir+ConductorFunctionSocketLocation)
+	err = os.Remove(destdir + ConductorFunctionSocketLocation)
 	if err != nil {
 		return err
 	}

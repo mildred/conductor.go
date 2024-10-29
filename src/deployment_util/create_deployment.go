@@ -16,7 +16,12 @@ import (
 	. "github.com/mildred/conductor.go/src/deployment"
 )
 
-func StartNewOrExistingFromService(ctx context.Context, svc *service.Service, seed *DeploymentSeed, max_deployment_index int, wants_fresh bool) (*Deployment, string, error) {
+type StartNewOrExistingOpts struct {
+	MaxIndex  int
+	WantFresh bool
+}
+
+func StartNewOrExistingFromService(ctx context.Context, svc *service.Service, seed *DeploymentSeed, opts StartNewOrExistingOpts) (*Deployment, string, error) {
 	sd, err := dbus.NewWithContext(ctx)
 	if err != nil {
 		return nil, "", err
@@ -38,48 +43,63 @@ func StartNewOrExistingFromService(ctx context.Context, svc *service.Service, se
 		deployment_units = append(deployment_units, DeploymentUnit(depl.DeploymentName))
 	}
 
-	statuses, err := sd.ListUnitsByNamesContext(ctx, deployment_units)
-	if err != nil {
-		return nil, "", err
-	}
-
-	for _, depl := range deployments {
-		should_match := depl.AppName == svc.AppName && depl.InstanceName == svc.InstanceName
-		if depl.ServiceDir != svc.BasePath {
-			if should_match {
-				log.Printf("Deployment %s do not match (service %q != %q)", depl.DeploymentName, depl.ServiceDir, svc.BasePath)
-			}
-			continue
-		}
-		if depl.ServiceId != svc.Id {
-			if should_match {
-				log.Printf("Deployment %s do not match (id %q != %q)", depl.DeploymentName, depl.ServiceId, svc.Id)
-			}
-			continue
-		}
-		var stat dbus.UnitStatus
-		for _, st := range statuses {
-			if st.Name == DeploymentUnit(depl.DeploymentName) {
-				stat = st
-				break
-			}
-		}
-		if stat.ActiveState == "failed" {
-			log.Printf("Deployment %s do not match (state is %s / %s)", depl.DeploymentName, stat.ActiveState, stat.SubState)
-			continue
-		} else if stat.ActiveState == "active" {
-			started_deployments = append(started_deployments, depl)
-		} else if stat.ActiveState == "activating" {
-			starting_deployments = append(starting_deployments, depl)
-		} else if stat.ActiveState == "inactive" {
-			stopped_deployments = append(stopped_deployments, depl)
-		} else {
-			// TODO: consider for reuse
-			log.Printf("Deployment %s do not match (state is %s / %s)", depl.DeploymentName, stat.ActiveState, stat.SubState)
-			continue
+	if seed.IsPod {
+		statuses, err := sd.ListUnitsByNamesContext(ctx, deployment_units)
+		if err != nil {
+			return nil, "", err
 		}
 
-		log.Printf("Deployment %s (%s / %s) is considered to reuse", depl.DeploymentName, stat.ActiveState, stat.SubState)
+		for _, depl := range deployments {
+			should_match := depl.AppName == svc.AppName && depl.InstanceName == svc.InstanceName
+			if depl.ServiceDir != svc.BasePath {
+				if should_match {
+					log.Printf("Deployment %s do not match (service %q != %q)", depl.DeploymentName, depl.ServiceDir, svc.BasePath)
+				}
+				continue
+			}
+			if depl.ServiceId != svc.Id {
+				if should_match {
+					log.Printf("Deployment %s do not match (id %q != %q)", depl.DeploymentName, depl.ServiceId, svc.Id)
+				}
+				continue
+			}
+			var stat dbus.UnitStatus
+			for _, st := range statuses {
+				if st.Name == DeploymentUnit(depl.DeploymentName) {
+					stat = st
+					break
+				}
+			}
+			if stat.ActiveState == "failed" {
+				log.Printf("Deployment %s do not match (state is %s / %s)", depl.DeploymentName, stat.ActiveState, stat.SubState)
+				continue
+			} else if stat.ActiveState == "active" {
+				started_deployments = append(started_deployments, depl)
+			} else if stat.ActiveState == "activating" {
+				starting_deployments = append(starting_deployments, depl)
+			} else if stat.ActiveState == "inactive" {
+				stopped_deployments = append(stopped_deployments, depl)
+			} else {
+				// TODO: consider for reuse
+				log.Printf("Deployment %s do not match (state is %s / %s)", depl.DeploymentName, stat.ActiveState, stat.SubState)
+				continue
+			}
+
+			log.Printf("Deployment %s (%s / %s) is considered to reuse", depl.DeploymentName, stat.ActiveState, stat.SubState)
+		}
+	} else {
+		existing, err := List(ListOpts{
+			FilterServiceDir: seed.ServiceDir,
+			FilterPartName:   &seed.PartName,
+			FilterServiceId:  seed.ServiceId,
+		})
+		if err != nil {
+			return nil, "", err
+		}
+
+		for _, depl := range existing {
+			return depl, "", nil
+		}
 	}
 
 	//
@@ -87,7 +107,7 @@ func StartNewOrExistingFromService(ctx context.Context, svc *service.Service, se
 	// use it and wait for it to be started, else start a new deployment
 	//
 
-	if len(started_deployments) > 0 && !wants_fresh {
+	if len(started_deployments) > 0 && !opts.WantFresh {
 		log.Printf("found started deployment %q", started_deployments[0].DeploymentName)
 		return started_deployments[0], "active", nil
 	} else if len(starting_deployments) > 0 {
@@ -104,7 +124,7 @@ func StartNewOrExistingFromService(ctx context.Context, svc *service.Service, se
 
 		var name string
 		var i = 1
-		for i <= max_deployment_index {
+		for i <= opts.MaxIndex {
 			name = fmt.Sprintf("%s-%s-%s%d", svc.AppName, svc.InstanceName, seed.Prefix(), i)
 			log.Printf("Trying new deployment name %s", name)
 			_, err := os.Stat(path.Join(DeploymentRunDir, name))
@@ -180,27 +200,84 @@ func CreateDeploymentFromService(name string, svc *service.Service, seed *Deploy
 	// 	return "", err
 	// }
 
-	err = os.MkdirAll("/run/systemd/system/"+DeploymentUnit(name)+".d", 0755)
-	if err != nil {
-		return "", err
+	var unit_name string
+	if seed.IsPod {
+		unit_name = DeploymentUnit(name)
+	} else if seed.IsFunction {
+		err = CreateCGIFunctionUnits(name)
+		if err != nil {
+			return "", err
+		}
+		unit_name = CGIFunctionServiceUnit(name, "")
 	}
 
-	var conf string = "[Service]\n"
-	conf += fmt.Sprintf("LogExtraFields=CONDUCTOR_APP=%s\n", svc.AppName)
-	conf += fmt.Sprintf("LogExtraFields=CONDUCTOR_INSTANCE=%s\n", svc.InstanceName)
-	conf += fmt.Sprintf("LogExtraFields=CONDUCTOR_DEPLOYMENT=%s\n", name)
-	err = os.WriteFile("/run/systemd/system/"+DeploymentUnit(name)+".d/50-journal.conf", []byte(conf), 0644)
-	if err != nil {
-		return "", err
-	}
+	if unit_name != "" {
 
-	cmd := exec.Command("systemctl", "daemon-reload")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	err = cmd.Run()
-	if err != nil {
-		return "", fmt.Errorf("while running systemctl daemon-reload, %v", err)
+		err = os.MkdirAll("/run/systemd/system/"+unit_name+".d", 0755)
+		if err != nil {
+			return "", err
+		}
+
+		var conf string = "[Service]\n"
+		conf += fmt.Sprintf("LogExtraFields=CONDUCTOR_APP=%s\n", svc.AppName)
+		conf += fmt.Sprintf("LogExtraFields=CONDUCTOR_INSTANCE=%s\n", svc.InstanceName)
+		conf += fmt.Sprintf("LogExtraFields=CONDUCTOR_DEPLOYMENT=%s\n", name)
+		err = os.WriteFile("/run/systemd/system/"+unit_name+".d/50-journal.conf", []byte(conf), 0644)
+		if err != nil {
+			return "", err
+		}
+
+		cmd := exec.Command("systemctl", "daemon-reload")
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		err = cmd.Run()
+		if err != nil {
+			return "", fmt.Errorf("while running systemctl daemon-reload, %v", err)
+		}
+
 	}
 
 	return dir, nil
+}
+
+func CreateCGIFunctionUnits(name string) error {
+	var service = `[Unit]
+Description=Conductor CGI Function ` + name + `
+
+[Service]
+Type=oneshot
+ExitType=cgroup
+StandardInput=socket
+StandardOutput=socket
+StandardError=journal
+CollectMode=inactive-or-failed
+
+WorkingDirectory=` + DeploymentDirByName(name) + `
+Environment=CONDUCTOR_DEPLOYMENT=` + name + `
+Environment=CONDUCTOR_SYSTEMD_UNIT=%n
+
+ExecStart=/bin/sh -xc 'PID=$$$$; exec conductor _ deployment start'
+`
+
+	var socket = `[Unit]
+Description=Conductor CGI Function socket for ` + name + `
+Requires=` + DeploymentConfigUnit(name) + `
+
+[Socket]
+ListenStream=` + DeploymentSocketPath(name) + `
+Accept=yes
+
+[Install]
+WantedBy=sockets.target
+`
+
+	err := os.WriteFile("/run/systemd/system/"+CGIFunctionSocketUnit(name), []byte(socket), 0o644)
+	if err != nil {
+		return err
+	}
+	err = os.WriteFile("/run/systemd/system/"+CGIFunctionServiceUnit(name, ""), []byte(service), 0o644)
+	if err != nil {
+		return err
+	}
+	return nil
 }

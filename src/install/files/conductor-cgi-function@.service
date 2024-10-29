@@ -1,11 +1,16 @@
 [Unit]
-Description=Register Conductor CGI function at %f
+Description=Conductor CGI Function %i
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/bin/conductor cgi declare %f
-RemainAfterExit=true
+ExitType=cgroup
+StandardInput=socket
+StandardOutput=socket
+StandardError=journal
+CollectMode=inactive-or-failed
 
-[Install]
-WantedBy=multi-user.target
+WorkingDirectory=/run/conductor/deployments/%i
+Environment=CONDUCTOR_DEPLOYMENT=%i
+Environment=CONDUCTOR_SYSTEMD_UNIT=%n
 
+ExecStart=/bin/sh -xc 'PID=$$$$; exec conductor _ deployment start'

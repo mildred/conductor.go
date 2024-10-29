@@ -9,8 +9,14 @@ import (
 )
 
 type DeploymentSeed struct {
-	ServiceDir string `json:"service_dir"`
-	PartName   string `json:"part_name"`
+	ServiceDir string                   `json:"service_dir"`
+	ServiceId  string                   `json:"service_id"`
+	PartName   string                   `json:"part_name"`
+	PartId     string                   `json:"part_id"`
+	IsPod      bool                     `json:"is_pod"`
+	IsFunction bool                     `json:"is_function"`
+	Pod        *service.ServicePod      `json:"-"`
+	Function   *service.ServiceFunction `json:"-"`
 }
 
 const SeedName = "conductor-deployment-seed.json"
@@ -43,13 +49,29 @@ func ReadSeed(fname string) (*DeploymentSeed, error) {
 }
 
 func SeedFromService(service *service.Service, part string) (*DeploymentSeed, error) {
-	pod := service.Pods.FindPod(part)
-	if pod == nil {
-		return nil, fmt.Errorf("Cannot find service part %q", part)
+	part_id, err := service.ComputeId("part:" + part)
+	if err != nil {
+		return nil, err
 	}
 
-	return &DeploymentSeed{
+	seed := &DeploymentSeed{
 		ServiceDir: service.BasePath,
+		ServiceId:  service.Id,
 		PartName:   part,
-	}, nil
+		PartId:     part_id,
+	}
+
+	if pod := service.Pods.FindPod(part); pod != nil {
+		seed.IsPod = true
+		seed.Pod = pod
+		return seed, nil
+	}
+
+	if f := service.Functions.FindFunction(part); f != nil {
+		seed.IsFunction = true
+		seed.Function = f
+		return seed, nil
+	}
+
+	return nil, fmt.Errorf("Cannot find service pod or function %q", part)
 }

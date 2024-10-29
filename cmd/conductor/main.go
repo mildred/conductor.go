@@ -131,6 +131,7 @@ func Main() error {
 		"system":     {cmd_system, "...", "System management"},
 		"service":    {cmd_service, "...", "Service commands"},
 		"deployment": {cmd_deployment, "...", "Deployment commands"},
+		"function":   {cmd_function, "...", "Function commands"},
 		"run":        {cmd_run, "...", "Run commands in a deployment"},
 		"_":          {cmd_private, "...", "Internal commands"},
 	})

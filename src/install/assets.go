@@ -36,3 +36,10 @@ const ConductorDeploymentConfigServiceLocation = "/etc/systemd/system/conductor-
 
 //go:embed files/conductor-deployment-config@.service
 var ConductorDeploymentConfigService string
+
+///////////////////////////////////////////////////////////////////////////////
+
+const ConductorFunctionSocketLocation = "/etc/systemd/system/conductor-cgi-function@.socket"
+
+//go:embed files/conductor-cgi-function@.socket
+var ConductorFunctionSocket string

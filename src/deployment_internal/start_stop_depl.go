@@ -2,13 +2,19 @@ package deployment_internal
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path"
 	"time"
 
 	"github.com/coreos/go-systemd/v22/daemon"
+
+	"github.com/mildred/conductor.go/src/caddy"
+	"github.com/mildred/conductor.go/src/service"
+	"github.com/mildred/conductor.go/src/tmpl"
 
 	. "github.com/mildred/conductor.go/src/deployment"
 )
@@ -101,6 +107,8 @@ func Start() error {
 
 	if depl.Pod != nil {
 		return StartPod(ctx, depl)
+	} else if depl.Function != nil {
+		return StartFunction(ctx, depl)
 	} else {
 		return fmt.Errorf("Cannot start deployment: not a pod")
 	}
@@ -185,9 +193,55 @@ func CaddyRegister(register bool, dir string) error {
 
 	log.Printf("%s: Loaded deployment %s, service %s-%s\n", prefix, depl.DeploymentName, depl.AppName, depl.InstanceName)
 
-	if depl.Pod != nil {
-		return CaddyRegisterPod(ctx, depl, register, dir)
-	} else {
-		return fmt.Errorf("Cannot register deployment: not a pod")
+	if depl.ProxyConfigTemplate == "" {
+		return nil
 	}
+
+	var configs []caddy.ConfigItem
+
+	caddy, err := caddy.NewClient(depl.CaddyLoadBalancer.ApiEndpoint)
+	if err != nil {
+		return err
+	}
+
+	config, err := tmpl.RunTemplate(depl.ProxyConfigTemplate, depl.Vars())
+	if err != nil {
+		return err
+	}
+
+	err = json.Unmarshal([]byte(config), &configs)
+	if err != nil {
+		return err
+	}
+
+	depl_desc := fmt.Sprintf("deployment %q", depl.DeploymentName)
+	if depl.Pod != nil {
+		depl_desc += fmt.Sprintf(" pod IP %s", depl.Pod.IPAddress)
+	}
+
+	if register {
+		unit_name := fmt.Sprintf(service.ServiceConfigUnit(depl.ServiceDir))
+		log.Printf("%s: Ensure the service config %s is registered", prefix, unit_name)
+
+		fmt.Fprintf(os.Stderr, "+ systemctl start %q\n", unit_name)
+		cmd := exec.CommandContext(ctx, "systemctl", "start", unit_name)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		err = cmd.Run()
+		if err != nil {
+			return err
+		}
+
+		log.Printf("register: Registering %s", depl_desc)
+	} else {
+		log.Printf("deregister: Deregistering %s", depl_desc)
+	}
+
+	err = caddy.Register(register, configs)
+	if err != nil {
+		return err
+	}
+
+	log.Printf("%s: Completed", prefix)
+	return nil
 }
