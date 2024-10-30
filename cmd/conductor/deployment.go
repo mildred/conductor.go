@@ -9,88 +9,127 @@ import (
 	"path"
 	"strings"
 
+	"github.com/integrii/flaggy"
+
 	"github.com/mildred/conductor.go/src/deployment"
 	"github.com/mildred/conductor.go/src/deployment_public"
 )
 
-func cmd_deployment_ls(usage func(), name []string, args []string) error {
-	flag := new_flag_set(name, usage)
-	unit := flag.Bool("unit", false, "Show systemd units column")
-	flag.Parse(args)
+func cmd_deployment_ls() *flaggy.Subcommand {
+	var unit bool
 
-	log.Default().SetOutput(io.Discard)
+	cmd := flaggy.NewSubcommand("ls")
+	cmd.Bool(&unit, "", "unit", "Show systemd units column")
+	cmd.Description = "List all deployments"
 
-	return deployment_public.PrintList(deployment_public.PrintListSettings{
-		Unit:        *unit,
-		ServiceUnit: *unit,
-	})
-}
-
-func cmd_deployment_rm(usage func(), name []string, args []string) error {
-	flag := new_flag_set(name, usage)
-	flag.Parse(args)
-
-	log.Default().SetOutput(io.Discard)
-
-	for _, arg := range flag.Args() {
-		err := deployment_public.Remove(arg)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func cmd_deployment_inspect(usage func(), name []string, args []string) error {
-	flag := new_flag_set(name, usage)
-	flag.Parse(args)
-
-	log.Default().SetOutput(io.Discard)
-
-	return deployment_public.PrintInspect(flag.Args()...)
-}
-
-func cmd_deployment_unit(usage func(), name []string, args []string) error {
-	flag := new_flag_set(name, usage)
-	flag.Parse(args)
-
-	log.Default().SetOutput(io.Discard)
-
-	ids := flag.Args()
-	if len(ids) == 0 {
-		cwd, err := os.Getwd()
-		if err != nil {
-			return err
-		}
-		ids = append(ids, path.Base(cwd))
-	}
-
-	for _, id := range ids {
-		fmt.Println(deployment.DeploymentUnit(id))
-	}
-	return nil
-}
-
-var cmd_deployment_status = cmd_deployment_systemd("status")
-var cmd_deployment_start = cmd_deployment_systemd("start")
-var cmd_deployment_stop = cmd_deployment_systemd("stop")
-var cmd_deployment_restart = cmd_deployment_systemd("restart")
-var cmd_deployment_kill = cmd_deployment_systemd("kill")
-
-func cmd_deployment_systemd(cmd_name string) func(usage func(), name []string, args []string) error {
-	return func(usage func(), name []string, args []string) error {
-		var signal *string
-
-		flag := new_flag_set(name, usage)
-		switch cmd_name {
-		case "kill":
-			signal = flag.String("signal", "", "Signal to send")
-		}
-		flag.Parse(args)
-
+	cmd.CommandUsed = Hook(func() error {
 		log.Default().SetOutput(io.Discard)
 
-		ids := flag.Args()
+		return deployment_public.PrintList(deployment_public.PrintListSettings{
+			Unit:        unit,
+			ServiceUnit: unit,
+		})
+	})
+	return cmd
+}
+
+func cmd_deployment_rm() *flaggy.Subcommand {
+	var ids []string
+
+	cmd := flaggy.NewSubcommand("rm") // "[DEPLOYMENT...]",
+	cmd.Description = "Remove a deployment"
+	cmd.AddExtraValues(&ids, "deployment", "The deployment to use")
+
+	cmd.CommandUsed = Hook(func() error {
+		log.Default().SetOutput(io.Discard)
+
+		for _, arg := range ids {
+			err := deployment_public.Remove(arg)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	return cmd
+}
+
+func cmd_deployment_inspect() *flaggy.Subcommand {
+	var ids []string
+
+	cmd := flaggy.NewSubcommand("inspect") // "[DEPLOYMENT...]",
+	cmd.Description = "Inspect deployment in current directory or on the command-line"
+	cmd.AddExtraValues(&ids, "deployment", "The deployment to use")
+
+	cmd.CommandUsed = Hook(func() error {
+		log.Default().SetOutput(io.Discard)
+
+		return deployment_public.PrintInspect(ids...)
+	})
+	return cmd
+}
+
+var cmd_deployment_status = cmd_deployment_systemd("status", "Status from systemctl")
+var cmd_deployment_start = cmd_deployment_systemd("start", "Start with systemctl")
+var cmd_deployment_stop = cmd_deployment_systemd("stop", "Stop with systemctl")
+var cmd_deployment_restart = cmd_deployment_systemd("restart", "Restart with systemctl")
+var cmd_deployment_kill = cmd_deployment_systemd("kill", "Kill with systemctl")
+
+func cmd_deployment_systemd(cmd_name, descr string) func() *flaggy.Subcommand {
+	return func() *flaggy.Subcommand {
+		var ids []string
+		var signal string
+
+		cmd := flaggy.NewSubcommand(cmd_name)
+		cmd.AddExtraValues(&ids, "deployment", "The deployment to use")
+		cmd.Description = descr
+
+		switch cmd_name {
+		case "kill":
+			cmd.String(&signal, "", "signal", "Signal to send")
+		}
+
+		cmd.CommandUsed = Hook(func() error {
+			log.Default().SetOutput(io.Discard)
+
+			if len(ids) == 0 {
+				cwd, err := os.Getwd()
+				if err != nil {
+					return err
+				}
+				ids = append(ids, path.Base(cwd))
+			}
+
+			var cli []string = []string{cmd_name}
+			if cmd_name == "kill" && signal != "" {
+				cli = append(cli, "--signal="+signal)
+			}
+			for _, id := range ids {
+				cli = append(cli, deployment.DeploymentUnit(id))
+			}
+
+			fmt.Fprintf(os.Stderr, "+ systemctl %s\n", strings.Join(cli, " "))
+			cmd := exec.Command("systemctl", cli...)
+			cmd.Stdin = os.Stdin
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+
+			return cmd.Run()
+		})
+		return cmd
+	}
+}
+
+func cmd_deployment_unit() *flaggy.Subcommand {
+	var ids []string
+
+	cmd := flaggy.NewSubcommand("unit")
+	cmd.Description = "Print systemd unit"
+	cmd.AddExtraValues(&ids, "deployment", "The deployment to use")
+
+	cmd.CommandUsed = Hook(func() error {
+		log.Default().SetOutput(io.Discard)
+
 		if len(ids) == 0 {
 			cwd, err := os.Getwd()
 			if err != nil {
@@ -99,63 +138,52 @@ func cmd_deployment_systemd(cmd_name string) func(usage func(), name []string, a
 			ids = append(ids, path.Base(cwd))
 		}
 
-		var cli []string = []string{cmd_name}
-		if signal != nil && *signal != "" {
-			cli = append(cli, "--signal="+*signal)
-		}
 		for _, id := range ids {
-			cli = append(cli, deployment.DeploymentUnit(id))
+			fmt.Println(deployment.DeploymentUnit(id))
+		}
+		return nil
+	})
+	return cmd
+}
+
+func cmd_deployment_env() *flaggy.Subcommand {
+	var depl_name string
+
+	cmd := flaggy.NewSubcommand("env")
+	cmd.Description = "Print templating environment variables"
+	cmd.AddPositionalValue(&depl_name, "deployment", 1, true, "The deployment to use")
+
+	cmd.CommandUsed = Hook(func() error {
+		log.Default().SetOutput(io.Discard)
+
+		depl, err := deployment.ReadDeploymentByName(depl_name)
+		if err != nil {
+			return err
 		}
 
-		fmt.Fprintf(os.Stderr, "+ systemctl %s\n", strings.Join(cli, " "))
-		cmd := exec.Command("systemctl", cli...)
-		cmd.Stdin = os.Stdin
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
+		for _, v := range depl.Vars() {
+			fmt.Printf("%s\n", v)
+		}
 
-		return cmd.Run()
-	}
-}
-
-func cmd_deployment_env(usage func(), name []string, args []string) error {
-	flag := new_flag_set(name, usage)
-	flag.Parse(args)
-
-	log.Default().SetOutput(io.Discard)
-
-	ids := flag.Args()
-	if len(ids) == 0 {
-		ids = append(ids, ".")
-	}
-	if len(ids) != 1 {
-		return fmt.Errorf("Command %s must take a single deployment", strings.Join(name, " "))
-	}
-
-	depl, err := deployment.ReadDeploymentByName(ids[0])
-	if err != nil {
-		return err
-	}
-
-	for _, v := range depl.Vars() {
-		fmt.Printf("%s\n", v)
-	}
-
-	return nil
-}
-
-func cmd_deployment(usage func(), name []string, args []string) error {
-	flag := new_flag_set(name, usage)
-
-	return run_subcommand(name, args, flag, map[string]Subcommand{
-		"ls":      {cmd_deployment_ls, "", "List all deployments"},
-		"rm":      {cmd_deployment_rm, "[DEPLOYMENT...]", "Remove a deployment"},
-		"inspect": {cmd_deployment_inspect, "[DEPLOYMENT...]", "Inspect deployment in current directory or on the command-line"},
-		"status":  {cmd_deployment_status, "[DEPLOYMENT...]", "Status from systemctl"},
-		"start":   {cmd_deployment_start, "[DEPLOYMENT...]", "Start with systemctl"},
-		"stop":    {cmd_deployment_stop, "[DEPLOYMENT...]", "Stop with systemctl"},
-		"restart": {cmd_deployment_restart, "[DEPLOYMENT...]", "Restart with systemctl"},
-		"kill":    {cmd_deployment_kill, "[DEPLOYMENT...]", "Kill with systemctl"},
-		"unit":    {cmd_deployment_unit, "[DEPLOYMENT...]", "Print systemd unit"},
-		"env":     {cmd_deployment_env, "[DEPLOYMENT]", "Print templating environment variables"},
+		return nil
 	})
+	return cmd
+}
+
+func cmd_deployment() *flaggy.Subcommand {
+	cmd := flaggy.NewSubcommand("deployment")
+	cmd.ShortName = "d"
+	cmd.Description = "Deployment commands"
+	cmd.AttachSubcommand(cmd_deployment_ls(), 1)
+	cmd.AttachSubcommand(cmd_deployment_rm(), 1)
+	cmd.AttachSubcommand(cmd_deployment_inspect(), 1)
+	cmd.AttachSubcommand(cmd_deployment_status(), 1)
+	cmd.AttachSubcommand(cmd_deployment_start(), 1)
+	cmd.AttachSubcommand(cmd_deployment_stop(), 1)
+	cmd.AttachSubcommand(cmd_deployment_restart(), 1)
+	cmd.AttachSubcommand(cmd_deployment_kill(), 1)
+	cmd.AttachSubcommand(cmd_deployment_unit(), 1)
+	cmd.AttachSubcommand(cmd_deployment_env(), 1)
+	cmd.RequireSubcommand = true
+	return cmd
 }

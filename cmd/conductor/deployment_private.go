@@ -1,75 +1,94 @@
 package main
 
 import (
-	"fmt"
-	"strings"
+	"github.com/integrii/flaggy"
 
 	"github.com/mildred/conductor.go/src/deployment_internal"
 )
 
-func private_deployment_prepare(usage func(), name []string, args []string) error {
-	flag := new_flag_set(name, usage)
-	flag.Parse(args)
+func cmd_private_deployment_prepare() *flaggy.Subcommand {
+	cmd := flaggy.NewSubcommand("prepare")
+	cmd.Description = "Prepare a deployment before starting it"
 
-	return deployment_internal.Prepare()
-}
-
-func private_deployment_start(usage func(), name []string, args []string) error {
-	flag := new_flag_set(name, usage)
-	flag.Parse(args)
-
-	return deployment_internal.Start()
-}
-
-func private_deployment_stop(usage func(), name []string, args []string) error {
-	flag := new_flag_set(name, usage)
-	flag.Parse(args)
-
-	return deployment_internal.Stop()
-}
-
-func private_deployment_cleanup(usage func(), name []string, args []string) error {
-	flag := new_flag_set(name, usage)
-	flag.Parse(args)
-
-	return deployment_internal.Cleanup()
-}
-
-func private_deployment_register(usage func(), name []string, args []string) error {
-	flag := new_flag_set(name, usage)
-	flag.Parse(args)
-
-	return deployment_internal.CaddyRegister(true, ".")
-}
-
-func private_deployment_deregister(usage func(), name []string, args []string) error {
-	flag := new_flag_set(name, usage)
-	flag.Parse(args)
-
-	return deployment_internal.CaddyRegister(false, ".")
-}
-
-func private_deployment_template(usage func(), name []string, args []string) error {
-	flag := new_flag_set(name, usage)
-	flag.Parse(args)
-
-	if flag.NArg() != 1 {
-		return fmt.Errorf("Command %s must take a template", strings.Join(name, " "))
-	}
-
-	return deployment_internal.Template(".", flag.Arg(0))
-}
-
-func private_deployment(usage func(), name []string, args []string) error {
-	flag := new_flag_set(name, usage)
-
-	return run_subcommand(name, args, flag, map[string]Subcommand{
-		"prepare":    {private_deployment_prepare, "", "Prepare a deployment before starting it"},
-		"start":      {private_deployment_start, "", "Start a deployment"},
-		"stop":       {private_deployment_stop, "", "Stop a deployment"},
-		"cleanup":    {private_deployment_cleanup, "", "Clean up deployment after it has stopped"},
-		"register":   {private_deployment_register, "", "Register deployment to load balancer"},
-		"deregister": {private_deployment_deregister, "", "Deregister deployment from load balancer"},
-		"template":   {private_deployment_template, "TEMPLATE", "Run a template in the current deployment context"},
+	cmd.CommandUsed = Hook(func() error {
+		return deployment_internal.Prepare()
 	})
+	return cmd
+}
+
+func cmd_private_deployment_start() *flaggy.Subcommand {
+	cmd := flaggy.NewSubcommand("start")
+	cmd.Description = "Start a deployment"
+
+	cmd.CommandUsed = Hook(func() error {
+		return deployment_internal.Start()
+	})
+	return cmd
+}
+
+func cmd_private_deployment_stop() *flaggy.Subcommand {
+	cmd := flaggy.NewSubcommand("stop")
+	cmd.Description = "Stop a deployment"
+
+	cmd.CommandUsed = Hook(func() error {
+		return deployment_internal.Stop()
+	})
+	return cmd
+}
+
+func cmd_private_deployment_cleanup() *flaggy.Subcommand {
+	cmd := flaggy.NewSubcommand("cleanup")
+	cmd.Description = "Clean up deployment after it has stopped"
+
+	cmd.CommandUsed = Hook(func() error {
+		return deployment_internal.Cleanup()
+	})
+	return cmd
+}
+
+func cmd_private_deployment_register() *flaggy.Subcommand {
+	cmd := flaggy.NewSubcommand("register")
+	cmd.Description = "Register deployment to load balancer"
+
+	cmd.CommandUsed = Hook(func() error {
+		return deployment_internal.CaddyRegister(true, ".")
+	})
+	return cmd
+}
+
+func cmd_private_deployment_deregister() *flaggy.Subcommand {
+	cmd := flaggy.NewSubcommand("deregister")
+	cmd.Description = "Deregister deployment from load balancer"
+
+	cmd.CommandUsed = Hook(func() error {
+		return deployment_internal.CaddyRegister(false, ".")
+	})
+	return cmd
+}
+
+func cmd_private_deployment_template() *flaggy.Subcommand {
+	var template string
+
+	cmd := flaggy.NewSubcommand("template")
+	cmd.Description = "Run a template in the current deployment context"
+	cmd.AddPositionalValue(&template, "template", 1, true, "The template file to run")
+
+	cmd.CommandUsed = Hook(func() error {
+		return deployment_internal.Template(".", template)
+	})
+	return cmd
+}
+
+func cmd_private_deployment() *flaggy.Subcommand {
+	cmd := flaggy.NewSubcommand("deployment")
+	cmd.Description = "Manage conductor deployments"
+	cmd.AttachSubcommand(cmd_private_deployment_prepare(), 1)
+	cmd.AttachSubcommand(cmd_private_deployment_start(), 1)
+	cmd.AttachSubcommand(cmd_private_deployment_stop(), 1)
+	cmd.AttachSubcommand(cmd_private_deployment_cleanup(), 1)
+	cmd.AttachSubcommand(cmd_private_deployment_register(), 1)
+	cmd.AttachSubcommand(cmd_private_deployment_deregister(), 1)
+	cmd.AttachSubcommand(cmd_private_deployment_template(), 1)
+	cmd.RequireSubcommand = true
+	return cmd
 }

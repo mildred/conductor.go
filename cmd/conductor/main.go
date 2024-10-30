@@ -1,12 +1,14 @@
 package main
 
 import (
-	"flag"
+	"context"
 	"fmt"
 	"io"
 	"log"
 	"os"
 	"strings"
+
+	"github.com/integrii/flaggy"
 
 	"github.com/mildred/conductor.go/src/deployment"
 	"github.com/mildred/conductor.go/src/deployment_public"
@@ -17,55 +19,68 @@ import (
 
 var version = "dev"
 
-func cmd_private(usage func(), name []string, args []string) error {
-	flag := new_flag_set(name, usage)
+func cmd_private() *flaggy.Subcommand {
+	cmd := flaggy.NewSubcommand("_")
+	cmd.Description = "Internal commands"
+	cmd.AttachSubcommand(cmd_private_service(), 1)
+	cmd.AttachSubcommand(cmd_private_deployment(), 1)
+	cmd.RequireSubcommand = true
+	return cmd
+}
 
-	return run_subcommand(name, args, flag, map[string]Subcommand{
-		"service":    {private_service, "...", "Manage conductor services"},
-		"deployment": {private_deployment, "...", "Manage conductor deployments"},
+func cmd_reload() *flaggy.Subcommand {
+	var inclusive bool
+
+	cmd := flaggy.NewSubcommand("reload")
+	cmd.Description = "Reload and start services in well-known locations"
+	cmd.AdditionalHelpPrepend = "\nReload and start services in well-known directories:"
+	for _, dir := range service.ServiceDirs {
+		cmd.AdditionalHelpPrepend += "\n  - " + dir
+	}
+
+	cmd.Bool(&inclusive, "", "inclusive", "Allow services from other directories (do not stop them)")
+
+	cmd.CommandUsed = Hook(func() error {
+		return service_public.ReloadServices(inclusive)
 	})
+	return cmd
 }
 
-func cmd_reload(usage func(), name []string, args []string) error {
-	flag := new_flag_set(name, func() {
-		usage()
-		fmt.Fprintf(flag.CommandLine.Output(), "\n"+
-			"Reload and start services in well-known directories:\n")
-		for _, dir := range service.ServiceDirs {
-			fmt.Fprintf(flag.CommandLine.Output(), "  - "+dir+"\n")
-		}
-		fmt.Fprintf(flag.CommandLine.Output(), "\n")
+func cmd_system_install() *flaggy.Subcommand {
+	var destdir string
+
+	cmd := flaggy.NewSubcommand("install")
+	cmd.Description = "Install system services"
+	cmd.String(&destdir, "", "destdir", "Directory root where to install")
+
+	cmd.CommandUsed = Hook(func() error {
+		return install.Install(destdir)
 	})
 
-	inclusive := flag.Bool("inclusive", false, "Allow services from other directories (do not stop them)")
-	flag.Parse(args)
-
-	return service_public.ReloadServices(*inclusive)
+	return cmd
 }
 
-func cmd_system_install(usage func(), name []string, args []string) error {
-	flag := new_flag_set(name, usage)
-	destdir := flag.String("destdir", "", "Directory root where to perform installation")
-	flag.Parse(args)
+func cmd_system_uninstall() *flaggy.Subcommand {
+	var destdir string
 
-	return install.Install(*destdir)
-}
+	cmd := flaggy.NewSubcommand("uninstall")
+	cmd.Description = "Uninstall system services"
+	cmd.String(&destdir, "", "destdir", "Directory root where to uninstall")
 
-func cmd_system_uninstall(usage func(), name []string, args []string) error {
-	flag := new_flag_set(name, usage)
-	destdir := flag.String("destdir", "", "Directory root where to uninstall")
-	flag.Parse(args)
-
-	return install.Uninstall(*destdir)
-}
-
-func cmd_system(usage func(), name []string, args []string) error {
-	flag := new_flag_set(name, usage)
-
-	return run_subcommand(name, args, flag, map[string]Subcommand{
-		"install":   {cmd_system_install, "", "Install system services"},
-		"uninstall": {cmd_system_uninstall, "", "Uninstall system services"},
+	cmd.CommandUsed = Hook(func() error {
+		return install.Uninstall(destdir)
 	})
+
+	return cmd
+}
+
+func cmd_system() *flaggy.Subcommand {
+	cmd := flaggy.NewSubcommand("system")
+	cmd.Description = "System management"
+	cmd.RequireSubcommand = true
+	cmd.AttachSubcommand(cmd_system_install(), 1)
+	cmd.AttachSubcommand(cmd_system_uninstall(), 1)
+	return cmd
 }
 
 type envlist []string
@@ -85,60 +100,78 @@ func (i *envlist) Set(value string) error {
 	return nil
 }
 
-func cmd_run(usage func(), name []string, args []string) error {
-	flag := new_flag_set(name, usage)
+func cmd_run() *flaggy.Subcommand {
+	var d, s string
 	var env envlist
-	d := flag.String("d", "", "Specify deployment")
-	s := flag.String("s", "", "Specify service")
-	flag.Var(&env, "e", "Environment to add to the command")
-	direct := flag.Bool("direct", false, "If command fails, do not add error message and keep exit status")
-	flag.Parse(args)
+	var direct bool
+	var cmdname string
+	var args []string
 
-	log.Default().SetOutput(io.Discard)
+	cmd := flaggy.NewSubcommand("run")
+	cmd.ShortName = "r"
+	cmd.Description = "Run commands in a deployment"
+	cmd.String(&d, "d", "deployment", "Specify deployment")
+	cmd.String(&s, "s", "service", "Specify service")
+	cmd.Var(&env, "e", "env", "Environment to add to the command")
+	cmd.Bool(&direct, "", "direct", "If command fails, do not add error message and keep exit status")
+	cmd.AddPositionalValue(&cmdname, "command", 1, false, "Command to run")
+	cmd.AddExtraValues(&args, "args", "Command arguments")
 
-	if *d != "" && *s == "" {
-		depl, err := deployment.ReadDeploymentByName(*d)
-		if err != nil {
-			return err
+	cmd.CommandUsed = Hook(func() error {
+		log.Default().SetOutput(io.Discard)
+
+		if d != "" && s == "" {
+			depl, err := deployment.ReadDeploymentByName(d)
+			if err != nil {
+				return err
+			}
+
+			if cmdname == "" {
+				return deployment_public.PrintListCommands(depl)
+			} else {
+				return deployment_public.RunDeploymentCommand(depl, direct, env, cmdname, args...)
+			}
+		} else if d == "" && s != "" {
+			service, err := service.LoadServiceByName(s)
+			if err != nil {
+				return err
+			}
+
+			if cmdname == "" {
+				return service_public.PrintListCommands(service)
+			} else {
+				return service_public.RunServiceCommand(service, direct, env, cmdname, args...)
+			}
 		}
 
-		if flag.NArg() == 0 {
-			return deployment_public.PrintListCommands(depl)
-		} else {
-			return deployment_public.RunDeploymentCommand(depl, *direct, env, flag.Arg(0), flag.Args()[1:]...)
-		}
-	} else if *d == "" && *s != "" {
-		service, err := service.LoadServiceByName(*s)
-		if err != nil {
-			return err
-		}
+		return fmt.Errorf("You must specify a deployment using the -d flag or a service using the -s flag")
+	})
 
-		if flag.NArg() == 0 {
-			return service_public.PrintListCommands(service)
-		} else {
-			return service_public.RunServiceCommand(service, *direct, env, flag.Arg(0), flag.Args()[1:]...)
-		}
-	}
-
-	return fmt.Errorf("You must specify a deployment using the -d flag or a service using the -s flag")
+	return cmd
 }
 
-func Main() error {
-	flag := new_flag_set(os.Args[0:1], nil)
+func Main(ctx context.Context) error {
+	f := flaggy.NewParser(os.Args[0])
+	f.Version = version
+	f.AttachSubcommand(cmd_service(), 1)
+	f.AttachSubcommand(cmd_deployment(), 1)
+	f.AttachSubcommand(cmd_function(), 1)
+	f.AttachSubcommand(cmd_run(), 1)
+	f.AttachSubcommand(cmd_reload(), 1)
+	f.AttachSubcommand(cmd_system(), 1)
+	f.AttachSubcommand(cmd_private(), 1)
+	f.RequireSubcommand = true
+	err := f.Parse()
+	if err != nil {
+		return err
+	}
 
-	return run_subcommand(os.Args[0:1], os.Args[1:], flag, map[string]Subcommand{
-		"reload":     {cmd_reload, "", "Reload and start services in well-known locations"},
-		"system":     {cmd_system, "...", "System management"},
-		"service":    {cmd_service, "...", "Service commands"},
-		"deployment": {cmd_deployment, "...", "Deployment commands"},
-		"function":   {cmd_function, "...", "Function commands"},
-		"run":        {cmd_run, "...", "Run commands in a deployment"},
-		"_":          {cmd_private, "...", "Internal commands"},
-	})
+	return nil
 }
 
 func main() {
-	err := Main()
+	ctx := context.Background()
+	err := Main(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)

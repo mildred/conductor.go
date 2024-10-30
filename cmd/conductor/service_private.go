@@ -1,116 +1,128 @@
 package main
 
 import (
-	"flag"
-	"fmt"
-	"strings"
+	"github.com/integrii/flaggy"
 
 	"github.com/mildred/conductor.go/src/service_internal"
 )
 
-func private_service_start(usage func(), name []string, args []string) error {
-	flag := new_flag_set(name, func() {
-		usage()
-		fmt.Fprintf(flag.CommandLine.Output(), "\n"+
-			"Start a service by using an already starting deployment that has the\n"+
-			"correct configuration or by starting a new deployment. Once the\n"+
-			"deployment is started, old deployments for the service are stopped.\n\n")
+func cmd_private_service_template() *flaggy.Subcommand {
+	var service string
+	var template string
+
+	cmd := flaggy.NewSubcommand("template")
+	cmd.Description = "Run a template in the context of a service"
+	cmd.AddPositionalValue(&service, "service", 1, true, "The service to act on")
+	cmd.AddPositionalValue(&template, "template", 2, true, "The template file to run")
+
+	cmd.CommandUsed = Hook(func() error {
+		return service_internal.Template(service, template)
 	})
-	max_deployment_index := flag.Int("max-deployment-index", 10, "Service will fail to deploy if it cannot find a deployment number below this")
-	flag.Parse(args)
+	return cmd
+}
 
-	if flag.NArg() != 1 {
-		return fmt.Errorf("Command %s must take a single service definition as argument", strings.Join(name, " "))
-	}
+func cmd_private_service_start() *flaggy.Subcommand {
+	var service string
+	var max_deployment_index = 10
 
-	return service_internal.StartOrReload(flag.Arg(0), service_internal.StartOrReloadOpts{
-		Restart:            false,
-		MaxDeploymentIndex: *max_deployment_index,
+	cmd := flaggy.NewSubcommand("start")
+	cmd.Description = "Start a service"
+	cmd.AddPositionalValue(&service, "service", 1, true, "The service to act on")
+	cmd.Int(&max_deployment_index, "", "max-deployment-index", "Service will fail to deploy if it cannot find a deployment number below this")
+	cmd.AdditionalHelpPrepend = "\n" +
+		"Start a service by using an already starting deployment that has the\n" +
+		"correct configuration or by starting a new deployment. Once the\n" +
+		"deployment is started, old deployments for the service are stopped."
+
+	cmd.CommandUsed = Hook(func() error {
+		return service_internal.StartOrReload(service, service_internal.StartOrReloadOpts{
+			Restart:            false,
+			MaxDeploymentIndex: max_deployment_index,
+		})
+
 	})
+	return cmd
 }
 
-func private_service_reload(usage func(), name []string, args []string) error {
-	flag := new_flag_set(name, usage)
-	fresh := flag.Bool("fresh", false, "Do not reuse a started deployment is possible")
-	max_deployment_index := flag.Int("max-deployment-index", 10, "Service will fail to deploy if it cannot find a deployment number below this")
-	flag.Parse(args)
+func cmd_private_service_reload() *flaggy.Subcommand {
+	var service string
+	var fresh bool
+	var max_deployment_index int = 10
 
-	if flag.NArg() != 1 {
-		return fmt.Errorf("Command %s must take a single service definition as argument", strings.Join(name, " "))
-	}
+	cmd := flaggy.NewSubcommand("reload")
+	cmd.Description = "Reload a service"
+	cmd.AddPositionalValue(&service, "service", 1, true, "The service to act on")
+	cmd.Bool(&fresh, "", "fresh", "Do not reuse a started deployment is possible")
+	cmd.Int(&max_deployment_index, "", "max-deployment-index", "Service will fail to deploy if it cannot find a deployment number below this")
+	cmd.CommandUsed = Hook(func() error {
+		return service_internal.StartOrReload(service, service_internal.StartOrReloadOpts{
+			Restart:            true,
+			WantsFresh:         fresh,
+			MaxDeploymentIndex: max_deployment_index,
+		})
 
-	return service_internal.StartOrReload(flag.Arg(0), service_internal.StartOrReloadOpts{
-		Restart:            true,
-		WantsFresh:         *fresh,
-		MaxDeploymentIndex: *max_deployment_index,
 	})
+	return cmd
 }
 
-func private_service_stop(usage func(), name []string, args []string) error {
-	flag := new_flag_set(name, usage)
-	flag.Parse(args)
+func cmd_private_service_stop() *flaggy.Subcommand {
+	var service string
 
-	if flag.NArg() != 1 {
-		return fmt.Errorf("Command %s must take a single service definition as argument", strings.Join(name, " "))
-	}
-
-	return service_internal.Stop(flag.Arg(0))
-}
-
-func private_service_cleanup(usage func(), name []string, args []string) error {
-	flag := new_flag_set(name, usage)
-	flag.Parse(args)
-
-	if flag.NArg() != 1 {
-		return fmt.Errorf("Command %s must take a single service definition as argument", strings.Join(name, " "))
-	}
-
-	return service_internal.Cleanup(flag.Arg(0))
-}
-
-func private_service_register(usage func(), name []string, args []string) error {
-	flag := new_flag_set(name, usage)
-	flag.Parse(args)
-
-	if flag.NArg() != 1 {
-		return fmt.Errorf("Command %s must take a single service definition as argument", strings.Join(name, " "))
-	}
-
-	return service_internal.CaddyRegister(true, flag.Arg(0))
-}
-
-func private_service_deregister(usage func(), name []string, args []string) error {
-	flag := new_flag_set(name, usage)
-	flag.Parse(args)
-
-	if flag.NArg() != 1 {
-		return fmt.Errorf("Command %s must take a single service definition as argument", strings.Join(name, " "))
-	}
-
-	return service_internal.CaddyRegister(false, flag.Arg(0))
-}
-
-func private_service_template(usage func(), name []string, args []string) error {
-	flag := new_flag_set(name, usage)
-	flag.Parse(args)
-
-	if flag.NArg() != 2 {
-		return fmt.Errorf("Command %s must take a service definition and a template", strings.Join(name, " "))
-	}
-
-	return service_internal.Template(flag.Arg(0), flag.Arg(1))
-}
-
-func private_service(usage func(), name []string, args []string) error {
-	flag := new_flag_set(name, usage)
-
-	return run_subcommand(name, args, flag, map[string]Subcommand{
-		"start":      {private_service_start, "SERVICE", "Start a service"},
-		"reload":     {private_service_reload, "SERVICE", "Reload a service"},
-		"stop":       {private_service_stop, "SERVICE", "Stop a service"},
-		"cleanup":    {private_service_cleanup, "SERVICE", "Clean up service after it has stopped"},
-		"register":   {private_service_register, "SERVICE", "Register service to load balancer"},
-		"deregister": {private_service_deregister, "SERVICE", "Deregister service from load balancer"},
-		"template":   {private_service_template, "SERVICE TEMPLATE", "Run a template in the context of a service"},
+	cmd := flaggy.NewSubcommand("stop")
+	cmd.Description = "Stop a service"
+	cmd.AddPositionalValue(&service, "service", 1, true, "The service to act on")
+	cmd.CommandUsed = Hook(func() error {
+		return service_internal.Stop(service)
 	})
+	return cmd
+}
+
+func cmd_private_service_cleanup() *flaggy.Subcommand {
+	var service string
+
+	cmd := flaggy.NewSubcommand("cleanup")
+	cmd.Description = "Clean up service after it has stopped"
+	cmd.AddPositionalValue(&service, "service", 1, true, "The service to act on")
+	cmd.CommandUsed = Hook(func() error {
+		return service_internal.Cleanup(service)
+	})
+	return cmd
+}
+
+func cmd_private_service_register() *flaggy.Subcommand {
+	var service string
+
+	cmd := flaggy.NewSubcommand("register")
+	cmd.Description = "Register service to load balancer"
+	cmd.AddPositionalValue(&service, "service", 1, true, "The service to act on")
+	cmd.CommandUsed = Hook(func() error {
+		return service_internal.CaddyRegister(true, service)
+	})
+	return cmd
+}
+
+func cmd_private_service_deregister() *flaggy.Subcommand {
+	var service string
+
+	cmd := flaggy.NewSubcommand("deregister")
+	cmd.Description = "Deregister service from load balancer"
+	cmd.AddPositionalValue(&service, "service", 1, true, "The service to act on")
+	cmd.CommandUsed = Hook(func() error {
+		return service_internal.CaddyRegister(false, service)
+	})
+	return cmd
+}
+
+func cmd_private_service() *flaggy.Subcommand {
+	cmd := flaggy.NewSubcommand("service")
+	cmd.Description = "Manage conductor services"
+	cmd.AttachSubcommand(cmd_private_service_start(), 1)
+	cmd.AttachSubcommand(cmd_private_service_reload(), 1)
+	cmd.AttachSubcommand(cmd_private_service_stop(), 1)
+	cmd.AttachSubcommand(cmd_private_service_cleanup(), 1)
+	cmd.AttachSubcommand(cmd_private_service_register(), 1)
+	cmd.AttachSubcommand(cmd_private_service_deregister(), 1)
+	cmd.AttachSubcommand(cmd_private_service_template(), 1)
+	cmd.RequireSubcommand = true
+	return cmd
 }
