@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"strings"
 	"time"
 
 	"github.com/mildred/conductor.go/src/dirs"
@@ -175,6 +176,7 @@ func (depl *Deployment) Vars() []string {
 			"CONDUCTOR_FUNCTION_FORMAT=",
 			"CONDUCTOR_FUNCTION_ID=",
 			"CONDUCTOR_FUNCTION_SOCKET=",
+			"CONDUCTOR_FUNCTION_POLICIES=",
 		)
 	} else if depl.Function != nil {
 		vars = append(vars,
@@ -186,6 +188,7 @@ func (depl *Deployment) Vars() []string {
 			"CONDUCTOR_FUNCTION_FORMAT="+depl.Function.Format,
 			"CONDUCTOR_FUNCTION_ID="+depl.PartId,
 			"CONDUCTOR_FUNCTION_SOCKET="+DeploymentSocketPath(depl.DeploymentName),
+			"CONDUCTOR_FUNCTION_POLICIES="+strings.Join(depl.Function.Policies, " "),
 		)
 	} else {
 		vars = append(vars,
@@ -197,6 +200,7 @@ func (depl *Deployment) Vars() []string {
 			"CONDUCTOR_FUNCTION_FORMAT=",
 			"CONDUCTOR_FUNCTION_ID=",
 			"CONDUCTOR_FUNCTION_SOCKET=",
+			"CONDUCTOR_FUNCTION_POLICIES=",
 		)
 	}
 

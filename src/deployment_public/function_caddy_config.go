@@ -3,37 +3,15 @@ package deployment_public
 import (
 	"encoding/json"
 	"os"
+	"strings"
 )
-
-type FunctionCaddyConfigMatch struct {
-	Path []string `json:"path"`
-}
-
-type FunctionCaddyConfigUpstream struct {
-	Dial string `json:"dial"`
-}
-
-type FunctionCaddyConfigTransport struct {
-	Protocol string `json:"protocol"`
-}
-
-type FunctionCaddyConfigHandle struct {
-	Handler   string                        `json:"handler"`
-	Transport FunctionCaddyConfigTransport  `json:"transport"`
-	Upstreams []FunctionCaddyConfigUpstream `json:"upstreams"`
-}
-
-type FunctionCaddyConfigRoot struct {
-	Id     string                      `json:"@id"`
-	Match  []FunctionCaddyConfigMatch  `json:"match"`
-	Handle []FunctionCaddyConfigHandle `json:"handle"`
-}
 
 type FuncFunctionCaddyConfigOpts struct {
 	DeploymentName string
 	SnippetId      string
 	FunctionId     string
 	SocketPath     string
+	Policies       []string
 }
 
 func (opts *FuncFunctionCaddyConfigOpts) setDefaults() error {
@@ -49,6 +27,9 @@ func (opts *FuncFunctionCaddyConfigOpts) setDefaults() error {
 	if opts.SocketPath == "" {
 		opts.SocketPath = os.Getenv("CONDUCTOR_FUNCTION_SOCKET")
 	}
+	if opts.Policies == nil {
+		opts.Policies = strings.Split(os.Getenv("CONDUCTOR_FUNCTION_POLICIES"), " ")
+	}
 	return nil
 }
 
@@ -58,26 +39,88 @@ func FunctionCaddyConfig(opts FuncFunctionCaddyConfigOpts) error {
 		return err
 	}
 
-	cfg := FunctionCaddyConfigRoot{
-		Id: opts.SnippetId,
-		Match: []FunctionCaddyConfigMatch{
-			{
-				Path: []string{"/cgi/" + opts.FunctionId + "/*"},
+	var handlers []interface{}
+
+	if len(opts.Policies) > 0 {
+		handlers = append(handlers, map[string]interface{}{
+			"handler": "reverse_proxy",
+			"transport": map[string]interface{}{
+				"protocol": "http",
 			},
-		},
-		Handle: []FunctionCaddyConfigHandle{
-			{
-				Handler: "reverse_proxy",
-				Transport: FunctionCaddyConfigTransport{
-					Protocol: "http",
+			"upstreams": []interface{}{
+				map[string]interface{}{
+					"dial": "unix//run/conductor-policy.socket",
 				},
-				Upstreams: []FunctionCaddyConfigUpstream{
-					{
-						Dial: "unix/" + opts.SocketPath,
+			},
+			"rewrite": map[string]interface{}{
+				"method": "HEAD",
+			},
+			"headers": map[string]interface{}{
+				"request": map[string]interface{}{
+					"set": map[string]interface{}{
+						"Conductor-Policy":   opts.Policies,
+						"X-Forwarded-Method": []string{"{http.request.method}"},
+						"X-Forwarded-Uri":    []string{"{http.request.uri}"},
 					},
 				},
 			},
+			"handle_response": []interface{}{
+				// When a response handler is invoked, the response from the backend is
+				// not written to the client, and the configured handle_response route
+				// will be executed instead, and it is up to that route to write a
+				// response. If the route does not write a response, then request
+				// handling will continue with any handlers that are ordered after this
+				// reverse_proxy.
+				//
+				// - any handle_response matching: the request can continue down the
+				//   line of handlers, unless the response handler writes a HTTP
+				//   response
+				// - no handle_response matching: the response from the auth upstream
+				//   is sent directly
+				map[string]interface{}{
+					"match": map[string]interface{}{
+						"status_code": []interface{}{2},
+					},
+					"routes": []interface{}{
+						map[string]interface{}{
+							"handle": []interface{}{
+								map[string]interface{}{
+									"handler": "headers",
+									"request": map[string]interface{}{
+										"set": map[string]interface{}{
+											"Conductor-Policy-Pass": []string{"1"},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		})
+
+	}
+
+	handlers = append(handlers, map[string]interface{}{
+		"handler": "reverse_proxy",
+		"transport": map[string]interface{}{
+			"protocol": "http",
 		},
+		"upstreams": []interface{}{
+			map[string]interface{}{
+				"dial": "unix/" + opts.SocketPath,
+			},
+		},
+	})
+
+	cfg := map[string]interface{}{
+		"@id": opts.SnippetId,
+		"match": []interface{}{
+			map[string]interface{}{
+				"path": []string{"/cgi/" + opts.FunctionId + "/*"},
+			},
+		},
+		"handle": handlers,
 	}
 
 	enc := json.NewEncoder(os.Stdout)

@@ -15,6 +15,7 @@ require (
 require (
 	github.com/PaesslerAG/gval v1.0.0 // indirect
 	github.com/godbus/dbus/v5 v5.0.4 // indirect
+	github.com/golang-jwt/jwt/v5 v5.2.1 // indirect
 	golang.org/x/sys v0.26.0 // indirect
 )
 

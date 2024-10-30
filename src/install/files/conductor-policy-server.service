@@ -1,0 +1,11 @@
+[Unit]
+Description=Conductor Policy Server
+Requires=network.target
+After=multi-user.target
+
+[Service]
+Type=simple
+ExecStart=/bin.sh -xc 'exec conductor _ policy-server'
+
+[Install]
+WantedBy=multi-user.target

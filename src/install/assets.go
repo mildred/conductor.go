@@ -43,3 +43,17 @@ const ConductorFunctionSocketLocation = "/etc/systemd/system/conductor-cgi-funct
 
 //go:embed files/conductor-cgi-function@.socket
 var ConductorFunctionSocket string
+
+///////////////////////////////////////////////////////////////////////////////
+
+const ConductorPolicyServerServiceLocation = "/etc/systemd/system/conductor-policy-server.service"
+
+//go:embed files/conductor-policy-server.service
+var ConductorPolicyServerService string
+
+///////////////////////////////////////////////////////////////////////////////
+
+const ConductorPolicyServerSocketLocation = "/etc/systemd/system/conductor-policy-server.socket"
+
+//go:embed files/conductor-policy-server.socket
+var ConductorPolicyServerSocket string

@@ -38,6 +38,18 @@ func Install(destdir string) error {
 		return err
 	}
 
+	fmt.Fprintf(os.Stderr, "+ touch %q\n", destdir+ConductorPolicyServerSocketLocation)
+	err = os.WriteFile(destdir+ConductorPolicyServerSocketLocation, []byte(ConductorPolicyServerSocket), 0644)
+	if err != nil {
+		return err
+	}
+
+	fmt.Fprintf(os.Stderr, "+ touch %q\n", destdir+ConductorPolicyServerServiceLocation)
+	err = os.WriteFile(destdir+ConductorPolicyServerServiceLocation, []byte(ConductorPolicyServerService), 0644)
+	if err != nil {
+		return err
+	}
+
 	/*
 		fmt.Fprintf(os.Stderr, "+ touch %q\n", destdir+ConductorFunctionSocketLocation)
 		err = os.WriteFile(destdir+ConductorFunctionSocketLocation, []byte(ConductorFunctionSocket), 0644)
@@ -113,8 +125,29 @@ func Uninstall(destdir string) error {
 		return err
 	}
 
+	fmt.Fprintf(os.Stderr, "+ rm -f %q\n", destdir+ConductorPolicyServerSocketLocation)
+	err = os.Remove(destdir + ConductorPolicyServerSocketLocation)
+	if err != nil {
+		return err
+	}
+
+	fmt.Fprintf(os.Stderr, "+ rm -f %q\n", destdir+ConductorPolicyServerServiceLocation)
+	err = os.Remove(destdir + ConductorPolicyServerServiceLocation)
+	if err != nil {
+		return err
+	}
+
 	fmt.Fprintf(os.Stderr, "+ systemctl daemon-reload\n")
 	cmd := exec.Command("systemctl", "daemon-reload")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	err = cmd.Run()
+	if err != nil {
+		return err
+	}
+
+	fmt.Fprintf(os.Stderr, "+ systemctl enable --now conductor-policy-server.socket\n")
+	cmd = exec.Command("systemctl", "enable", "--now", "conductor-policy-server.socket")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	err = cmd.Run()

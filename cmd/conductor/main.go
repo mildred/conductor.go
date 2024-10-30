@@ -13,17 +13,30 @@ import (
 	"github.com/mildred/conductor.go/src/deployment"
 	"github.com/mildred/conductor.go/src/deployment_public"
 	"github.com/mildred/conductor.go/src/install"
+	"github.com/mildred/conductor.go/src/policies"
 	"github.com/mildred/conductor.go/src/service"
 	"github.com/mildred/conductor.go/src/service_public"
 )
 
 var version = "dev"
 
+func cmd_private_policy_server() *flaggy.Subcommand {
+	cmd := flaggy.NewSubcommand("policy-server")
+	cmd.Description = "Run a policy server"
+
+	cmd.CommandUsed = Hook(func() error {
+		return policies.RunServer()
+	})
+	return cmd
+
+}
+
 func cmd_private() *flaggy.Subcommand {
 	cmd := flaggy.NewSubcommand("_")
 	cmd.Description = "Internal commands"
 	cmd.AttachSubcommand(cmd_private_service(), 1)
 	cmd.AttachSubcommand(cmd_private_deployment(), 1)
+	cmd.AttachSubcommand(cmd_private_policy_server(), 1)
 	cmd.RequireSubcommand = true
 	return cmd
 }
