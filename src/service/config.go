@@ -48,8 +48,8 @@ type Service struct {
 	InstanceName            string                     `json:"instance_name,omitempty"`         // staging
 	Config                  map[string]*ConfigValue    `json:"config,omitempty"`                // key-value pairs for config and templating, CHANNEL=staging
 	ProxyConfigTemplate     string                     `json:"proxy_config_template,omitempty"` // Template file for the load-balancer config
-	Pods                    *ServicePods               `json:"pods,omitempty"`
-	Functions               *ServiceFunctions          `json:"functions,omitempty"`
+	Pods                    ServicePods                `json:"pods,omitempty"`
+	Functions               ServiceFunctions           `json:"functions,omitempty"`
 	Hooks                   []*Hook                    `json:"hooks,omitempty"`
 	CaddyLoadBalancer       CaddyConfig                `json:"caddy_load_balancer"`
 	DisplayServiceConfig    []string                   `json:"display_service_config"`
@@ -254,6 +254,10 @@ func loadService(path string, fix_paths bool, base *Service, inh *InheritFile) (
 		has_config_set_file := service.ConfigSetFile != ""
 
 		for _, inherit := range inherit.Inherit {
+			if !has_config_set_file && inherit.SetConfig {
+				service.ConfigSetFile = inherit.Path
+			}
+
 			if inherit.IgnoreError {
 				_, err = os.Stat(inherit.Path)
 				if err != nil && os.IsNotExist(err) {
@@ -268,10 +272,6 @@ func loadService(path string, fix_paths bool, base *Service, inh *InheritFile) (
 			service, err = loadService(inherit.Path, true, service, inherit)
 			if err != nil {
 				return nil, err
-			}
-
-			if !has_config_set_file && inherit.SetConfig {
-				service.ConfigSetFile = inherit.Path
 			}
 		}
 	}
@@ -426,13 +426,13 @@ func (service *Service) Vars() []string {
 
 func (service *Service) Parts() ([]string, error) {
 	var res []string
-	for _, pod := range *service.Pods {
+	for _, pod := range service.Pods {
 		if slices.Contains(res, pod.Name) {
 			return nil, fmt.Errorf("duplicated part %s in service", pod.Name)
 		}
 		res = append(res, pod.Name)
 	}
-	for _, f := range *service.Functions {
+	for _, f := range service.Functions {
 		if slices.Contains(res, f.Name) {
 			return nil, fmt.Errorf("duplicated part %s in service", f.Name)
 		}
