@@ -251,7 +251,6 @@ func cmd_service_inspect() *flaggy.Subcommand {
 func cmd_service_ls() *flaggy.Subcommand {
 	var c = configlist{}
 	var filter_jsonpaths = strlist{}
-	var service string
 	var app_flag string
 	var json_flag bool
 	var jsons_flag bool
@@ -279,7 +278,6 @@ func cmd_service_ls() *flaggy.Subcommand {
 	cmd.String(&resume_b, "", "resume-before", "Resume list before this item as specified by JSONPath returning boolean")
 	cmd.String(&resume_a, "", "resume-after", "Resume list after this item as specified by JSONPath returning boolean")
 	cmd.String(&jsonpath, "", "jsonpath", "Evaluate this JSONPath for each row")
-	cmd.AddPositionalValue(&service, "service", 1, true, "The service to act on")
 
 	cmd.CommandUsed = Hook(func() error {
 		log.Default().SetOutput(io.Discard)
@@ -393,7 +391,7 @@ func cmd_service_unit() *flaggy.Subcommand {
 func cmd_service_config_ls() *flaggy.Subcommand {
 	var service_descr string
 
-	cmd := flaggy.NewSubcommand("ls") // "SERVICE",
+	cmd := flaggy.NewSubcommand("ls")
 	cmd.Description = "List service configuration variables"
 	cmd.AddPositionalValue(&service_descr, "service", 1, true, "The service to act on")
 
