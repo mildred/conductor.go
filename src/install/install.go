@@ -66,13 +66,13 @@ func Install(destdir string) error {
 
 	fmt.Fprintf(os.Stderr, "+ rm -f %q\n", destdir+ConductorFunctionSocketLocation)
 	err = os.Remove(destdir + ConductorFunctionSocketLocation)
-	if err != nil {
+	if err != nil && !os.IsNotExist(err) {
 		return err
 	}
 
 	fmt.Fprintf(os.Stderr, "+ rm -f %q\n", destdir+ConductorCGIFunctionServiceLocation)
 	err = os.Remove(destdir + ConductorCGIFunctionServiceLocation)
-	if err != nil {
+	if err != nil && !os.IsNotExist(err) {
 		return err
 	}
 
@@ -91,49 +91,49 @@ func Install(destdir string) error {
 func Uninstall(destdir string) error {
 	fmt.Fprintf(os.Stderr, "+ rm -f %q\n", destdir+ConductorServiceServiceLocation)
 	err := os.Remove(destdir + ConductorServiceServiceLocation)
-	if err != nil {
+	if err != nil && !os.IsNotExist(err) {
 		return err
 	}
 
 	fmt.Fprintf(os.Stderr, "+ rm -f %q\n", destdir+ConductorServiceConfigServiceLocation)
 	err = os.Remove(destdir + ConductorServiceConfigServiceLocation)
-	if err != nil {
+	if err != nil && !os.IsNotExist(err) {
 		return err
 	}
 
 	fmt.Fprintf(os.Stderr, "+ rm -f %q\n", destdir+ConductorDeploymentServiceLocation)
 	err = os.Remove(destdir + ConductorDeploymentServiceLocation)
-	if err != nil {
+	if err != nil && !os.IsNotExist(err) {
 		return err
 	}
 
 	fmt.Fprintf(os.Stderr, "+ rm -f %q\n", destdir+ConductorDeploymentConfigServiceLocation)
 	err = os.Remove(destdir + ConductorDeploymentConfigServiceLocation)
-	if err != nil {
+	if err != nil && !os.IsNotExist(err) {
 		return err
 	}
 
 	fmt.Fprintf(os.Stderr, "+ rm -f %q\n", destdir+ConductorFunctionSocketLocation)
 	err = os.Remove(destdir + ConductorFunctionSocketLocation)
-	if err != nil {
+	if err != nil && !os.IsNotExist(err) {
 		return err
 	}
 
 	fmt.Fprintf(os.Stderr, "+ rm -f %q\n", destdir+ConductorCGIFunctionServiceLocation)
 	err = os.Remove(destdir + ConductorCGIFunctionServiceLocation)
-	if err != nil {
+	if err != nil && !os.IsNotExist(err) {
 		return err
 	}
 
 	fmt.Fprintf(os.Stderr, "+ rm -f %q\n", destdir+ConductorPolicyServerSocketLocation)
 	err = os.Remove(destdir + ConductorPolicyServerSocketLocation)
-	if err != nil {
+	if err != nil && !os.IsNotExist(err) {
 		return err
 	}
 
 	fmt.Fprintf(os.Stderr, "+ rm -f %q\n", destdir+ConductorPolicyServerServiceLocation)
 	err = os.Remove(destdir + ConductorPolicyServerServiceLocation)
-	if err != nil {
+	if err != nil && !os.IsNotExist(err) {
 		return err
 	}
 
