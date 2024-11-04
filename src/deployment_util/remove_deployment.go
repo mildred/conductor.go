@@ -8,10 +8,32 @@ import (
 	"os/exec"
 	"time"
 
+	"github.com/coreos/go-systemd/v22/dbus"
+
 	. "github.com/mildred/conductor.go/src/deployment"
 )
 
 func RemoveTimeout(ctx0 context.Context, deployment_name string, timeout, term_timeout time.Duration) error {
+	sd, err := dbus.NewWithContext(ctx0)
+	if err != nil {
+		return err
+	}
+
+	statuses, err := sd.ListUnitsByNamesContext(ctx0, []string{DeploymentUnit(deployment_name), CGIFunctionSocketUnit(deployment_name)})
+	if err != nil {
+		return err
+	}
+
+	var has_deployment = false
+	var has_cgi_function = false
+	for _, status := range statuses {
+		if status.Name == DeploymentUnit(deployment_name) {
+			has_deployment = status.LoadState == "loaded"
+		} else if status.Name == CGIFunctionSocketUnit(deployment_name) {
+			has_cgi_function = status.LoadState == "loaded"
+		}
+	}
+
 	var cancel context.CancelFunc = func() {}
 	var ctx = ctx0
 	if timeout != 0 {
@@ -23,8 +45,8 @@ func RemoveTimeout(ctx0 context.Context, deployment_name string, timeout, term_t
 	cmd := exec.CommandContext(ctx, "systemctl", "stop", DeploymentUnit(deployment_name))
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	err := cmd.Run()
-	if err != nil && ctx.Err() == nil {
+	err = cmd.Run()
+	if err != nil && ctx.Err() == nil && has_deployment {
 		return err
 	}
 
@@ -41,7 +63,7 @@ func RemoveTimeout(ctx0 context.Context, deployment_name string, timeout, term_t
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		err := cmd.Run()
-		if err != nil && ctx.Err() == nil {
+		if err != nil && ctx.Err() == nil && has_deployment {
 			return err
 		}
 	}
@@ -52,7 +74,7 @@ func RemoveTimeout(ctx0 context.Context, deployment_name string, timeout, term_t
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		err := cmd.Run()
-		if err != nil {
+		if err != nil && has_deployment {
 			log.Printf("Error killing: %v", err)
 		}
 
@@ -71,7 +93,7 @@ func RemoveTimeout(ctx0 context.Context, deployment_name string, timeout, term_t
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	err = cmd.Run()
-	if err != nil {
+	if err != nil && has_cgi_function {
 		return err
 	}
 
