@@ -482,7 +482,7 @@ func cmd_service_config_set() *flaggy.Subcommand {
 			if serv.Config[key].String() != value {
 				changed_args[key] = value
 			} else {
-				fmt.Printf("Configuration %q is already at %q", key, value)
+				fmt.Printf("Configuration %q is already at %q\n", key, value)
 			}
 		}
 
