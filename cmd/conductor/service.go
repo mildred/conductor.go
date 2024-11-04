@@ -429,7 +429,7 @@ func cmd_service_config_get() *flaggy.Subcommand {
 
 		var failures []string
 
-		for i := 1; i < len(vars); i++ {
+		for i := 0; i < len(vars); i++ {
 			arg := vars[i]
 			if val, ok := service.Config[arg]; ok {
 				fmt.Printf("%s\n", val)
@@ -461,30 +461,33 @@ func cmd_service_config_set() *flaggy.Subcommand {
 	cmd.AddExtraValues(&vars, "VAR=VAL", "Variables to set")
 
 	cmd.CommandUsed = Hook(func() error {
-		service, err := service.LoadServiceByName(service_descr)
+		serv, err := service.LoadServiceByName(service_descr)
 		if err != nil {
 			return err
 		}
 
 		filename := file_flag
 		if filename == "" {
-			filename = service.ConfigSetFile
+			filename = serv.ConfigSetFile
 		}
 
 		changed_args := map[string]string{}
-		for i := 1; i < len(vars); i++ {
+		for i := 0; i < len(vars); i++ {
 			splits := strings.SplitN(vars[i], "=", 2)
 			if len(splits) < 2 {
 				continue
 			}
 
 			key, value := splits[0], splits[1]
-			if service.Config[key].String() != value {
+			if serv.Config[key].String() != value {
 				changed_args[key] = value
+			} else {
+				fmt.Printf("Configuration %q is already at %q", key, value)
 			}
 		}
 
 		if len(changed_args) == 0 {
+			fmt.Printf("No configuration change detected. Do nothing.\n")
 			return nil
 		}
 
@@ -492,9 +495,32 @@ func cmd_service_config_set() *flaggy.Subcommand {
 		// Add config
 		//
 
+		fmt.Printf("Update config in: %s\n", filename)
 		err = service_public.ServiceSetConfig(filename, changed_args)
 		if err != nil {
 			return err
+		}
+
+		//
+		// Check configuration has been applied
+		//
+
+		serv, err = service.LoadServiceByName(service_descr)
+		if err != nil {
+			return err
+		}
+
+		var failures []string
+		for k, v := range changed_args {
+			cfg, ok := serv.Config[k]
+			if !ok {
+				failures = append(failures, fmt.Sprintf("%q in unset, should be %q", k, v))
+			} else if cfg.String() != v {
+				failures = append(failures, fmt.Sprintf("%q in %q, should be %q", k, cfg.String(), v))
+			}
+		}
+		if len(failures) > 0 {
+			return fmt.Errorf("Configuration update failed: %v", strings.Join(failures, ", "))
 		}
 
 		//
