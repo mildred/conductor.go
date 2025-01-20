@@ -360,6 +360,10 @@ func (service *Service) FillDefaults() error {
 	service.Functions.FillDefaults(service)
 	if service.ProxyConfigTemplate == "" {
 		service.ProxyConfigTemplate = filepath.Join(service.BasePath, "proxy-config.template")
+		_, err := os.Stat(service.ProxyConfigTemplate)
+		if err != nil && os.IsNotExist(err) {
+			service.ProxyConfigTemplate = ""
+		}
 	}
 	if service.CaddyLoadBalancer.ApiEndpoint == "" {
 		service.CaddyLoadBalancer.ApiEndpoint = "http://localhost:2019"

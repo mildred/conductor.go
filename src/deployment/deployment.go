@@ -136,6 +136,11 @@ func ReadDeployment(dir, deployment_id string) (*Deployment, error) {
 }
 
 func (depl *Deployment) TemplateProxyConfig() error {
+	if depl.ProxyConfigTemplate == "" {
+		depl.TemplatedProxyConfig = nil
+		return nil
+	}
+
 	log.Printf("prepare: Templating the proxy config\n")
 	res, err := tmpl.RunTemplate(depl.ProxyConfigTemplate, depl.Vars())
 	if err != nil {
