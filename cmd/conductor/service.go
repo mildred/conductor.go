@@ -85,6 +85,36 @@ func (c *configlist) Set(value string) error {
 	return nil
 }
 
+func cmd_service_enable() *flaggy.Subcommand {
+	var service string
+	var now bool
+
+	cmd := flaggy.NewSubcommand("enable") // "SERVICE",
+	cmd.Description = "Declare and enable a service"
+	cmd.Bool(&now, "", "now", "start the service")
+	cmd.AddPositionalValue(&service, "service", 1, true, "The service to act on")
+
+	cmd.CommandUsed = Hook(func() error {
+		return service_public.Enable(service, now)
+	})
+	return cmd
+}
+
+func cmd_service_disable() *flaggy.Subcommand {
+	var service string
+	var now bool
+
+	cmd := flaggy.NewSubcommand("disable") // "SERVICE",
+	cmd.Description = "Disable a service"
+	cmd.Bool(&now, "", "now", "stop the service")
+	cmd.AddPositionalValue(&service, "service", 1, true, "The service to act on")
+
+	cmd.CommandUsed = Hook(func() error {
+		return service_public.Disable(service, now)
+	})
+	return cmd
+}
+
 func cmd_service_start() *flaggy.Subcommand {
 	var service string
 
@@ -576,6 +606,8 @@ func cmd_service() *flaggy.Subcommand {
 	cmd.Description = "Service commands"
 	cmd.AttachSubcommand(cmd_service_start(), 1)
 	cmd.AttachSubcommand(cmd_service_stop(), 1)
+	cmd.AttachSubcommand(cmd_service_enable(), 1)
+	cmd.AttachSubcommand(cmd_service_disable(), 1)
 	cmd.AttachSubcommand(cmd_service_reload(), 1)
 	cmd.AttachSubcommand(cmd_service_rolling_restart(), 1)
 	cmd.AttachSubcommand(cmd_service_restart(), 1)

@@ -105,6 +105,44 @@ func ReloadServices(inclusive bool) error {
 	return nil
 }
 
+func Enable(definition_path string, now bool) error {
+	unit, err := ServiceUnitByName(definition_path)
+	if err != nil {
+		return err
+	}
+
+	var cmd *exec.Cmd
+	if now {
+		fmt.Fprintf(os.Stderr, "+ systemctl enable --now %q\n", unit)
+		cmd = exec.Command("systemctl", "enable", "--now", unit)
+	} else {
+		fmt.Fprintf(os.Stderr, "+ systemctl enable %q\n", unit)
+		cmd = exec.Command("systemctl", "enable", unit)
+	}
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+func Disable(definition_path string, now bool) error {
+	unit, err := ServiceUnitByName(definition_path)
+	if err != nil {
+		return err
+	}
+
+	var cmd *exec.Cmd
+	if now {
+		fmt.Fprintf(os.Stderr, "+ systemctl disable --now %q\n", unit)
+		cmd = exec.Command("systemctl", "disable", "--now", unit)
+	} else {
+		fmt.Fprintf(os.Stderr, "+ systemctl disable %q\n", unit)
+		cmd = exec.Command("systemctl", "disable", unit)
+	}
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
 func Start(definition_path string) error {
 	unit, err := ServiceUnitByName(definition_path)
 	if err != nil {

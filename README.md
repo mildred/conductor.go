@@ -117,6 +117,10 @@ Templates are any executable script, variables are passed to them via the
 command-line arguments or the environment variables, use what you prefer. It
 should return on the standard output the templated document.
 
+Templates executed in the context of the service are executed in the service
+directory. If executed in the context of a deployment, the template is executed
+in the deployment directory.
+
 The important templates are:
 
 - the pod template: it should return a Kubernetes pod in YAML compatible with
@@ -144,6 +148,44 @@ Variables accessible within templates are visible with the commands `conductor
 service env` or `conductor deployment env`. It is possible to simulate a
 template execution with `conductor _ service template` or `conductor _
 deployment template`.
+
+Example template:
+
+```bash
+#!/bin/bash
+
+cat <<YAML
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    app: $CONDUCTOR_APP
+  name: $POD_NAME
+spec:
+
+  hostAliases:
+    - ip: "127.0.0.1"
+      hostnames:
+        - mongodb
+
+  containers:
+
+    - name: main
+      image: ${DOCKER_IMAGE}:${DOCKER_TAG}
+      env:
+        - name: CONDUCTOR_DEPLOYMENT
+          value: "${CONDUCTOR_DEPLOYMENT}"
+      resources:
+        limits:
+          memory: "4Gi"
+
+    - name: mongodb
+      image: mongo:7.0
+      command: ["--replSet", "rs0"]
+      # args: []
+YAML
+```
 
 ### Display config
 
