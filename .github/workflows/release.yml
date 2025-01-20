@@ -25,7 +25,6 @@ jobs:
         with:
           version: v2
           args: release --clean
-          workdir: cmd/conductor
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

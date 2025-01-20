@@ -8,7 +8,9 @@ import (
 	"os"
 	"strings"
 
+	"github.com/blang/semver"
 	"github.com/integrii/flaggy"
+	"github.com/rhysd/go-github-selfupdate/selfupdate"
 
 	"github.com/mildred/conductor.go/src/deployment"
 	"github.com/mildred/conductor.go/src/deployment_public"
@@ -87,12 +89,40 @@ func cmd_system_uninstall() *flaggy.Subcommand {
 	return cmd
 }
 
+func cmd_system_upgrade() *flaggy.Subcommand {
+	var check bool = false
+
+	cmd := flaggy.NewSubcommand("upgrade")
+	cmd.Description = "Upgrade to new version"
+	cmd.Bool(&check, "", "check", "Only check for new release")
+
+	cmd.CommandUsed = Hook(func() error {
+		v := semver.MustParse(version)
+		latest, err := selfupdate.UpdateSelf(v, "mildred/conductor.go")
+		if err != nil {
+			log.Println("Binary update failed:", err)
+			return nil
+		}
+		if latest.Version.Equals(v) {
+			// latest version is the same as current version. It means current binary is up to date.
+			log.Println("Current binary is the latest version", version)
+		} else {
+			log.Println("Successfully updated to version", latest.Version)
+			log.Println("Release note:\n", latest.ReleaseNotes)
+		}
+		return nil
+	})
+
+	return cmd
+}
+
 func cmd_system() *flaggy.Subcommand {
 	cmd := flaggy.NewSubcommand("system")
 	cmd.Description = "System management"
 	cmd.RequireSubcommand = true
 	cmd.AttachSubcommand(cmd_system_install(), 1)
 	cmd.AttachSubcommand(cmd_system_uninstall(), 1)
+	cmd.AttachSubcommand(cmd_system_upgrade(), 1)
 	return cmd
 }
 
