@@ -94,21 +94,37 @@ func cmd_system_upgrade() *flaggy.Subcommand {
 
 	cmd := flaggy.NewSubcommand("upgrade")
 	cmd.Description = "Upgrade to new version"
-	cmd.Bool(&check, "", "check", "Only check for new release")
+	cmd.Bool(&check, "c", "check", "Only check for new release")
 
 	cmd.CommandUsed = Hook(func() error {
+		if check || version == "dev" {
+			rel, found, err := selfupdate.DetectLatest("mildred/conductor.go")
+			if err != nil {
+				return err
+			}
+			if found {
+				log.Println("Latest version is", rel.Version)
+			} else {
+				log.Println("Latest release not found")
+			}
+			return nil
+		}
+
 		v := semver.MustParse(version)
 		latest, err := selfupdate.UpdateSelf(v, "mildred/conductor.go")
 		if err != nil {
 			log.Println("Binary update failed:", err)
 			return nil
 		}
-		if latest.Version.Equals(v) {
+		if check || version == "dev" {
+			log.Println("Latest version is", latest.Version)
+		} else if latest.Version.Equals(v) {
 			// latest version is the same as current version. It means current binary is up to date.
 			log.Println("Current binary is the latest version", version)
 		} else {
 			log.Println("Successfully updated to version", latest.Version)
 			log.Println("Release note:\n", latest.ReleaseNotes)
+
 		}
 		return nil
 	})
