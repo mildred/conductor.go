@@ -54,7 +54,7 @@ func isInstalled() (bool, string, error) {
 
 	installed, err := exec.LookPath(path.Base(self))
 	if err != nil {
-		return false, self, err
+		return false, self, nil
 	}
 
 	self_st, err := os.Stat(self)
