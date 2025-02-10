@@ -19,16 +19,22 @@ func RemoveTimeout(ctx0 context.Context, deployment_name string, timeout, term_t
 		return err
 	}
 
-	statuses, err := sd.ListUnitsByNamesContext(ctx0, []string{DeploymentUnit(deployment_name), CGIFunctionSocketUnit(deployment_name)})
+	statuses, err := sd.ListUnitsByNamesContext(ctx0, []string{
+		DeploymentUnit(deployment_name),
+		DeploymentConfigUnit(deployment_name),
+		CGIFunctionSocketUnit(deployment_name)})
 	if err != nil {
 		return err
 	}
 
 	var has_deployment = false
+	var has_config = false
 	var has_cgi_function = false
 	for _, status := range statuses {
 		if status.Name == DeploymentUnit(deployment_name) {
 			has_deployment = status.LoadState == "loaded"
+		} else if status.Name == DeploymentConfigUnit(deployment_name) {
+			has_config = status.LoadState == "loaded"
 		} else if status.Name == CGIFunctionSocketUnit(deployment_name) {
 			has_cgi_function = status.LoadState == "loaded"
 		}
@@ -88,10 +94,25 @@ func RemoveTimeout(ctx0 context.Context, deployment_name string, timeout, term_t
 		}
 	}
 
-	fmt.Fprintf(os.Stderr, "+ systemctl stop %s %s\n", DeploymentConfigUnit(deployment_name), CGIFunctionSocketUnit(deployment_name))
-	cmd = exec.Command("systemctl", "stop", DeploymentConfigUnit(deployment_name), CGIFunctionSocketUnit(deployment_name))
+	fmt.Fprintf(os.Stderr, "+ systemctl stop %s\n", DeploymentConfigUnit(deployment_name))
+	cmd = exec.Command("systemctl", "stop", DeploymentConfigUnit(deployment_name))
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	if !has_config {
+		cmd.Stderr = nil
+	}
+	err = cmd.Run()
+	if err != nil && has_config {
+		return err
+	}
+
+	fmt.Fprintf(os.Stderr, "+ systemctl stop %s\n", CGIFunctionSocketUnit(deployment_name))
+	cmd = exec.Command("systemctl", "stop", CGIFunctionSocketUnit(deployment_name))
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if !has_cgi_function {
+		cmd.Stderr = nil
+	}
 	err = cmd.Run()
 	if err != nil && has_cgi_function {
 		return err
