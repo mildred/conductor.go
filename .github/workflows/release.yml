@@ -3,6 +3,8 @@ on:
   push:
     tags:
       - 'v*'
+    branches:
+      - master
 
 env:
   GO_VERSION: "1.22.0"
@@ -14,17 +16,28 @@ jobs:
     name: create assets
     runs-on: ubuntu-latest
     steps:
+      - if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        run: |
+          echo "flags=" >> $GITHUB_ENV
+          echo "fetch_tags=true" >> $GITHUB_ENV
       - name: Install Go
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-tags: ${{ env.fetch_tags }}
+      - if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        run: |
+          tag_name="$(git describe --tags --abbrev=0 2>/dev/null || echo 'v0.0.0')-latest-$(git rev-parse --abbrev-ref HEAD)"
+          git tag -d "$tag_name" || true
+          git tag "$tag_name"
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@286f3b13b1b49da4ac219696163fb8c1c93e1200 #v6
         with:
           version: v2
-          args: release --clean
+          args: release --clean ${{ env.flags }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -36,19 +49,28 @@ jobs:
     name: create docker image
     runs-on: ubuntu-latest
     steps:
+      - if: ${{ !startsWith(github.ref, 'refs/tags/v') && hashFiles('Dockerfile') != '' }}
+        run: |
+          echo "fetch_tags=true" >> $GITHUB_ENV
       - name: Checkout code
+        if: ${{ hashFiles('Dockerfile') != '' }}
         uses: actions/checkout@v4
+        with:
+          fetch-tags: ${{ env.fetch_tags }}
       - name: Log in to the Container registry
+        if: ${{ hashFiles('Dockerfile') != '' }}
         uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: build Docker image
+        if: ${{ hashFiles('Dockerfile') != '' }}
         run: |
-          VERSION=$(git describe --tags)
+          VERSION=$(git describe --tags --always)
           docker build --build-arg "version=$VERSION" --tag ${IMAGE_NAME} .
       - name: push Docker image
+        if: ${{ hashFiles('Dockerfile') != '' }}
         run: |
           TAG=$(git describe --tags)
           docker tag ${IMAGE_NAME} ${REGISTRY}/${IMAGE_NAME}:${GITHUB_SHA}
