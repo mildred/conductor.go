@@ -39,13 +39,6 @@ func Update(version string, check bool) error {
 		return nil
 	}
 
-	tubectl_path := path.Join(path.Dir(exe), "tubectl")
-	err = selfupdate.DefaultUpdater().UpdateTo(latest, tubectl_path)
-	if err != nil {
-		log.Println("Binary update for tubectl failed:", err)
-		return nil
-	}
-
 	if check || version == "dev" {
 		log.Println("Latest version is", latest.Version)
 	} else if latest.Version.Equals(v) {
@@ -54,8 +47,15 @@ func Update(version string, check bool) error {
 	} else {
 		log.Println("Successfully updated to version", latest.Version)
 		log.Println("Release note:\n", latest.ReleaseNotes)
-
 	}
+
+	tubectl_path := path.Join(path.Dir(exe), "tubectl")
+	err = selfupdate.DefaultUpdater().UpdateTo(latest, tubectl_path)
+	if err != nil {
+		log.Println("Binary update for tubectl failed:", err)
+		return nil
+	}
+
 	return nil
 
 }
