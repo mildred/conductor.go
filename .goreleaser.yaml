@@ -16,7 +16,8 @@ before:
     - go generate ./...
 
 builds:
-  - env:
+  - id: conductor
+    env:
       - CGO_ENABLED=0
     goos:
       - linux
@@ -24,7 +25,8 @@ builds:
       - darwin
     binary: conductor
     main: ./cmd/conductor
-  - goos:
+  - id: tubectl
+    goos:
       - linux
     binary: tubectl
     main: github.com/cloudflare/tubular/cmd/tubectl@latest
