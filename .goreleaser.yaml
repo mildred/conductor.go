@@ -29,7 +29,10 @@ builds:
     goos:
       - linux
     binary: tubectl
-    main: github.com/cloudflare/tubular/cmd/tubectl@latest
+    hooks:
+      pre:
+        - git clone git://github.com/cloudflare/tubular
+    main: ./tubular/cmd/tubectl
 
 archives:
   - formats: ['tar.xz']
