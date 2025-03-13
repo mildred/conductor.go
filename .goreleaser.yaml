@@ -22,7 +22,7 @@ builds:
     binary: tubectl
     hooks:
       pre:
-        - git clone git://github.com/cloudflare/tubular
+        - if ! test -e tubular; then git clone git://github.com/cloudflare/tubular; fi
     main: ./tubular/cmd/tubectl
   - id: conductor
     env:
