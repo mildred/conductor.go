@@ -24,6 +24,10 @@ builds:
       - darwin
     binary: conductor
     main: ./cmd/conductor
+  - goos:
+      - linux
+    binary: tubectl
+    main: github.com/cloudflare/tubular/cmd/tubectl@latest
 
 archives:
   - format: tar.xz
