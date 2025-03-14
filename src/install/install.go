@@ -81,6 +81,12 @@ func Update(version string, desired_version string, check bool) error {
 	}
 
 	tubectl_path := path.Join(path.Dir(exe), "tubectl")
+
+	f, err := os.OpenFile(tubectl_path, os.O_RDONLY|os.O_CREATE, 0777)
+	if err == nil {
+		f.Close()
+	}
+
 	err = selfupdate.DefaultUpdater().UpdateTo(rel, tubectl_path)
 	if err != nil {
 		log.Println("Binary update for tubectl failed:", err)

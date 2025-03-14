@@ -34,6 +34,8 @@ jobs:
           git tag -d "$tag_name" || true
           git tag "$tag_name"
       - run: git clone http://github.com/cloudflare/tubular.git ./tubular
+      - run: rm -rf ./tubular/vendor/go4.org/unsafe/assume-no-moving-gc
+      - run: git clone https://github.com/go4org/unsafe-assume-no-moving-gc tubular/vendor/go4.org/unsafe/assume-no-moving-gc
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@286f3b13b1b49da4ac219696163fb8c1c93e1200 #v6
         with:
