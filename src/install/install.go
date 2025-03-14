@@ -7,22 +7,52 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"path/filepath"
+	"runtime"
+	"strings"
 
 	"github.com/blang/semver"
 	"github.com/rhysd/go-github-selfupdate/selfupdate"
 )
 
-func Update(version string, check bool) error {
+func Update(version string, desired_version string, check bool) error {
+	current := semver.MustParse(version)
+
 	exe, err := os.Executable()
 	if err != nil {
 		return err
 	}
+	if runtime.GOOS == "windows" && !strings.HasSuffix(exe, ".exe") {
+		// Ensure to add '.exe' to given path on Windows
+		exe = exe + ".exe"
+	}
+
+	stat, err := os.Lstat(exe)
+	if err != nil {
+		return fmt.Errorf("Failed to stat '%s'. File may not exist: %s", exe, err)
+	}
+	if stat.Mode()&os.ModeSymlink != 0 {
+		p, err := filepath.EvalSymlinks(exe)
+		if err != nil {
+			return fmt.Errorf("Failed to resolve symlink '%s' for executable: %s", exe, err)
+		}
+		exe = p
+	}
+
+	rel, found, err := selfupdate.DetectVersion("mildred/conductor.go", desired_version)
+	if err != nil {
+		return err
+	} else if !found {
+		log.Println("No release detected. Current version is considered up-to-date")
+		return nil
+	} else if current.Equals(rel.Version) {
+		log.Println("Current version", current, "is the latest. Update is not needed")
+		return nil
+	}
+
+	log.Println("Will update", exe, "to the latest version", rel.Version)
 
 	if check || version == "dev" {
-		rel, found, err := selfupdate.DetectLatest("mildred/conductor.go")
-		if err != nil {
-			return err
-		}
 		if found {
 			log.Println("Latest version is", rel.Version)
 		} else {
@@ -31,26 +61,24 @@ func Update(version string, check bool) error {
 		return nil
 	}
 
-	v := semver.MustParse(version)
-
-	latest, err := selfupdate.DefaultUpdater().UpdateSelf(v, "mildred/conductor.go")
+	err = selfupdate.DefaultUpdater().UpdateTo(rel, exe)
 	if err != nil {
 		log.Println("Binary update failed:", err)
 		return nil
 	}
 
 	if check || version == "dev" {
-		log.Println("Latest version is", latest.Version)
-	} else if latest.Version.Equals(v) {
+		log.Println("Latest version is", rel.Version)
+	} else if rel.Version.Equals(current) {
 		// latest version is the same as current version. It means current binary is up to date.
 		log.Println("Current binary is the latest version", version)
 	} else {
-		log.Println("Successfully updated to version", latest.Version)
-		log.Println("Release note:\n", latest.ReleaseNotes)
+		log.Println("Successfully updated to version", rel.Version)
+		log.Println("Release note:\n", rel.ReleaseNotes)
 	}
 
 	tubectl_path := path.Join(path.Dir(exe), "tubectl")
-	err = selfupdate.DefaultUpdater().UpdateTo(latest, tubectl_path)
+	err = selfupdate.DefaultUpdater().UpdateTo(rel, tubectl_path)
 	if err != nil {
 		log.Println("Binary update for tubectl failed:", err)
 		return nil

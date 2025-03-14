@@ -89,10 +89,12 @@ func cmd_system_uninstall() *flaggy.Subcommand {
 
 func cmd_system_update() *flaggy.Subcommand {
 	var check bool = false
+	var desired_ver string = ""
 
 	cmd := flaggy.NewSubcommand("update")
 	cmd.Description = "Update to new version"
 	cmd.Bool(&check, "c", "check", "Only check for new release")
+	cmd.AddPositionalValue(&desired_ver, "version", 1, false, "Version to update to")
 
 	cmd.CommandUsed = Hook(func() error {
 		ver := version
@@ -100,7 +102,7 @@ func cmd_system_update() *flaggy.Subcommand {
 			ver = "0.0.0"
 		}
 
-		return install.Update(ver, check)
+		return install.Update(ver, desired_ver, check)
 	})
 
 	return cmd
