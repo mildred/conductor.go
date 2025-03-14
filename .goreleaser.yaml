@@ -21,6 +21,8 @@ builds:
       - linux
     goarch:
       - amd64
+      # - arm
+      # - arm64
     binary: tubectl
     dir: tubular
     main: ./cmd/tubectl
@@ -36,6 +38,7 @@ builds:
 
 archives:
   - formats: ['tar.xz']
+    allow_different_binary_count: true
     # this name template makes the OS and Arch compatible with the results of `uname`.
     # name_template: >-
     #   {{ .ProjectName }}_
