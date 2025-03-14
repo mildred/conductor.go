@@ -19,6 +19,8 @@ builds:
   - id: tubectl
     goos:
       - linux
+    goarch:
+      - amd64
     binary: tubectl
     dir: tubular
     main: ./cmd/tubectl

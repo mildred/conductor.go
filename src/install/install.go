@@ -16,7 +16,10 @@ import (
 )
 
 func Update(version string, desired_version string, check bool) error {
-	current := semver.MustParse(version)
+	var current semver.Version
+	if version != "dev" {
+		current = semver.MustParse(version)
+	}
 
 	exe, err := os.Executable()
 	if err != nil {
