@@ -20,6 +20,11 @@ jobs:
         run: |
           echo "flags=" >> $GITHUB_ENV
           echo "fetch_tags=true" >> $GITHUB_ENV
+          echo "fetch_depth=0" >> $GITHUB_ENV
+      - if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        run: |
+          echo "fetch_tags=false" >> $GITHUB_ENV
+          echo "fetch_depth=1" >> $GITHUB_ENV
       - name: Install Go
         uses: actions/setup-go@v5
         with:
@@ -28,6 +33,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-tags: ${{ env.fetch_tags }}
+          fetch-depth: ${{ env.fetch_depth }}
       - if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         run: |
           tag_name="$(git describe --tags --abbrev=0 2>/dev/null || echo 'v0.0.0')-latest-$(git rev-parse --abbrev-ref HEAD)"
