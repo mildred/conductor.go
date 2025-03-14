@@ -33,6 +33,7 @@ jobs:
           tag_name="$(git describe --tags --abbrev=0 2>/dev/null || echo 'v0.0.0')-latest-$(git rev-parse --abbrev-ref HEAD)"
           git tag -d "$tag_name" || true
           git tag "$tag_name"
+      - run: git clone http://github.com/cloudflare/tubular.git ./tubular
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@286f3b13b1b49da4ac219696163fb8c1c93e1200 #v6
         with:

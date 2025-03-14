@@ -20,9 +20,6 @@ builds:
     goos:
       - linux
     binary: tubectl
-    hooks:
-      pre:
-        - sh -c 'git clone http://github.com/cloudflare/tubular.git ./tubular || true'
     dir: tubular
     main: ./cmd/tubectl
   - id: conductor
