@@ -21,7 +21,7 @@ jobs:
           echo "flags=" >> $GITHUB_ENV
           echo "fetch_tags=true" >> $GITHUB_ENV
           echo "fetch_depth=0" >> $GITHUB_ENV
-      - if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+      - if: ${{ startsWith(github.ref, 'refs/tags/v') }}
         run: |
           echo "fetch_tags=false" >> $GITHUB_ENV
           echo "fetch_depth=1" >> $GITHUB_ENV
