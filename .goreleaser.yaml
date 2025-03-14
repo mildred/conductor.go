@@ -23,7 +23,8 @@ builds:
     hooks:
       pre:
         - sh -c 'git clone http://github.com/cloudflare/tubular.git ./tubular || true'
-    main: ./tubular/cmd/tubectl
+    dir: tubular
+    main: ./cmd/tubectl
   - id: conductor
     env:
       - CGO_ENABLED=0
