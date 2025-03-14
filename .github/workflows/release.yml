@@ -36,6 +36,7 @@ jobs:
           fetch-depth: ${{ env.fetch_depth }}
       - if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         run: |
+          git  tag | grep -- -latest- | xargs  git tag -d
           tag_name="$(git describe --tags --abbrev=0 2>/dev/null || echo 'v0.0.0')"
           tag_name="${tag_name%-latest-$(git rev-parse --abbrev-ref HEAD)}"
           tag_name="$tag_name-latest-$(git rev-parse --abbrev-ref HEAD)"
