@@ -37,6 +37,20 @@ type StartOrReloadOpts struct {
 	TermTimeout        time.Duration
 }
 
+func stopServicesOrLog(prefix string, depl *deployment.Deployment, units []string) {
+	log.Printf("%s: Stop %s newest units after failure...", prefix, depl.DeploymentName)
+	for _, unit := range units {
+		fmt.Fprintf(os.Stderr, "+ systemctl stop %q\n", unit)
+		cmd := exec.Command("systemctl", "stop", unit)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		err := cmd.Run()
+		if err != nil {
+			log.Printf("%s: ERROR %v", prefix, err)
+		}
+	}
+}
+
 func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 	if opts.MaxDeploymentIndex == 0 {
 		opts.MaxDeploymentIndex = 10
@@ -94,6 +108,8 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 	// Find or create a suitable deployment
 	//
 
+	var started_services []string
+
 	parts, err := service.Parts()
 	if err != nil {
 		return err
@@ -137,6 +153,7 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 					cmd.Stdout = os.Stdout
 					cmd.Stderr = os.Stderr
 					err = cmd.Run()
+					started_services = append(started_services, deployment.DeploymentUnit(depl.DeploymentName))
 					if err != nil {
 						return err
 					}
@@ -147,6 +164,7 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 					cmd.Stdout = os.Stdout
 					cmd.Stderr = os.Stderr
 					err = cmd.Run()
+					started_services = append(started_services, deployment.DeploymentUnit(depl.DeploymentName))
 					if err != nil {
 						return err
 					}
@@ -155,6 +173,8 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 				return nil
 			}()
 			if err != nil {
+				stopServicesOrLog(prefix, depl, started_services)
+				started_services = nil
 				return err
 			}
 
@@ -166,7 +186,10 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 			err = cmd.Run()
+			started_services = append(started_services, deployment.CGIFunctionSocketUnit(depl.DeploymentName))
 			if err != nil {
+				stopServicesOrLog(prefix, depl, started_services)
+				started_services = nil
 				return err
 			}
 
