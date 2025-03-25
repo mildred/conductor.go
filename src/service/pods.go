@@ -7,9 +7,10 @@ import (
 )
 
 type ServicePod struct {
-	Name              string `json:"name"`
-	PodTemplate       string `json:"pod_template,omitempty"`        // Template file for pod
-	ConfigMapTemplate string `json:"config_map_template,omitempty"` // ConfigMap template file
+	Name              string   `json:"name"`
+	ServiceDirectives []string `json:"service_directives,omitempty"`
+	PodTemplate       string   `json:"pod_template,omitempty"`        // Template file for pod
+	ConfigMapTemplate string   `json:"config_map_template,omitempty"` // ConfigMap template file
 }
 
 type ServicePods []*ServicePod

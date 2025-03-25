@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"strings"
 
 	"github.com/coreos/go-systemd/v22/dbus"
 
@@ -201,14 +202,19 @@ func CreateDeploymentFromService(name string, svc *service.Service, seed *Deploy
 	// }
 
 	var unit_name string
+	var service_directives []string
 	if seed.IsPod {
 		unit_name = DeploymentUnit(name)
+		pod := svc.Pods.FindPod(seed.PartName)
+		service_directives = pod.ServiceDirectives
 	} else if seed.IsFunction {
 		err = CreateCGIFunctionUnits(name)
 		if err != nil {
 			return "", err
 		}
 		unit_name = CGIFunctionServiceUnit(name, "")
+		fct := svc.Functions.FindFunction(seed.PartName)
+		service_directives = fct.ServiceDirectives
 	}
 
 	if unit_name != "" {
@@ -225,6 +231,17 @@ func CreateDeploymentFromService(name string, svc *service.Service, seed *Deploy
 		err = os.WriteFile("/run/systemd/system/"+unit_name+".d/50-journal.conf", []byte(conf), 0644)
 		if err != nil {
 			return "", err
+		}
+
+		if len(service_directives) > 0 {
+			var conf string = "[Service]\n"
+			for _, directive := range service_directives {
+				conf += strings.ReplaceAll(directive, "\n", "\\\n") + "\n"
+			}
+			err = os.WriteFile("/run/systemd/system/"+unit_name+".d/90-extra-directives.conf", []byte(conf), 0644)
+			if err != nil {
+				return "", err
+			}
 		}
 
 		cmd := exec.Command("systemctl", "daemon-reload")

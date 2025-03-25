@@ -7,6 +7,7 @@ import (
 
 type ServiceFunction struct {
 	Name              string   `json:"name"`
+	ServiceDirectives []string `json:"service_directives,omitempty"`
 	Format            string   `json:"format,omitempty"` // Format: cgi, http-stdio
 	Exec              []string `json:"exec,omitempty"`
 	StderrAsStdout    bool     `json:"stderr_as_stdout,omitempty"`

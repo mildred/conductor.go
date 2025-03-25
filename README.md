@@ -60,6 +60,7 @@ To declare a service, just put a JSON file in
       "name": "",
       "pod_template": "./pod.template",
       "config_map_template": "./config-map.template",
+      "service_directives": []
     }
   ],
   "proxy_config_template": "./proxy-config.template",
@@ -249,7 +250,8 @@ There is an untested implementation. You can declare functions in your service:
         "Content-Type: text/plain; charset=utf-8"
       ],
       "no_response_headers": false,
-      "path_info_strip": 2
+      "path_info_strip": 2,
+      "service_directives": []
     }
   ]
 }
