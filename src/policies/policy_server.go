@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -19,17 +20,24 @@ func httpCheckPolicies(w http.ResponseWriter, req *http.Request) error {
 		return err
 	}
 
-	for _, policy_name := range req.Header.Values("Conductor-Policy") {
+	for _, policy_spec := range req.Header.Values("Conductor-Policy") {
+		policy_parts := strings.SplitN(policy_spec, "/", 2)
+		policy_name := policy_parts[0]
+		authorization := ""
+		if len(policy_parts) >= 2 {
+			authorization = policy_parts[1]
+		}
+
 		policy := policies.ByName[policy_name]
 
 		if policy == nil {
 			return fmt.Errorf("missing policy %s", policy_name)
 		}
 
-		res, err := policy.Matching(&MatchContext{
+		res, err, _ := policy.Matching(&MatchContext{
 			Policies: policies,
 			Request:  req,
-		})
+		}, authorization, nil)
 		if err != nil {
 			return err
 		}

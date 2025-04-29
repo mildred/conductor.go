@@ -8,11 +8,12 @@ import (
 
 	. "github.com/mildred/conductor.go/src/deployment"
 	. "github.com/mildred/conductor.go/src/deployment_util"
+	"github.com/mildred/conductor.go/src/dirs"
 )
 
 func Stop(deployment_name string) error {
-	fmt.Fprintf(os.Stderr, "+ systemctl stop %s %s\n", DeploymentUnit(deployment_name), CGIFunctionSocketUnit(deployment_name))
-	cmd := exec.Command("systemctl", "stop", DeploymentUnit(deployment_name), CGIFunctionSocketUnit(deployment_name))
+	fmt.Fprintf(os.Stderr, "+ systemctl %s stop %s %s\n", dirs.SystemdModeFlag(), DeploymentUnit(deployment_name), CGIFunctionSocketUnit(deployment_name))
+	cmd := exec.Command("systemctl", dirs.SystemdModeFlag(), "stop", DeploymentUnit(deployment_name), CGIFunctionSocketUnit(deployment_name))
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()

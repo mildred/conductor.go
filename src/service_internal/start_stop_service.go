@@ -40,8 +40,8 @@ type StartOrReloadOpts struct {
 func stopServicesOrLog(prefix string, depl *deployment.Deployment, units []string) {
 	log.Printf("%s: Stop %s newest units after failure...", prefix, depl.DeploymentName)
 	for _, unit := range units {
-		fmt.Fprintf(os.Stderr, "+ systemctl stop %q\n", unit)
-		cmd := exec.Command("systemctl", "stop", unit)
+		fmt.Fprintf(os.Stderr, "+ systemctl %s stop %q\n", dirs.SystemdModeFlag(), unit)
+		cmd := exec.Command("systemctl", dirs.SystemdModeFlag(), "stop", unit)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		err := cmd.Run()
@@ -148,8 +148,8 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 					log.Printf("%s: Found started pod deployment %s", prefix, depl.DeploymentName)
 				} else if depl_status == "activating" || depl_status == "inactive" {
 					log.Printf("%s: Found %s pod deployment %s, waiting to be started...", prefix, depl_status, depl.DeploymentName)
-					fmt.Fprintf(os.Stderr, "+ systemctl start %q\n", deployment.DeploymentUnit(depl.DeploymentName))
-					cmd := exec.Command("systemctl", "start", deployment.DeploymentUnit(depl.DeploymentName))
+					fmt.Fprintf(os.Stderr, "+ systemctl %s start %q\n", dirs.SystemdModeFlag(), deployment.DeploymentUnit(depl.DeploymentName))
+					cmd := exec.Command("systemctl", dirs.SystemdModeFlag(), "start", deployment.DeploymentUnit(depl.DeploymentName))
 					cmd.Stdout = os.Stdout
 					cmd.Stderr = os.Stderr
 					err = cmd.Run()
@@ -159,8 +159,8 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 					}
 				} else {
 					log.Printf("%s: Starting new pod deployment %s...", prefix, depl.DeploymentName)
-					fmt.Fprintf(os.Stderr, "+ systemctl start %q\n", deployment.DeploymentUnit(depl.DeploymentName))
-					cmd := exec.Command("systemctl", "start", deployment.DeploymentUnit(depl.DeploymentName))
+					fmt.Fprintf(os.Stderr, "+ systemctl %s start %q\n", dirs.SystemdModeFlag(), deployment.DeploymentUnit(depl.DeploymentName))
+					cmd := exec.Command("systemctl", dirs.SystemdModeFlag(), "start", deployment.DeploymentUnit(depl.DeploymentName))
 					cmd.Stdout = os.Stdout
 					cmd.Stderr = os.Stderr
 					err = cmd.Run()
@@ -180,9 +180,9 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 
 		} else if seed.IsFunction {
 
-			log.Printf("%s: Starting new CGI funcion deployment %s...", prefix, depl.DeploymentName)
-			fmt.Fprintf(os.Stderr, "+ systemctl start %q\n", deployment.CGIFunctionSocketUnit(depl.DeploymentName))
-			cmd := exec.Command("systemctl", "start", deployment.CGIFunctionSocketUnit(depl.DeploymentName))
+			log.Printf("%s: Starting new CGI function deployment %s...", prefix, depl.DeploymentName)
+			fmt.Fprintf(os.Stderr, "+ systemctl %s start %q\n", dirs.SystemdModeFlag(), deployment.CGIFunctionSocketUnit(depl.DeploymentName))
+			cmd := exec.Command("systemctl", dirs.SystemdModeFlag(), "start", deployment.CGIFunctionSocketUnit(depl.DeploymentName))
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 			err = cmd.Run()

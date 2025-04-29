@@ -171,3 +171,46 @@ func PrintInspect(deployments ...string) error {
 	}
 	return nil
 }
+
+func Print(depl_name string) error {
+	depl, err := ReadDeploymentByName(depl_name)
+	if err != nil {
+		return err
+	}
+
+	tbl := table.New("Name", depl.DeploymentName)
+	tbl.AddRow("App", depl.AppName)
+	tbl.AddRow("Instance", depl.InstanceName)
+	tbl.AddRow("Part", depl.PartName)
+	tbl.AddRow("Service Path", depl.ServiceDir)
+	tbl.AddRow("Service Id", depl.ServiceId)
+	tbl.AddRow("Id", depl.Id)
+
+	tbl.Print()
+
+	fmt.Println()
+
+	var ctx = context.Background()
+	sd, err := dbus.NewWithContext(ctx)
+	if err != nil {
+		return err
+	}
+
+	units, err := sd.ListUnitsByPatternsContext(ctx, nil, []string{
+		service.ServiceUnit(depl.ServiceDir),
+		service.ServiceConfigUnit(depl.ServiceDir),
+		DeploymentUnit(depl.DeploymentName),
+		DeploymentConfigUnit(depl.DeploymentName),
+	})
+	if err != nil {
+		return err
+	}
+
+	tbl = table.New("Name", "Loaded", "Active")
+	for _, u := range units {
+		tbl.AddRow(u.Name, u.LoadState, u.ActiveState, u.SubState)
+	}
+	tbl.Print()
+
+	return nil
+}

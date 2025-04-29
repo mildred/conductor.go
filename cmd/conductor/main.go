@@ -28,7 +28,6 @@ func cmd_private_policy_server() *flaggy.Subcommand {
 		return policies.RunServer()
 	})
 	return cmd
-
 }
 
 func cmd_private() *flaggy.Subcommand {
@@ -191,6 +190,8 @@ func Main(ctx context.Context) error {
 	f.AttachSubcommand(cmd_service(), 1)
 	f.AttachSubcommand(cmd_deployment(), 1)
 	f.AttachSubcommand(cmd_function(), 1)
+	f.AttachSubcommand(cmd_policy(), 1)
+	f.AttachSubcommand(cmd_peer(), 1)
 	f.AttachSubcommand(cmd_run(), 1)
 	f.AttachSubcommand(cmd_reload(), 1)
 	f.AttachSubcommand(cmd_system(), 1)

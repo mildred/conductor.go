@@ -1,0 +1,15 @@
+{
+  "apps": {
+    "http": {
+      "servers": {
+        "srv0": {
+          "automatic_https": { "disable": true },
+          "listen": [ ":8080" ],
+          "routes": [
+          ]
+        }
+      }
+    }
+  }
+}
+

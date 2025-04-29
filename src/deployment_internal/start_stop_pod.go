@@ -14,6 +14,7 @@ import (
 	"github.com/mildred/conductor.go/src/tmpl"
 
 	. "github.com/mildred/conductor.go/src/deployment"
+	"github.com/mildred/conductor.go/src/dirs"
 )
 
 // Note for deployment hooks, there could be different ways to hook:
@@ -85,8 +86,8 @@ func StartPod(ctx context.Context, depl *Deployment) error {
 	//
 
 	log.Printf("start: Adding deployment to load-balancer...\n")
-	fmt.Fprintf(os.Stderr, "+ systemctl start %q\n", DeploymentConfigUnit(depl.DeploymentName))
-	cmd := exec.Command("systemctl", "start", DeploymentConfigUnit(depl.DeploymentName))
+	fmt.Fprintf(os.Stderr, "+ systemctl %s start %q\n", dirs.SystemdModeFlag(), DeploymentConfigUnit(depl.DeploymentName))
+	cmd := exec.Command("systemctl", dirs.SystemdModeFlag(), "start", DeploymentConfigUnit(depl.DeploymentName))
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	err = cmd.Run()
@@ -126,8 +127,8 @@ func StopPod(ctx context.Context, depl *Deployment) error {
 	//
 
 	log.Printf("stop: Removing deployment from load-balancer...\n")
-	fmt.Fprintf(os.Stderr, "+ systemctl stop %q\n", DeploymentConfigUnit(depl.DeploymentName))
-	cmd := exec.Command("systemctl", "stop", DeploymentConfigUnit(depl.DeploymentName))
+	fmt.Fprintf(os.Stderr, "+ systemctl %s stop %q\n", dirs.SystemdModeFlag(), DeploymentConfigUnit(depl.DeploymentName))
+	cmd := exec.Command("systemctl", dirs.SystemdModeFlag(), "stop", DeploymentConfigUnit(depl.DeploymentName))
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	err = cmd.Run()

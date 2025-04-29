@@ -14,6 +14,7 @@ import (
 
 	"github.com/mildred/conductor.go/src/deployment"
 	"github.com/mildred/conductor.go/src/deployment_util"
+	"github.com/mildred/conductor.go/src/dirs"
 	"github.com/mildred/conductor.go/src/service"
 	"github.com/mildred/conductor.go/src/service_internal"
 	"github.com/mildred/conductor.go/src/service_public"
@@ -246,8 +247,8 @@ func cmd_service_deploy() *flaggy.Subcommand {
 		}
 
 		if start {
-			fmt.Fprintf(os.Stderr, "+ systemctl start %s\n", deployment.DeploymentUnit(depl_name))
-			cmd := exec.Command("systemctl", "start", deployment.DeploymentUnit(depl_name))
+			fmt.Fprintf(os.Stderr, "+ systemctl %s start %s\n", dirs.SystemdModeFlag(), deployment.DeploymentUnit(depl_name))
+			cmd := exec.Command("systemctl", dirs.SystemdModeFlag(), "start", deployment.DeploymentUnit(depl_name))
 			cmd.Stdin = os.Stdin
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
@@ -349,10 +350,10 @@ func cmd_service_ls() *flaggy.Subcommand {
 	return cmd
 }
 
-func cmd_service_show() *flaggy.Subcommand {
+func cmd_service_show(name string) *flaggy.Subcommand {
 	var service string
 
-	cmd := flaggy.NewSubcommand("show") // "SERVICE",
+	cmd := flaggy.NewSubcommand(name) // "SERVICE",
 	cmd.Description = "Show service"
 	cmd.AddPositionalValue(&service, "service", 1, true, "The service to act on")
 
@@ -374,7 +375,7 @@ func cmd_service_status() *flaggy.Subcommand {
 	cmd.CommandUsed = Hook(func() error {
 		log.Default().SetOutput(io.Discard)
 
-		var cli []string = []string{"status"}
+		var cli []string = []string{dirs.SystemdModeFlag(), "status"}
 		for _, arg := range args {
 			unit, err := service.ServiceUnitByName(arg)
 			if err != nil {
@@ -614,7 +615,8 @@ func cmd_service() *flaggy.Subcommand {
 	cmd.AttachSubcommand(cmd_service_deploy(), 1)
 	cmd.AttachSubcommand(cmd_service_inspect(), 1)
 	cmd.AttachSubcommand(cmd_service_ls(), 1)
-	cmd.AttachSubcommand(cmd_service_show(), 1)
+	cmd.AttachSubcommand(cmd_service_show("show"), 1)
+	cmd.AttachSubcommand(cmd_service_show("print"), 1)
 	cmd.AttachSubcommand(cmd_service_status(), 1)
 	cmd.AttachSubcommand(cmd_service_unit(), 1)
 	cmd.AttachSubcommand(cmd_service_config(), 1)

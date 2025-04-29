@@ -22,5 +22,5 @@ ExecStop=/bin/sh     -xc 'PID=$$$$; exec conductor _ service stop    "$@"' - %f
 ExecStopPost=/bin/sh -xc 'PID=$$$$; exec conductor _ service cleanup "$@"' - %f
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target
 

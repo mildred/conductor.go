@@ -116,15 +116,7 @@ func ServiceUnitByName(name string) (string, error) {
 }
 
 func ServiceRealpath(service_dir string) (string, error) {
-	service_file, err := realpath.Realpath(filepath.Join(service_dir, ConfigName))
-	if err != nil {
-		return "", err
-	}
-	_, err = os.Stat(service_file)
-	if err != nil {
-		return "", err
-	}
-	return filepath.Dir(service_file), nil
+	return dirs.DirConfigRealpath(service_dir, ConfigName)
 }
 
 func ServiceNameFromFile(service_file string) (string, error) {

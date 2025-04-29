@@ -13,6 +13,8 @@ import (
 
 	"github.com/blang/semver"
 	"github.com/rhysd/go-github-selfupdate/selfupdate"
+
+	"github.com/mildred/conductor.go/src/dirs"
 )
 
 func Update(version string, desired_version string, check bool) error {
@@ -127,7 +129,7 @@ func Install(destdir string) error {
 		if err != nil {
 			return err
 		}
-		if !installed {
+		if !installed && dirs.AsRoot {
 			destination := path.Join("/usr/local/bin", path.Base(executable))
 			fmt.Fprintf(os.Stderr, "+ cp %q %q\n", executable, destination)
 
@@ -218,8 +220,8 @@ func Install(destdir string) error {
 		return err
 	}
 
-	fmt.Fprintf(os.Stderr, "+ systemctl daemon-reload\n")
-	cmd := exec.Command("systemctl", "daemon-reload")
+	fmt.Fprintf(os.Stderr, "+ systemctl %s daemon-reload\n", dirs.SystemdModeFlag())
+	cmd := exec.Command("systemctl", dirs.SystemdModeFlag(), "daemon-reload")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	err = cmd.Run()
@@ -279,8 +281,8 @@ func Uninstall(destdir string) error {
 		return err
 	}
 
-	fmt.Fprintf(os.Stderr, "+ systemctl daemon-reload\n")
-	cmd := exec.Command("systemctl", "daemon-reload")
+	fmt.Fprintf(os.Stderr, "+ systemctl %s daemon-reload\n", dirs.SystemdModeFlag())
+	cmd := exec.Command("systemctl", dirs.SystemdModeFlag(), "daemon-reload")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	err = cmd.Run()
@@ -288,8 +290,8 @@ func Uninstall(destdir string) error {
 		return err
 	}
 
-	fmt.Fprintf(os.Stderr, "+ systemctl enable --now conductor-policy-server.socket\n")
-	cmd = exec.Command("systemctl", "enable", "--now", "conductor-policy-server.socket")
+	fmt.Fprintf(os.Stderr, "+ systemctl %s enable --now conductor-policy-server.socket\n", dirs.SystemdModeFlag())
+	cmd = exec.Command("systemctl", dirs.SystemdModeFlag(), "enable", "--now", "conductor-policy-server.socket")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	err = cmd.Run()

@@ -12,6 +12,7 @@ import (
 
 	"github.com/coreos/go-systemd/v22/dbus"
 
+	"github.com/mildred/conductor.go/src/dirs"
 	"github.com/mildred/conductor.go/src/service"
 
 	. "github.com/mildred/conductor.go/src/deployment"
@@ -219,7 +220,7 @@ func CreateDeploymentFromService(name string, svc *service.Service, seed *Deploy
 
 	if unit_name != "" {
 
-		err = os.MkdirAll("/run/systemd/system/"+unit_name+".d", 0755)
+		err = os.MkdirAll(dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode(), unit_name+".d"), 0755)
 		if err != nil {
 			return "", err
 		}
@@ -228,7 +229,7 @@ func CreateDeploymentFromService(name string, svc *service.Service, seed *Deploy
 		conf += fmt.Sprintf("LogExtraFields=CONDUCTOR_APP=%s\n", svc.AppName)
 		conf += fmt.Sprintf("LogExtraFields=CONDUCTOR_INSTANCE=%s\n", svc.InstanceName)
 		conf += fmt.Sprintf("LogExtraFields=CONDUCTOR_DEPLOYMENT=%s\n", name)
-		err = os.WriteFile("/run/systemd/system/"+unit_name+".d/50-journal.conf", []byte(conf), 0644)
+		err = os.WriteFile(dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode(), unit_name+".d/50-journal.conf"), []byte(conf), 0644)
 		if err != nil {
 			return "", err
 		}
@@ -238,18 +239,18 @@ func CreateDeploymentFromService(name string, svc *service.Service, seed *Deploy
 			for _, directive := range service_directives {
 				conf += strings.ReplaceAll(directive, "\n", "\\\n") + "\n"
 			}
-			err = os.WriteFile("/run/systemd/system/"+unit_name+".d/90-extra-directives.conf", []byte(conf), 0644)
+			err = os.WriteFile(dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode(), unit_name+".d/90-extra-directives.conf"), []byte(conf), 0644)
 			if err != nil {
 				return "", err
 			}
 		}
 
-		cmd := exec.Command("systemctl", "daemon-reload")
+		cmd := exec.Command("systemctl", dirs.SystemdModeFlag(), "daemon-reload")
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		err = cmd.Run()
 		if err != nil {
-			return "", fmt.Errorf("while running systemctl daemon-reload, %v", err)
+			return "", fmt.Errorf("while running systemctl %s daemon-reload, %v", dirs.SystemdModeFlag(), err)
 		}
 
 	}
@@ -288,11 +289,16 @@ Accept=yes
 WantedBy=sockets.target
 `
 
-	err := os.WriteFile("/run/systemd/system/"+CGIFunctionSocketUnit(name), []byte(socket), 0o644)
+	err := os.MkdirAll(dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode()), 0755)
 	if err != nil {
 		return err
 	}
-	err = os.WriteFile("/run/systemd/system/"+CGIFunctionServiceUnit(name, ""), []byte(service), 0o644)
+
+	err = os.WriteFile(dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode(), CGIFunctionSocketUnit(name)), []byte(socket), 0o644)
+	if err != nil {
+		return err
+	}
+	err = os.WriteFile(dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode(), CGIFunctionServiceUnit(name, "")), []byte(service), 0o644)
 	if err != nil {
 		return err
 	}

@@ -386,3 +386,164 @@ It should be as simple as running `conductor action run SERVICE db:migrate ...`.
 
 It should be easy to declare an action to be accessible remotely via a CGI
 script, security should prevent unauthorized access.
+
+Clustering
+----------
+
+Conductor machines can work in cluster mode with a gossip protocol
+
+Cluster creation flow:
+
+- foreign node generates an invite key pair with `conductor peer invite`
+  the invite key is stored in a separate policy that is not a peer (no
+  peer-hostname in meta) and that is authorized to add a peer. The secret key is
+  shown on the standard output
+- current node adds the foreign node with `conductor peer add foreign INVITE_SECRET`
+- current node generates a secret key for itself stored in the metadata of the
+  policy matcher. It sets peer-hostname to the current fqdn and sets the public
+  key as allowed token
+- current node dials the foreign node and authenticate with the secret key
+  provided. It executes a CGI function to add a peer. It add itself to the
+  foreign peer. The remote:
+    - the foreign node add the first node to the peer list with the public key
+      it provided
+    - the foreign node generates a secret key for itself if needed and sets
+      itself in the list of peers providing the current fqdn
+    - the foreign node returns to the first node its public key
+- upon success, it adds the remote peer to the current list of peers
+
+Commands:
+
+- `conductor peers list`: list all peers in the cluster
+- `conductor peers pubkey [HOSTNAME]`: get the public key for the named peer, or
+  current. This key allows other peers to add themselves to the cluster
+- `conductor peers add HOSTNAME PUBKEY`: add the peer by hostname and public
+  key, this will also 
+
+Fleet
+-----
+
+Conductor should come with:
+
+- a default Caddy systemd unit (reverse proxy, configured for CGI and services)
+- a sidecar daemon to synchronize a configuration directory
+    - either using NATS Jetstream object store
+      https://github.com/corpix/ndfs
+    - a syncthing instance, probably overkill and difficult to configure and
+      maintain (no need for 2 way sync)
+
+Conductor should come with a few build-in functions that:
+
+- uploads to the local disk a service directory
+- enable/disable/start/stop services uploaded by function above
+- connects the file synchronization with another conductor machine
+
+A fleet orchestrator daemon should be provided that would share the common
+configuration via the file synchronization tool and would trigger functions on
+the orchestrator instances to enable/start services depending on allocation
+
+The fleet orchestrator could be implemented on each conductor instance and
+managed using NATS messenging. A conductor instance would take a lock on a
+service definition, evaluate where it should be scheduled, then release the
+lock.
+
+Orchestration strategies:
+
+- each conductor instance would have a config file describing the machine it is
+  running on with a number of resources (abstract). The machine could be
+  declared to have 4 VCPU, 100 GBRAM, 10 NETWORKPORTS
+
+- each service would declare the best and minimum numbers for these units
+
+- if a machine can be found that can allocate the best resource for all its
+services, it is chosen. Else, each machine is evaluated in turn, machine that
+cannot allocate the minimum resources are excluded. Then an overcommit ratio is
+computed for each unit, and the maximum overcommit is selected to evaluate the
+machine. The chosen machine is the one with the less overcommit.
+
+### Function: add peer
+
+authentication: JWT or bearer token signed by the member
+
+inputs:
+
+  - policy name
+  - peer id (mandatory)
+  - peer hostname (optional)
+  - peer authentication method (list):
+      - public key (JWT token)
+      - bearer token
+  - authorizations (object of boolean values)
+      - peer-list-read
+      - peer-list-write
+      - service-write
+  - if the member add should be gossipped to other members
+  - the list of member ids that received this message already (for gossip)
+
+Create an Any matcher in the policy with the peer info in the matcher
+
+Add metadata to the matcher:
+  - peer id
+  - peer hostname
+  - authorizations
+
+
+```json
+{
+  match: [
+    {
+      any: [
+        {
+          "meta": {
+            "peer-id": "1",
+            "peer-hostname": "peer-1.example.org"
+          },
+          default_authorizations: {
+            "peer-list-read": true,
+            "peer-list-write": true,
+            "service-write": true
+          },
+          bearer: [
+            { "token": "secret" }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+### Function: remove peer
+
+authentication: JWT or bearer  token signed by the member
+
+inputs: 
+  - policy name
+  - peer id
+  - if the member remove should be gossipped to other members
+  - the list of member ids that received this message already (for gossip)
+
+Remove an Any matcher from the policy
+
+### Function: list peers
+
+authentication: JWT or bearer token signed by the member
+
+inputs:
+  - policy name
+
+outputs: list of peers
+
+### Function: write service
+
+authentication: JWT or bearer token signed by the member
+
+inputs:
+  - a list of:
+      - service name
+      - service files (archive file)
+      - service version string
+  - should the service write should be gossipped or not
+
+does nothing if the service is already at the same version
+

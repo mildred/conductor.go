@@ -4,7 +4,10 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
+
+	"github.com/yookoala/realpath"
 )
 
 var home string = os.Getenv("HOME")
@@ -27,6 +30,22 @@ var SelfStateHome = path.Join(StateHome, SelfName)
 var SelfRuntimeDir = path.Join(RuntimeDir, SelfName)
 var SelfDataDirs = MultiJoin(SelfName, DataDirs...)
 var SelfConfigDirs = MultiJoin(SelfName, ConfigDirs...)
+
+func SystemdMode() string {
+	if AsRoot {
+		return "system"
+	} else {
+		return "user"
+	}
+}
+
+func SystemdModeFlag() string {
+	if AsRoot {
+		return "--system"
+	} else {
+		return "--user"
+	}
+}
 
 func init_dir(root_dir, xdg_varname, xdg_dir string) string {
 	if AsRoot {
@@ -68,4 +87,16 @@ func MultiJoin(ext string, dirs ...string) []string {
 
 func Join(elem ...string) string {
 	return path.Join(elem...)
+}
+
+func DirConfigRealpath(dir, config_name string) (string, error) {
+	service_file, err := realpath.Realpath(filepath.Join(dir, config_name))
+	if err != nil {
+		return "", err
+	}
+	_, err = os.Stat(service_file)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Dir(service_file), nil
 }

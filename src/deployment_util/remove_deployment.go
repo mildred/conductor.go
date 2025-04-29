@@ -10,6 +10,8 @@ import (
 
 	"github.com/coreos/go-systemd/v22/dbus"
 
+	"github.com/mildred/conductor.go/src/dirs"
+
 	. "github.com/mildred/conductor.go/src/deployment"
 )
 
@@ -47,8 +49,8 @@ func RemoveTimeout(ctx0 context.Context, deployment_name string, timeout, term_t
 		defer cancel()
 	}
 
-	fmt.Fprintf(os.Stderr, "+ systemctl stop %s\n", DeploymentUnit(deployment_name))
-	cmd := exec.CommandContext(ctx, "systemctl", "stop", DeploymentUnit(deployment_name))
+	fmt.Fprintf(os.Stderr, "+ systemctl %s stop %s\n", dirs.SystemdModeFlag(), DeploymentUnit(deployment_name))
+	cmd := exec.CommandContext(ctx, "systemctl", dirs.SystemdModeFlag(), "stop", DeploymentUnit(deployment_name))
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	err = cmd.Run()
@@ -64,8 +66,8 @@ func RemoveTimeout(ctx0 context.Context, deployment_name string, timeout, term_t
 		ctx, cancel = context.WithTimeout(ctx0, term_timeout)
 		defer cancel() // should not be needed but else golang prints a warning
 
-		fmt.Fprintf(os.Stderr, "+ systemctl kill %s\n", DeploymentUnit(deployment_name))
-		cmd := exec.CommandContext(ctx, "systemctl", "kill", DeploymentUnit(deployment_name))
+		fmt.Fprintf(os.Stderr, "+ systemctl %s kill %s\n", dirs.SystemdModeFlag(), DeploymentUnit(deployment_name))
+		cmd := exec.CommandContext(ctx, "systemctl", dirs.SystemdModeFlag(), "kill", DeploymentUnit(deployment_name))
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		err := cmd.Run()
@@ -75,8 +77,8 @@ func RemoveTimeout(ctx0 context.Context, deployment_name string, timeout, term_t
 	}
 
 	if failed_to_stop {
-		fmt.Fprintf(os.Stderr, "+ systemctl kill --signal=SIGKILL %q\n", DeploymentUnit(deployment_name))
-		cmd := exec.Command("systemctl", "kill", "--signal=SIGKILL", DeploymentUnit(deployment_name))
+		fmt.Fprintf(os.Stderr, "+ systemctl %s kill --signal=SIGKILL %q\n", dirs.SystemdModeFlag(), DeploymentUnit(deployment_name))
+		cmd := exec.Command("systemctl", dirs.SystemdModeFlag(), "kill", "--signal=SIGKILL", DeploymentUnit(deployment_name))
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		err := cmd.Run()
@@ -84,8 +86,8 @@ func RemoveTimeout(ctx0 context.Context, deployment_name string, timeout, term_t
 			log.Printf("Error killing: %v", err)
 		}
 
-		fmt.Fprintf(os.Stderr, "+ systemctl reset-failed %q\n", DeploymentUnit(deployment_name))
-		cmd = exec.Command("systemctl", "reset-failed", DeploymentUnit(deployment_name))
+		fmt.Fprintf(os.Stderr, "+ systemctl %s reset-failed %q\n", dirs.SystemdModeFlag(), DeploymentUnit(deployment_name))
+		cmd = exec.Command("systemctl", dirs.SystemdModeFlag(), "reset-failed", DeploymentUnit(deployment_name))
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		err = cmd.Run()
@@ -94,8 +96,8 @@ func RemoveTimeout(ctx0 context.Context, deployment_name string, timeout, term_t
 		}
 	}
 
-	fmt.Fprintf(os.Stderr, "+ systemctl stop %s\n", DeploymentConfigUnit(deployment_name))
-	cmd = exec.Command("systemctl", "stop", DeploymentConfigUnit(deployment_name))
+	fmt.Fprintf(os.Stderr, "+ systemctl %s stop %s\n", dirs.SystemdModeFlag(), DeploymentConfigUnit(deployment_name))
+	cmd = exec.Command("systemctl", dirs.SystemdModeFlag(), "stop", DeploymentConfigUnit(deployment_name))
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if !has_config {
@@ -106,8 +108,8 @@ func RemoveTimeout(ctx0 context.Context, deployment_name string, timeout, term_t
 		return err
 	}
 
-	fmt.Fprintf(os.Stderr, "+ systemctl stop %s\n", CGIFunctionSocketUnit(deployment_name))
-	cmd = exec.Command("systemctl", "stop", CGIFunctionSocketUnit(deployment_name))
+	fmt.Fprintf(os.Stderr, "+ systemctl %s stop %s\n", dirs.SystemdModeFlag(), CGIFunctionSocketUnit(deployment_name))
+	cmd = exec.Command("systemctl", dirs.SystemdModeFlag(), "stop", CGIFunctionSocketUnit(deployment_name))
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if !has_cgi_function {
@@ -125,10 +127,10 @@ func RemoveTimeout(ctx0 context.Context, deployment_name string, timeout, term_t
 	}
 
 	systemd_run_dirs := []string{
-		"/run/systemd/system/" + DeploymentUnit(deployment_name) + ".d",
-		"/run/systemd/system/" + CGIFunctionSocketUnit(deployment_name) + ".d",
-		"/run/systemd/system/" + CGIFunctionSocketUnit(deployment_name),
-		"/run/systemd/system/" + CGIFunctionServiceUnit(deployment_name, ""),
+		dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode(), DeploymentUnit(deployment_name)+".d"),
+		dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode(), CGIFunctionSocketUnit(deployment_name)+".d"),
+		dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode(), CGIFunctionSocketUnit(deployment_name)),
+		dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode(), CGIFunctionServiceUnit(deployment_name, "")),
 	}
 	for _, systemd_run_dir := range systemd_run_dirs {
 		fmt.Fprintf(os.Stderr, "+ rm -rf %q\n", systemd_run_dir)

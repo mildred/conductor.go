@@ -13,21 +13,24 @@ import (
 
 	"github.com/mildred/conductor.go/src/deployment"
 	"github.com/mildred/conductor.go/src/deployment_public"
+	"github.com/mildred/conductor.go/src/dirs"
 )
 
 func cmd_deployment_ls() *flaggy.Subcommand {
-	var unit bool
+	var unit, terse bool
 
 	cmd := flaggy.NewSubcommand("ls")
 	cmd.Bool(&unit, "", "unit", "Show systemd units column")
+	cmd.Bool(&terse, "", "terse", "Show minimum details")
 	cmd.Description = "List all deployments"
 
 	cmd.CommandUsed = Hook(func() error {
 		log.Default().SetOutput(io.Discard)
 
 		return deployment_public.PrintList(deployment_public.PrintListSettings{
-			Unit:        unit,
-			ServiceUnit: unit,
+			Unit:         unit,
+			ServiceUnit:  unit,
+			ConfigStatus: !terse,
 		})
 	})
 	return cmd
@@ -100,7 +103,7 @@ func cmd_deployment_systemd(cmd_name, descr string) func() *flaggy.Subcommand {
 				ids = append(ids, path.Base(cwd))
 			}
 
-			var cli []string = []string{cmd_name}
+			var cli []string = []string{dirs.SystemdModeFlag(), cmd_name}
 			if cmd_name == "kill" && signal != "" {
 				cli = append(cli, "--signal="+signal)
 			}
@@ -170,6 +173,21 @@ func cmd_deployment_env() *flaggy.Subcommand {
 	return cmd
 }
 
+func cmd_deployment_show(name string) *flaggy.Subcommand {
+	var depl_name string
+
+	cmd := flaggy.NewSubcommand(name) // "SERVICE",
+	cmd.Description = "Show deployment"
+	cmd.AddPositionalValue(&depl_name, "deployment", 1, true, "The deployment to use")
+
+	cmd.CommandUsed = Hook(func() error {
+		log.Default().SetOutput(io.Discard)
+
+		return deployment_public.Print(depl_name)
+	})
+	return cmd
+}
+
 func cmd_deployment() *flaggy.Subcommand {
 	cmd := flaggy.NewSubcommand("deployment")
 	cmd.ShortName = "d"
@@ -184,6 +202,8 @@ func cmd_deployment() *flaggy.Subcommand {
 	cmd.AttachSubcommand(cmd_deployment_kill(), 1)
 	cmd.AttachSubcommand(cmd_deployment_unit(), 1)
 	cmd.AttachSubcommand(cmd_deployment_env(), 1)
+	cmd.AttachSubcommand(cmd_deployment_show("show"), 1)
+	cmd.AttachSubcommand(cmd_deployment_show("print"), 1)
 	cmd.RequireSubcommand = true
 	return cmd
 }

@@ -18,6 +18,7 @@ import (
 	"github.com/rodaine/table"
 
 	"github.com/mildred/conductor.go/src/deployment_public"
+	"github.com/mildred/conductor.go/src/dirs"
 	"github.com/mildred/conductor.go/src/utils"
 
 	. "github.com/mildred/conductor.go/src/service"
@@ -81,8 +82,8 @@ func ReloadServices(inclusive bool) error {
 	}
 
 	for _, unit := range stop_list {
-		fmt.Fprintf(os.Stderr, "+ systemctl disable --now %q\n", unit)
-		cmd := exec.Command("systemctl", "disable", "--now", unit)
+		fmt.Fprintf(os.Stderr, "+ systemctl %s disable --now %q\n", dirs.SystemdModeFlag(), unit)
+		cmd := exec.Command("systemctl", dirs.SystemdModeFlag(), "disable", "--now", unit)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		err = cmd.Run()
@@ -92,8 +93,8 @@ func ReloadServices(inclusive bool) error {
 	}
 
 	for _, unit := range start_list {
-		fmt.Fprintf(os.Stderr, "+ systemctl enable --now %q\n", unit)
-		cmd := exec.Command("systemctl", "enable", "--now", unit)
+		fmt.Fprintf(os.Stderr, "+ systemctl %s enable --now %q\n", dirs.SystemdModeFlag(), unit)
+		cmd := exec.Command("systemctl", dirs.SystemdModeFlag(), "enable", "--now", unit)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		err = cmd.Run()
@@ -113,11 +114,11 @@ func Enable(definition_path string, now bool) error {
 
 	var cmd *exec.Cmd
 	if now {
-		fmt.Fprintf(os.Stderr, "+ systemctl enable --now %q\n", unit)
-		cmd = exec.Command("systemctl", "enable", "--now", unit)
+		fmt.Fprintf(os.Stderr, "+ systemctl %s enable --now %q\n", dirs.SystemdModeFlag(), unit)
+		cmd = exec.Command("systemctl", dirs.SystemdModeFlag(), "enable", "--now", unit)
 	} else {
-		fmt.Fprintf(os.Stderr, "+ systemctl enable %q\n", unit)
-		cmd = exec.Command("systemctl", "enable", unit)
+		fmt.Fprintf(os.Stderr, "+ systemctl %s enable %q\n", dirs.SystemdModeFlag(), unit)
+		cmd = exec.Command("systemctl", dirs.SystemdModeFlag(), "enable", unit)
 	}
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -132,11 +133,11 @@ func Disable(definition_path string, now bool) error {
 
 	var cmd *exec.Cmd
 	if now {
-		fmt.Fprintf(os.Stderr, "+ systemctl disable --now %q\n", unit)
-		cmd = exec.Command("systemctl", "disable", "--now", unit)
+		fmt.Fprintf(os.Stderr, "+ systemctl %s disable --now %q\n", dirs.SystemdModeFlag(), unit)
+		cmd = exec.Command("systemctl", dirs.SystemdModeFlag(), "disable", "--now", unit)
 	} else {
-		fmt.Fprintf(os.Stderr, "+ systemctl disable %q\n", unit)
-		cmd = exec.Command("systemctl", "disable", unit)
+		fmt.Fprintf(os.Stderr, "+ systemctl %s disable %q\n", dirs.SystemdModeFlag(), unit)
+		cmd = exec.Command("systemctl", dirs.SystemdModeFlag(), "disable", unit)
 	}
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -149,8 +150,8 @@ func Start(definition_path string) error {
 		return err
 	}
 
-	fmt.Fprintf(os.Stderr, "+ systemctl start %q\n", unit)
-	cmd := exec.Command("systemctl", "start", unit)
+	fmt.Fprintf(os.Stderr, "+ systemctl %s start %q\n", dirs.SystemdModeFlag(), unit)
+	cmd := exec.Command("systemctl", dirs.SystemdModeFlag(), "start", unit)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
@@ -162,8 +163,8 @@ func Stop(definition_path string) error {
 		return err
 	}
 
-	fmt.Fprintf(os.Stderr, "+ systemctl stop %q\n", unit)
-	cmd := exec.Command("systemctl", "stop", unit)
+	fmt.Fprintf(os.Stderr, "+ systemctl %s stop %q\n", dirs.SystemdModeFlag(), unit)
+	cmd := exec.Command("systemctl", dirs.SystemdModeFlag(), "stop", unit)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
@@ -180,7 +181,7 @@ func Restart(definition_path string, opts RestartOpts) error {
 		return err
 	}
 
-	var args []string = []string{"restart"}
+	var args []string = []string{dirs.SystemdModeFlag(), "restart"}
 	if opts.NoBlock {
 		args = append(args, "--no-block")
 
@@ -225,7 +226,7 @@ func Reload(definition_path string, opts ReloadOpts) error {
 		active = u.ActiveState == "active"
 	}
 
-	var args []string
+	var args []string = []string{dirs.SystemdModeFlag()}
 	if active {
 		args = append(args, "reload")
 	} else {
