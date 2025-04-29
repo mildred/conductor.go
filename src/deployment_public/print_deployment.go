@@ -184,7 +184,6 @@ func Print(depl_name string) error {
 	tbl.AddRow("Part", depl.PartName)
 	tbl.AddRow("Service Path", depl.ServiceDir)
 	tbl.AddRow("Service Id", depl.ServiceId)
-	tbl.AddRow("Id", depl.Id)
 
 	tbl.Print()
 
@@ -206,9 +205,19 @@ func Print(depl_name string) error {
 		return err
 	}
 
-	tbl = table.New("Name", "Loaded", "Active")
+	tbl = table.New("", "Unit", "Loaded", "Active", "")
 	for _, u := range units {
-		tbl.AddRow(u.Name, u.LoadState, u.ActiveState, u.SubState)
+		var name string
+		if u.Name == service.ServiceUnit(depl.ServiceDir) {
+			name = "Service"
+		} else if u.Name == service.ServiceConfigUnit(depl.ServiceDir) {
+			name = "Reverse-Proxy Service Config"
+		} else if u.Name == DeploymentUnit(depl.DeploymentName) {
+			name = "Deployment"
+		} else if u.Name == DeploymentConfigUnit(depl.DeploymentName) {
+			name = "Reverse-Proxy Deployment Config"
+		}
+		tbl.AddRow(name, u.Name, u.LoadState, u.ActiveState, "("+u.SubState+")")
 	}
 	tbl.Print()
 

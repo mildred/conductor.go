@@ -624,6 +624,7 @@ func PrintService(name string) error {
 	tbl.AddRow("Path", service.BasePath)
 	tbl.AddRow("Filename", service.FileName)
 	tbl.AddRow("Id", service.Id)
+	tbl.Print()
 
 	var ctx = context.Background()
 	sd, err := dbus.NewWithContext(ctx)
@@ -631,29 +632,29 @@ func PrintService(name string) error {
 		return err
 	}
 
+	tbl = table.New("", "")
+	for _, col := range service.DisplayServiceConfig {
+		tbl.AddRow(col, service.Config[col])
+	}
+	tbl.Print()
+	fmt.Println()
+
+	tbl = table.New("", "Unit", "Loaded", "Active", "")
 	units, err := sd.ListUnitsByPatternsContext(ctx, nil, []string{ServiceUnit(service.BasePath), ServiceConfigUnit(service.BasePath)})
 	if err != nil {
 		return err
 	}
 
 	for _, u := range units {
+		var name string
 		if u.Name == ServiceUnit(service.BasePath) {
-			tbl.AddRow("Service", u.Name)
-			tbl.AddRow("Service Enabled", u.LoadState)
-			tbl.AddRow("Service Started", fmt.Sprintf("%s (%s)", u.ActiveState, u.SubState))
+			name = "Service"
 		} else if u.Name == ServiceConfigUnit(service.BasePath) {
-			tbl.AddRow("Reverse-Proxy config", u.Name)
-			tbl.AddRow("Reverse-Proxy config Enabled", u.LoadState)
-			tbl.AddRow("Reverse-Proxy config Started", fmt.Sprintf("%s (%s)", u.ActiveState, u.SubState))
+			name = "Reverse-Proxy Config"
 		}
+		tbl.AddRow(name, u.Name, u.LoadState, u.ActiveState, "("+u.SubState+")")
 	}
-
-	for _, col := range service.DisplayServiceConfig {
-		tbl.AddRow(col, service.Config[col])
-	}
-
 	tbl.Print()
-
 	fmt.Println()
 
 	deployment_public.PrintList(deployment_public.PrintListSettings{
