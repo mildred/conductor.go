@@ -262,28 +262,25 @@ func CreateDeploymentFromService(name string, svc *service.Service, seed *Deploy
 func CreateCGIFunctionUnits(name string) error {
 	var service = `[Unit]
 Description=Conductor CGI Function ` + name + `
+CollectMode=inactive-or-failed
 
 [Service]
 Type=oneshot
-ExitType=cgroup
 StandardInput=socket
 StandardOutput=socket
 StandardError=journal
-CollectMode=inactive-or-failed
 
 WorkingDirectory=` + DeploymentDirByName(name, false) + `
 Environment=CONDUCTOR_DEPLOYMENT=` + name + `
 Environment=CONDUCTOR_SYSTEMD_UNIT=%n
 
-ExecStart=/bin/sh -xc 'PID=$$$$; exec conductor _ deployment start'
+ExecStart=/bin/sh -xc 'PID=$$$$; exec conductor _ deployment start --function'
 `
 
 	var socket = `[Unit]
 Description=Conductor CGI Function socket for ` + name + `
 Requires=` + DeploymentUnit(name) + `
-After=` + DeploymentUnit(name) + `
 Requires=` + DeploymentConfigUnit(name) + `
-Before=` + DeploymentConfigUnit(name) + `
 
 [Socket]
 ListenStream=` + DeploymentSocketPath(name) + `
@@ -293,7 +290,11 @@ Accept=yes
 WantedBy=sockets.target
 `
 
-	var function_conf = `[Service]
+	var function_conf = `[Unit]
+Requires=` + DeploymentConfigUnit(name) + `
+Before=` + DeploymentConfigUnit(name) + `
+
+[Service]
 Type=oneshot
 ExitType=main
 RemainAfterExit=yes

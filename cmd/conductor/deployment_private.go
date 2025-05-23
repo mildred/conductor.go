@@ -17,21 +17,27 @@ func cmd_private_deployment_prepare() *flaggy.Subcommand {
 }
 
 func cmd_private_deployment_start() *flaggy.Subcommand {
+	var function bool
+
 	cmd := flaggy.NewSubcommand("start")
+	cmd.Bool(&function, "", "function", "Start a function")
 	cmd.Description = "Start a deployment"
 
 	cmd.CommandUsed = Hook(func() error {
-		return deployment_internal.Start()
+		return deployment_internal.Start(function)
 	})
 	return cmd
 }
 
 func cmd_private_deployment_stop() *flaggy.Subcommand {
+	var function bool
+
 	cmd := flaggy.NewSubcommand("stop")
+	cmd.Bool(&function, "", "function", "Stop a function")
 	cmd.Description = "Stop a deployment"
 
 	cmd.CommandUsed = Hook(func() error {
-		return deployment_internal.Stop()
+		return deployment_internal.Stop(function)
 	})
 	return cmd
 }

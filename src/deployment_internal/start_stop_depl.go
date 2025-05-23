@@ -95,7 +95,7 @@ func Prepare() error {
 	return nil
 }
 
-func Start() error {
+func Start(function bool) error {
 	ctx := context.Background()
 	depl, err := LoadDeployment(ConfigName)
 	if err != nil {
@@ -104,16 +104,20 @@ func Start() error {
 
 	log.Printf("start: Loaded deployment %s, service %s-%s\n", depl.DeploymentName, depl.AppName, depl.InstanceName)
 
-	if depl.Pod != nil {
+	if depl.Pod != nil && !function {
 		return StartPod(ctx, depl)
 	} else if depl.Function != nil {
-		return StartFunction(ctx, depl)
+		if function {
+			return StartFunction(ctx, depl)
+		} else {
+			return nil
+		}
 	} else {
-		return fmt.Errorf("Cannot start deployment: not a pod")
+		return fmt.Errorf("Cannot start incompatible deployment")
 	}
 }
 
-func Stop() error {
+func Stop(function bool) error {
 	ctx := context.Background()
 
 	//
@@ -136,10 +140,14 @@ func Stop() error {
 
 	log.Printf("stop: Loaded deployment %s, service %s-%s\n", depl.DeploymentName, depl.AppName, depl.InstanceName)
 
-	if depl.Pod != nil {
+	if depl.Pod != nil && !function {
 		return StopPod(ctx, depl)
 	} else if depl.Function != nil {
-		return StopFunction(ctx, depl)
+		if function {
+			return StopFunction(ctx, depl)
+		} else {
+			return nil
+		}
 	} else {
 		return fmt.Errorf("Cannot stop deployment: not a pod")
 	}
