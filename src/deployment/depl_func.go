@@ -14,7 +14,12 @@ type DeploymentFunction struct {
 
 func (f *DeploymentFunction) ProxyConfig(depl *Deployment) (caddy.ConfigItems, error) {
 	var result caddy.ConfigItems
-	for _, reverse := range f.ReverseProxy {
+	proxies, err := f.ReverseProxy(depl.Service)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, reverse := range proxies {
 		if reverse.UpstreamsPath == "" {
 			continue
 		}

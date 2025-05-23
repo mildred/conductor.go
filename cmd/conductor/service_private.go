@@ -1,10 +1,54 @@
 package main
 
 import (
+	"fmt"
+
 	"github.com/integrii/flaggy"
 
+	"github.com/mildred/conductor.go/src/service"
 	"github.com/mildred/conductor.go/src/service_internal"
 )
+
+func cmd_private_service_id() *flaggy.Subcommand {
+	var service_name string
+	var extra string
+	var source bool
+	var raw bool
+
+	cmd := flaggy.NewSubcommand("id")
+	cmd.Description = "Get the service ID"
+	cmd.String(&extra, "extra", "e", "Extra data to compute the ID")
+	cmd.Bool(&source, "source", "s", "Get the gata that contributes to the ID instead")
+	cmd.Bool(&raw, "raw", "r", "Do not add extra end of line")
+	cmd.AddPositionalValue(&service_name, "service", 1, true, "The service to act on")
+
+	cmd.CommandUsed = Hook(func() error {
+		s, err := service.LoadServiceByName(service_name)
+		if err != nil {
+			return err
+		}
+
+		var data string
+		if source {
+			var d []byte
+			d, err = s.ComputeIdData(extra)
+			data = string(d)
+		} else {
+			data, err = s.ComputeId(extra)
+		}
+		if err != nil {
+			return err
+		}
+
+		if raw {
+			fmt.Print(data)
+		} else {
+			fmt.Println(data)
+		}
+		return nil
+	})
+	return cmd
+}
 
 func cmd_private_service_template() *flaggy.Subcommand {
 	var service string
@@ -123,6 +167,7 @@ func cmd_private_service() *flaggy.Subcommand {
 	cmd.AttachSubcommand(cmd_private_service_register(), 1)
 	cmd.AttachSubcommand(cmd_private_service_deregister(), 1)
 	cmd.AttachSubcommand(cmd_private_service_template(), 1)
+	cmd.AttachSubcommand(cmd_private_service_id(), 1)
 	cmd.RequireSubcommand = true
 	return cmd
 }

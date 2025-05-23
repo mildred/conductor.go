@@ -4,23 +4,25 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"slices"
 	"strings"
 
+	"github.com/mildred/conductor.go/src/caddy"
 	"github.com/mildred/conductor.go/src/dirs"
 )
 
 type ServiceFunction struct {
-	Name                string                        `json:"name"`
-	ServiceDirectives   []string                      `json:"service_directives,omitempty"`
-	Format              string                        `json:"format,omitempty"` // Format: cgi, http-stdio
-	Exec                []string                      `json:"exec,omitempty"`
-	StderrAsStdout      bool                          `json:"stderr_as_stdout,omitempty"`
-	ResponseHeaders     []string                      `json:"response_headers,omitempty"`    // Additional response headers
-	NoResponseHeaders   bool                          `json:"no_response_headers,omitempty"` // Function does not add response headers
-	PathInfoStrip       int                           `json:"path_info_strip,omitempty"`     // Strip this number of leading elements from PATH_INFO
-	Policies            []string                      `json:"policies,omitempty"`            // Policies to match
-	ReverseProxy        []*ServiceFunctionProxyConfig `json:"reverse_proxy"`
-	DefaultReverseProxy *bool                         `json:"default_reverse_proxy,omitempty"`
+	Name                 string                       `json:"name"`
+	ServiceDirectives    []string                     `json:"service_directives,omitempty"`
+	Format               string                       `json:"format,omitempty"` // Format: cgi, http-stdio
+	Exec                 []string                     `json:"exec,omitempty"`
+	StderrAsStdout       bool                         `json:"stderr_as_stdout,omitempty"`
+	ResponseHeaders      []string                     `json:"response_headers,omitempty"`    // Additional response headers
+	NoResponseHeaders    bool                         `json:"no_response_headers,omitempty"` // Function does not add response headers
+	PathInfoStrip        int                          `json:"path_info_strip,omitempty"`     // Strip this number of leading elements from PATH_INFO
+	Policies             []string                     `json:"policies,omitempty"`            // Policies to match
+	ProvidedReverseProxy []ServiceFunctionProxyConfig `json:"reverse_proxy"`
+	DefaultReverseProxy  *bool                        `json:"default_reverse_proxy,omitempty"`
 }
 
 type ServiceFunctionProxyConfig struct { // TODO
@@ -61,46 +63,61 @@ func (functions *ServiceFunctions) FixPaths(dir string) error {
 }
 
 func (functions *ServiceFunctions) FillDefaults(service *Service) error {
-	for _, f := range *functions {
+	return nil
+}
 
-		if (f.DefaultReverseProxy == nil && len(f.ReverseProxy) == 0) || *f.DefaultReverseProxy {
-			name := "default"
-			route, err := f.CaddyConfig(service, name)
+func (f *ServiceFunction) ReverseProxy(service *Service) (res []ServiceFunctionProxyConfig, err error) {
+	var names []string
+
+	for i, proxy := range f.ProvidedReverseProxy {
+		if proxy.Name == "" {
+			proxy.Name = fmt.Sprintf("%d", i)
+		}
+
+		if slices.Contains(names, proxy.Name) {
+			return nil, fmt.Errorf("Reverse proxy configuration %+v appears more than once", proxy.Name)
+		}
+		names = append(names, proxy.Name)
+
+		if len(proxy.Route) != 0 {
+			err := caddyConfigSetId(&proxy.Route, f.CaddyConfigName(service, proxy.Name))
 			if err != nil {
-				return err
+				return nil, err
 			}
-			f.ReverseProxy = append(f.ReverseProxy, &ServiceFunctionProxyConfig{
-				Name:          "default",
-				MountPoint:    "conductor-server/routes",
-				Route:         route,
-				UpstreamsPath: f.CaddyConfigName(service, name) + ".handler/upstreams",
-			})
-		}
-
-		for i, proxy := range f.ReverseProxy {
-			if proxy.Name == "" {
-				proxy.Name = fmt.Sprintf("%d", i)
-			}
-
-			if proxy.MountPoint == "" {
-				proxy.MountPoint = "conductor-server/routes"
-			}
-			if len(proxy.Route) == 0 {
-				var err error
-				proxy.Route, err = f.CaddyConfig(service, proxy.Name)
-				if err != nil {
-					return err
-				}
-			} else {
-				err := caddyConfigSetId(&proxy.Route, f.CaddyConfigName(service, proxy.Name))
-				if err != nil {
-					return err
-				}
+		} else {
+			proxy.Route, err = f.CaddyConfig(service, proxy.Name)
+			if err != nil {
+				return nil, err
 			}
 		}
+
+		if proxy.MountPoint == "" {
+			proxy.MountPoint = "conductor-server/routes"
+		}
+
+		res = append(res, proxy)
 	}
 
-	return nil
+	if (f.DefaultReverseProxy == nil && len(res) == 0) || *f.DefaultReverseProxy {
+		name := "default"
+		if slices.Contains(names, name) {
+			return nil, fmt.Errorf("Reverse proxy configuration %+v appears more than once because default_reverse_proxy is set", name)
+		}
+
+		route, err := f.CaddyConfig(service, name)
+		if err != nil {
+			return nil, err
+		}
+
+		res = append(res, ServiceFunctionProxyConfig{
+			Name:          name,
+			MountPoint:    "conductor-server/routes",
+			Route:         route,
+			UpstreamsPath: f.CaddyConfigName(service, name) + ".handler/upstreams",
+		})
+	}
+
+	return
 }
 
 func caddyConfigSetId(route *json.RawMessage, new_id string) error {
@@ -119,6 +136,22 @@ func caddyConfigSetId(route *json.RawMessage, new_id string) error {
 	}
 
 	return nil
+}
+
+func (f *ServiceFunction) ReverseProxyConfigs(service *Service) (configs caddy.ConfigItems, err error) {
+	proxies, err := f.ReverseProxy(service)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, proxy := range proxies {
+		configs = append(configs, &caddy.ConfigItem{
+			MountPoint: proxy.MountPoint,
+			Config:     proxy.Route,
+		})
+	}
+
+	return
 }
 
 func (f *ServiceFunction) CaddyConfigName(service *Service, name string) string {

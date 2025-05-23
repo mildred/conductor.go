@@ -376,6 +376,20 @@ func (service *Service) FillDefaults() error {
 	return nil
 }
 
+func (service *Service) ComputeIdData(extra string) ([]byte, error) {
+	data, err := json.Marshal(service)
+	if err != nil {
+		return nil, err
+	}
+
+	canon, err := jsoncanonicalizer.Transform(data)
+	if err != nil {
+		return nil, err
+	}
+
+	return append(canon, []byte(extra)...), nil
+}
+
 func (service *Service) ComputeId(extra string) (string, error) {
 	data, err := json.Marshal(service)
 	if err != nil {
@@ -455,23 +469,19 @@ func (service *Service) ProxyConfig() (caddy.ConfigItems, error) {
 	var configs caddy.ConfigItems
 
 	for _, pod := range service.Pods {
-		for _, proxy := range pod.ReverseProxy {
-			if proxy.UpstreamsPath != "" {
-				configs = append(configs, &caddy.ConfigItem{
-					MountPoint: proxy.MountPoint,
-					Config:     proxy.Route,
-				})
-			}
+		cfgs, err := pod.ReverseProxyConfigs(service)
+		if err != nil {
+			return nil, err
 		}
+		configs = append(configs, cfgs...)
 	}
 
 	for _, f := range service.Functions {
-		for _, proxy := range f.ReverseProxy {
-			configs = append(configs, &caddy.ConfigItem{
-				MountPoint: proxy.MountPoint,
-				Config:     proxy.Route,
-			})
+		cfgs, err := f.ReverseProxyConfigs(service)
+		if err != nil {
+			return nil, err
 		}
+		configs = append(configs, cfgs...)
 	}
 
 	if service.ProxyConfigTemplate != "" {

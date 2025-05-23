@@ -34,7 +34,12 @@ func (pod *DeploymentPod) TemplatePod(depl *Deployment) error {
 
 func (pod *DeploymentPod) ProxyConfig(depl *Deployment) (caddy.ConfigItems, error) {
 	var result caddy.ConfigItems
-	for _, reverse := range pod.ReverseProxy {
+	proxies, err := pod.ReverseProxy(depl.Service)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, reverse := range proxies {
 		if reverse.UpstreamsPath == "" {
 			continue
 		}
