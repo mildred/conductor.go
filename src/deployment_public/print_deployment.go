@@ -26,7 +26,7 @@ type PrintListSettings struct {
 
 func PrintList(settings PrintListSettings) error {
 	var ctx = context.Background()
-	sd, err := dbus.NewWithContext(ctx)
+	sd, err := utils.NewSystemdClient(ctx)
 	if err != nil {
 		return err
 	}
@@ -190,7 +190,7 @@ func Print(depl_name string) error {
 	fmt.Println()
 
 	var ctx = context.Background()
-	sd, err := dbus.NewWithContext(ctx)
+	sd, err := utils.NewSystemdClient(ctx)
 	if err != nil {
 		return err
 	}
@@ -200,6 +200,8 @@ func Print(depl_name string) error {
 		service.ServiceConfigUnit(depl.ServiceDir),
 		DeploymentUnit(depl.DeploymentName),
 		DeploymentConfigUnit(depl.DeploymentName),
+		CGIFunctionSocketUnit(depl.DeploymentName),
+		CGIFunctionServiceUnit(depl.DeploymentName, "*"),
 	})
 	if err != nil {
 		return err
@@ -216,6 +218,8 @@ func Print(depl_name string) error {
 			name = "Deployment"
 		} else if u.Name == DeploymentConfigUnit(depl.DeploymentName) {
 			name = "Reverse-Proxy Deployment Config"
+		} else if name == CGIFunctionSocketUnit(depl.DeploymentName) {
+			name = "CGI Function socket"
 		}
 		tbl.AddRow(name, u.Name, u.LoadState, u.ActiveState, "("+u.SubState+")")
 	}

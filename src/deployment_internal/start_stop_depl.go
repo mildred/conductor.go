@@ -63,7 +63,7 @@ func Prepare() error {
 	//
 	//
 
-	// sd, err := dbus.NewWithContext(ctx)
+	// sd, err := utils.NewSystemdClient(ctx)
 	// if err != nil {
 	// 	return err
 	// }
@@ -188,7 +188,7 @@ func CaddyRegister(register bool, dir string) error {
 
 	depl, err := LoadDeployment(ConfigName)
 	if err != nil {
-		return err
+		return fmt.Errorf("while loading deployment %+v, %v", ConfigName, err)
 	}
 
 	log.Printf("%s: Loaded deployment %s, service %s-%s\n", prefix, depl.DeploymentName, depl.AppName, depl.InstanceName)
@@ -201,17 +201,17 @@ func CaddyRegister(register bool, dir string) error {
 
 	caddy, err := caddy.NewClient(depl.CaddyLoadBalancer.ApiEndpoint)
 	if err != nil {
-		return err
+		return fmt.Errorf("while connecting to Caddy, %v", err)
 	}
 
 	config, err := tmpl.RunTemplate(depl.ProxyConfigTemplate, depl.Vars())
 	if err != nil {
-		return err
+		return fmt.Errorf("while running the proxy-config template, %v", err)
 	}
 
 	err = json.Unmarshal([]byte(config), &configs)
 	if err != nil {
-		return err
+		return fmt.Errorf("while reading the result of the proxy-config template, %v", err)
 	}
 
 	depl_desc := fmt.Sprintf("deployment %q", depl.DeploymentName)
@@ -229,7 +229,7 @@ func CaddyRegister(register bool, dir string) error {
 		cmd.Stderr = os.Stderr
 		err = cmd.Run()
 		if err != nil {
-			return err
+			return fmt.Errorf("while starting the systemd unit %+v, %v", unit_name, err)
 		}
 
 		log.Printf("register: Registering %s", depl_desc)
@@ -239,7 +239,7 @@ func CaddyRegister(register bool, dir string) error {
 
 	err = caddy.Register(register, configs)
 	if err != nil {
-		return err
+		return fmt.Errorf("while registering Caddy config, %v", err)
 	}
 
 	log.Printf("%s: Completed", prefix)

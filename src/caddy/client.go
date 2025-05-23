@@ -25,6 +25,12 @@ type ConfigItem struct {
 	RegisterOnly bool            `json:"register_only"`
 }
 
+type ConfigStatus struct {
+	Id      string          `json:"id"`
+	Present bool            `json:"present"`
+	Config  json.RawMessage `json:"config"`
+}
+
 func NewClient(endpoint string) (*CaddyClient, error) {
 	u, err := url.Parse(endpoint)
 	if err != nil {
@@ -121,4 +127,33 @@ func (client *CaddyClient) Register(register bool, configs []ConfigItem) error {
 	}
 
 	return nil
+}
+
+func (client *CaddyClient) GetConfig(config ConfigItem) (*ConfigStatus, error) {
+	config_id := config.Id
+	result := &ConfigStatus{
+		Id: config_id,
+	}
+
+	url, err := client.endpoint.Parse("/id/" + config_id)
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := http.Get(url.String())
+	if err != nil {
+		return nil, err
+	}
+	log.Printf("caddy: GET /id/%s: %s\n", config_id, res.Status)
+
+	result.Present = res.StatusCode >= 200 && res.StatusCode < 300
+
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	result.Config = body
+
+	return result, nil
 }

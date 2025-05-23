@@ -16,9 +16,16 @@ func StartFunction(ctx context.Context, depl *Deployment) error {
 	var err error
 	switch depl.Function.Format {
 	case "cgi":
-		err = StartCGIFunction(ctx, depl, depl.Function)
+		// Nothing to start, this is started on demand
+		// err = StartCGIFunction(ctx, depl, depl.Function)
+		if err != nil {
+			return fmt.Errorf("while starting CGI function, %v", err)
+		}
 	case "http-stdio":
 		err = StartHttpStdioFunction(ctx, depl, depl.Function)
+		if err != nil {
+			return fmt.Errorf("while starting HTTP stdio function, %v", err)
+		}
 	default:
 		err = fmt.Errorf("Unknown CGI function format %s", depl.Function.Format)
 	}
@@ -36,23 +43,23 @@ func StartCGIFunction(ctx context.Context, depl *Deployment, f *DeploymentFuncti
 
 	req, res, err := cgi.ReadCGIRequest(cfg)
 	if err != nil {
-		return err
+		return fmt.Errorf("while reading CGI request, %v", err)
 	}
 
 	err = cgi.SetCGIVars(cfg, req)
 	if err != nil {
-		return err
+		return fmt.Errorf("while setting CGI variables, %v", err)
 	}
 
 	err = ExecuteDecodedFunction(ctx, depl, f, req.Body, func(out io.ReadCloser) error {
 		err = cgi.ReadCGIResponse(cfg, out, res)
 		if err != nil {
-			return err
+			return fmt.Errorf("while reading CGI response, %v", err)
 		}
 
 		err = cgi.WriteCGIResponse(cfg, res)
 		if err != nil {
-			return err
+			return fmt.Errorf("while writing CGI response, %v", err)
 		}
 		return nil
 	})

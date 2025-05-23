@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"os"
 	"strings"
+
+	"github.com/mildred/conductor.go/src/dirs"
 )
 
 type FuncFunctionCaddyConfigOpts struct {
@@ -18,11 +20,11 @@ func (opts *FuncFunctionCaddyConfigOpts) setDefaults() error {
 	if opts.DeploymentName == "" {
 		opts.DeploymentName = os.Getenv("CONDUCTOR_DEPLOYMENT")
 	}
-	if opts.SnippetId == "" {
-		opts.SnippetId = "conductor-function-" + opts.DeploymentName
-	}
 	if opts.FunctionId == "" {
 		opts.FunctionId = os.Getenv("CONDUCTOR_FUNCTION_ID")
+	}
+	if opts.SnippetId == "" {
+		opts.SnippetId = "conductor-function." + opts.DeploymentName + "." + opts.FunctionId
 	}
 	if opts.SocketPath == "" {
 		opts.SocketPath = os.Getenv("CONDUCTOR_FUNCTION_SOCKET")
@@ -49,7 +51,7 @@ func FunctionCaddyConfig(opts FuncFunctionCaddyConfigOpts) error {
 			},
 			"upstreams": []interface{}{
 				map[string]interface{}{
-					"dial": "unix//run/conductor-policy.socket",
+					"dial": "unix/" + dirs.Join(dirs.RuntimeDir, "conductor-policy.socket"),
 				},
 			},
 			"rewrite": map[string]interface{}{

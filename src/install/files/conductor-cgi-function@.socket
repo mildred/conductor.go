@@ -3,7 +3,7 @@ Description=Conductor CGI Function socket for %i
 Requires=conductor-deployment-config@%i.service
 
 [Socket]
-ListenStream=/run/conductor/deployments/%i/stream.socket
+ListenStream=%t/conductor/deployments/%i/stream.socket
 Accept=yes # TODO: does not work because it needs a non templated unit
 
 [Install]

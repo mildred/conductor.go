@@ -2,7 +2,6 @@ package service_internal
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -414,12 +413,7 @@ func CaddyRegister(register bool, service_name string) error {
 		return err
 	}
 
-	config, err := tmpl.RunTemplate(service.ProxyConfigTemplate, service.Vars())
-	if err != nil {
-		return err
-	}
-
-	err = json.Unmarshal([]byte(config), &configs)
+	err = tmpl.RunTemplateJSON(service.ProxyConfigTemplate, service.Vars(), &configs)
 	if err != nil {
 		return err
 	}

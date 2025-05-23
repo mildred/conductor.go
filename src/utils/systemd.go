@@ -7,6 +7,9 @@ import (
 	"time"
 
 	"github.com/coreos/go-systemd/v22/daemon"
+	"github.com/coreos/go-systemd/v22/dbus"
+
+	"github.com/mildred/conductor.go/src/dirs"
 )
 
 func ExtendTimeout(ctx context.Context, extra_time time.Duration) {
@@ -21,5 +24,13 @@ func ExtendTimeout(ctx context.Context, extra_time time.Duration) {
 		ctx1, cancel := context.WithTimeout(ctx, loop_duration)
 		<-ctx1.Done()
 		cancel()
+	}
+}
+
+func NewSystemdClient(ctx context.Context) (*dbus.Conn, error) {
+	if dirs.AsRoot {
+		return dbus.NewSystemConnectionContext(ctx)
+	} else {
+		return dbus.NewUserConnectionContext(ctx)
 	}
 }

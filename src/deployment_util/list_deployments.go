@@ -7,6 +7,8 @@ import (
 
 	"github.com/coreos/go-systemd/v22/dbus"
 
+	"github.com/mildred/conductor.go/src/utils"
+
 	. "github.com/mildred/conductor.go/src/deployment"
 )
 
@@ -53,7 +55,7 @@ func List(opts ListOpts) ([]*Deployment, error) {
 }
 
 func ListUnitStatus(ctx context.Context, deployments []*Deployment, config_unit bool) ([]dbus.UnitStatus, error) {
-	sd, err := dbus.NewWithContext(ctx)
+	sd, err := utils.NewSystemdClient(ctx)
 	if err != nil {
 		return nil, err
 	}

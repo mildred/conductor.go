@@ -14,6 +14,7 @@ import (
 
 	"github.com/mildred/conductor.go/src/dirs"
 	"github.com/mildred/conductor.go/src/service"
+	"github.com/mildred/conductor.go/src/utils"
 
 	. "github.com/mildred/conductor.go/src/deployment"
 )
@@ -24,7 +25,7 @@ type StartNewOrExistingOpts struct {
 }
 
 func StartNewOrExistingFromService(ctx context.Context, svc *service.Service, seed *DeploymentSeed, opts StartNewOrExistingOpts) (*Deployment, string, error) {
-	sd, err := dbus.NewWithContext(ctx)
+	sd, err := utils.NewSystemdClient(ctx)
 	if err != nil {
 		return nil, "", err
 	}
@@ -289,15 +290,19 @@ Accept=yes
 WantedBy=sockets.target
 `
 
+	log.Printf("Create %s", dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode()))
 	err := os.MkdirAll(dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode()), 0755)
 	if err != nil {
 		return err
 	}
 
+	log.Printf("Write %s", dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode(), CGIFunctionSocketUnit(name)))
 	err = os.WriteFile(dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode(), CGIFunctionSocketUnit(name)), []byte(socket), 0o644)
 	if err != nil {
 		return err
 	}
+
+	log.Printf("Write %s", dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode(), CGIFunctionServiceUnit(name, "")))
 	err = os.WriteFile(dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode(), CGIFunctionServiceUnit(name, "")), []byte(service), 0o644)
 	if err != nil {
 		return err

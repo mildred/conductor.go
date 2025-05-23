@@ -8,15 +8,14 @@ import (
 	"os/exec"
 	"time"
 
-	"github.com/coreos/go-systemd/v22/dbus"
-
 	"github.com/mildred/conductor.go/src/dirs"
+	"github.com/mildred/conductor.go/src/utils"
 
 	. "github.com/mildred/conductor.go/src/deployment"
 )
 
 func RemoveTimeout(ctx0 context.Context, deployment_name string, timeout, term_timeout time.Duration) error {
-	sd, err := dbus.NewWithContext(ctx0)
+	sd, err := utils.NewSystemdClient(ctx0)
 	if err != nil {
 		return err
 	}

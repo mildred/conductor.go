@@ -9,7 +9,7 @@ StandardOutput=socket
 StandardError=journal
 CollectMode=inactive-or-failed
 
-WorkingDirectory=/run/conductor/deployments/%i
+WorkingDirectory=%t/conductor/deployments/%i
 Environment=CONDUCTOR_DEPLOYMENT=%i
 Environment=CONDUCTOR_SYSTEMD_UNIT=%n
 

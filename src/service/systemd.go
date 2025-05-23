@@ -4,10 +4,12 @@ import (
 	"context"
 
 	"github.com/coreos/go-systemd/v22/dbus"
+
+	"github.com/mildred/conductor.go/src/utils"
 )
 
 func (service *Service) UnitStatus(ctx context.Context) (dbus.UnitStatus, error) {
-	sd, err := dbus.NewWithContext(ctx)
+	sd, err := utils.NewSystemdClient(ctx)
 	if err != nil {
 		return dbus.UnitStatus{}, err
 	}

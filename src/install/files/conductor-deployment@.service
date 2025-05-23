@@ -9,11 +9,11 @@ TimeoutStartSec=0
 Restart=always
 RestartPreventExitStatus=10
 
-WorkingDirectory=/run/conductor/deployments/%i
+WorkingDirectory=%t/conductor/deployments/%i
 Environment=CONDUCTOR_DEPLOYMENT=%i
 Environment=CONDUCTOR_SYSTEMD_UNIT=%n
 
-# EnvironmentFile=/run/conductor/deployments/%i/conductor-deployment.env
+# EnvironmentFile=%t/conductor/deployments/%i/conductor-deployment.env
 # LogExtraFields=CONDUCTOR_APP=${CONDUCTOR_APP}
 # LogExtraFields=CONDUCTOR_INSTANCE=${CONDUCTOR_INSTANCE}
 # LogExtraFields=CONDUCTOR_DEPLOYMENT=${CONDUCTOR_DEPLOYMENT}

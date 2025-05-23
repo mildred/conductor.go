@@ -8,11 +8,11 @@ After=caddy.service
 PartOf=caddy.service
 
 [Service]
-WorkingDirectory=/run/conductor/deployments/%i
+WorkingDirectory=%t/conductor/deployments/%i
 TimeoutStartSec=0
 RemainAfterExit=yes
 
-ExecStartPre=-/usr/local/bin/conductor _ deployment deregister
-ExecStartPre=/usr/local/bin/conductor _ deployment register
+ExecStartPre=-/bin/sh -xc "exec conductor _ deployment deregister"
+ExecStartPre=/bin/sh  -xc "exec conductor _ deployment register"
 ExecStart=/bin/true
-ExecStopPost=/usr/local/bin/conductor _ deployment deregister
+ExecStopPost=/bin/sh  -xc "exec conductor _ deployment deregister"

@@ -6,15 +6,21 @@ import (
 )
 
 type ServiceFunction struct {
-	Name              string   `json:"name"`
-	ServiceDirectives []string `json:"service_directives,omitempty"`
-	Format            string   `json:"format,omitempty"` // Format: cgi, http-stdio
-	Exec              []string `json:"exec,omitempty"`
-	StderrAsStdout    bool     `json:"stderr_as_stdout,omitempty"`
-	ResponseHeaders   []string `json:"response_headers,omitempty"`    // Additional response headers
-	NoResponseHeaders bool     `json:"no_response_headers,omitempty"` // Function does not add response headers
-	PathInfoStrip     int      `json:"path_info_strip,omitempty"`     // Strip this number of leading elements from PATH_INFO
-	Policies          []string `json:"policies,omitempty"`            // Policies to match
+	Name              string                     `json:"name"`
+	ServiceDirectives []string                   `json:"service_directives,omitempty"`
+	Format            string                     `json:"format,omitempty"` // Format: cgi, http-stdio
+	Exec              []string                   `json:"exec,omitempty"`
+	StderrAsStdout    bool                       `json:"stderr_as_stdout,omitempty"`
+	ResponseHeaders   []string                   `json:"response_headers,omitempty"`    // Additional response headers
+	NoResponseHeaders bool                       `json:"no_response_headers,omitempty"` // Function does not add response headers
+	PathInfoStrip     int                        `json:"path_info_strip,omitempty"`     // Strip this number of leading elements from PATH_INFO
+	Policies          []string                   `json:"policies,omitempty"`            // Policies to match
+	ReverseProxy      ServiceFunctionProxyConfig `json:"reverse_proxy"`
+}
+
+type ServiceFunctionProxyConfig struct { // TODO
+	MountPoint string          `json:"mount_point"`
+	Route      json.RawMessage `json:"proxy_route"` // if unspecified, generate default, if false, do not generate Route
 }
 
 type ServiceFunctions []*ServiceFunction

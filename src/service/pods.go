@@ -7,10 +7,17 @@ import (
 )
 
 type ServicePod struct {
-	Name              string   `json:"name"`
-	ServiceDirectives []string `json:"service_directives,omitempty"`
-	PodTemplate       string   `json:"pod_template,omitempty"`        // Template file for pod
-	ConfigMapTemplate string   `json:"config_map_template,omitempty"` // ConfigMap template file
+	Name              string                `json:"name"`
+	ServiceDirectives []string              `json:"service_directives,omitempty"`
+	PodTemplate       string                `json:"pod_template,omitempty"`        // Template file for pod
+	ConfigMapTemplate string                `json:"config_map_template,omitempty"` // ConfigMap template file
+	ReverseProxy      ServicePodProxyConfig `json:"reverse_proxy"`
+}
+
+type ServicePodProxyConfig struct {
+	MountPoint    string          `json:"mount_point"`
+	Route         json.RawMessage `json:"proxy_route"` // TODO:
+	UpstreamsPath string          `json:"upstreams_path"`
 }
 
 type ServicePods []*ServicePod

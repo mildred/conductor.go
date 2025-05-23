@@ -30,7 +30,7 @@ export OLD_XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR
 export XDG_CONFIG_HOME="$PWD/etc"
 export XDG_DATA_HOME="$PWD/share"
 export XDG_STATE_HOME="$PWD/lib"
-export XDG_RUNTIME_DIR="$(mktemp "$XDG_RUNTIME_DIR/c.XXXXXXX")"
+export XDG_RUNTIME_DIR="$(mktemp -d "$XDG_RUNTIME_DIR/c.XXXXXXX")"
 export PATH="$PWD/bin:$PATH"
 export PS1="[conductor instance :$port] $PS1"
 
@@ -61,6 +61,7 @@ cat <<JSON >caddy-config.json
     "http": {
       "servers": {
         "srv0": {
+          "@id": "conductor-server",
           "automatic_https": { "disable": true },
           "listen": [ ":$port" ],
           "routes": [
@@ -72,17 +73,26 @@ cat <<JSON >caddy-config.json
 }
 JSON
 
+# Fake caddy service
+mkdir -p "$XDG_CONFIG_HOME/systemd/user"
+cat <<SERVICE >"$XDG_CONFIG_HOME/systemd/user/caddy.service"
+[Service]
+ExecStart=/bin/true
+RemainAfterExit=yes
+SERVICE
+
 #echo
 #echo "Start Caddy server on port $port using: ./caddy.sh &"
 #echo
 
 if which tmux >/dev/null 2>&1; then
-  tmux new-session -n "init" sh -c '
-    tmux new-window -n caddy-'"$port"' ./caddy.sh;
-    tmux new-window -n systemd-user /lib/systemd/systemd --user;
-    tmux new-window -n journalctl -e XDG_RUNTIME_DIR=$OLD_XDG_RUNTIME_DIR journalctl --user -f;
-    tmux new-window -n '"$name"' "$SHELL";
+  tmux new-session -n "init" sh -xc '
+    tmux new-window -d -n caddy-'"$port"' sh -xc "./caddy.sh; cat";
+    tmux new-window -d -n systemd-user sh -xc "/lib/systemd/systemd --user --log-level=debug --log-target=console";
+    tmux new-window -d -n journalctl -e XDG_RUNTIME_DIR=$OLD_XDG_RUNTIME_DIR journalctl --user -f;
+    tmux new-window -d -n '"$name"' "$SHELL";
     conductor system install
+    env | grep -E "^XDG_(CONFIG_HOME|DATA_HOME|STATE_HOME|RUNTIME_DIR)"
     exec $SHELL
   '
 else

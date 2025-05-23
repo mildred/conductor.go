@@ -214,7 +214,7 @@ func (depl *Deployment) Vars() []string {
 
 func (depl *Deployment) Save(fname string) error {
 	log.Printf("Save deployment to %s\n", fname)
-	f, err := os.OpenFile(fname, os.O_TRUNC|os.O_CREATE|os.O_RDWR, 0)
+	f, err := os.OpenFile(fname, os.O_TRUNC|os.O_CREATE|os.O_RDWR, 0644)
 	if err != nil {
 		return err
 	}
