@@ -12,14 +12,17 @@ import (
 	. "github.com/mildred/conductor.go/src/deployment"
 )
 
-func StartFunction(ctx context.Context, depl *Deployment) error {
+func StartFunction(ctx context.Context, depl *Deployment, function bool) error {
 	var err error
 	switch depl.Function.Format {
 	case "cgi":
-		// Nothing to start, this is started on demand
-		// err = StartCGIFunction(ctx, depl, depl.Function)
-		if err != nil {
-			return fmt.Errorf("while starting CGI function, %v", err)
+		if function {
+			err = StartCGIFunction(ctx, depl, depl.Function)
+			if err != nil {
+				return fmt.Errorf("while starting CGI function, %v", err)
+			}
+		} else {
+			// Nothing to start, this is started on demand
 		}
 	case "http-stdio":
 		err = StartHttpStdioFunction(ctx, depl, depl.Function)
@@ -27,7 +30,7 @@ func StartFunction(ctx context.Context, depl *Deployment) error {
 			return fmt.Errorf("while starting HTTP stdio function, %v", err)
 		}
 	default:
-		err = fmt.Errorf("Unknown CGI function format %s", depl.Function.Format)
+		err = fmt.Errorf("Unknown function format %s", depl.Function.Format)
 	}
 	if err != nil {
 		return err
@@ -68,7 +71,7 @@ func StartCGIFunction(ctx context.Context, depl *Deployment, f *DeploymentFuncti
 		return nil
 	})
 	if err != nil {
-		return err
+		return fmt.Errorf("executing decoded function, %v", err)
 	}
 
 	return nil
@@ -80,53 +83,57 @@ func ExecuteDecodedFunction(ctx context.Context, depl *Deployment, f *Deployment
 		return fmt.Errorf("Missing executable")
 	}
 
-	for _, resp_header := range f.ResponseHeaders {
-		fmt.Fprintf(os.Stdout, "%s\r\n", resp_header)
-	}
-
-	if f.NoResponseHeaders {
-		fmt.Fprintf(os.Stdout, "\r\n")
-	}
-
 	cmd := exec.CommandContext(ctx, f.Exec[0], f.Exec[1:]...)
 	cmd.Env = append(cmd.Environ(), depl.Vars()...)
 	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
 	var stdout_pipe io.ReadCloser
 	if handle_stdout != nil {
 		stdout_pipe, err = cmd.StdoutPipe()
 		if err != nil {
-			return err
+			return fmt.Errorf("connecting standard output, %v", err)
 		}
+	} else {
+		cmd.Stdout = os.Stdout
 	}
 
 	if f.StderrAsStdout {
 		cmd.Stderr = cmd.Stdout
 	}
 
+	for _, resp_header := range f.ResponseHeaders {
+		fmt.Fprintf(cmd.Stdout, "%s\r\n", resp_header)
+	}
+
+	if f.NoResponseHeaders {
+		fmt.Fprintf(cmd.Stdout, "\r\n")
+	}
+
 	if handle_stdout != nil {
 		err = cmd.Start()
 		if err != nil {
-			return err
+			return fmt.Errorf("starting CGI function, %v", err)
 		}
 
 		err = handle_stdout(stdout_pipe)
 		if err != nil {
-			return err
+			return fmt.Errorf("handling stdout, %v", err)
 		}
 
 		err = cmd.Wait()
 		if err != nil {
-			return err
+			return fmt.Errorf("waiting for CGI function, %v", err)
 		}
 	} else {
-		return cmd.Run()
+		err := cmd.Run()
+		if err != nil {
+			return fmt.Errorf("running CGI function, %v", err)
+		}
 	}
 	return nil
 }
 
-func StopFunction(ctx context.Context, depl *Deployment) error {
+func StopFunction(ctx context.Context, depl *Deployment, function bool) error {
 	return nil
 }

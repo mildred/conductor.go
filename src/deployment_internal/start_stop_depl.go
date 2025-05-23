@@ -107,11 +107,7 @@ func Start(function bool) error {
 	if depl.Pod != nil && !function {
 		return StartPod(ctx, depl)
 	} else if depl.Function != nil {
-		if function {
-			return StartFunction(ctx, depl)
-		} else {
-			return nil
-		}
+		return StartFunction(ctx, depl, function)
 	} else {
 		return fmt.Errorf("Cannot start incompatible deployment")
 	}
@@ -143,11 +139,7 @@ func Stop(function bool) error {
 	if depl.Pod != nil && !function {
 		return StopPod(ctx, depl)
 	} else if depl.Function != nil {
-		if function {
-			return StopFunction(ctx, depl)
-		} else {
-			return nil
-		}
+		return StopFunction(ctx, depl, function)
 	} else {
 		return fmt.Errorf("Cannot stop deployment: not a pod")
 	}
