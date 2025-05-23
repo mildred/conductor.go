@@ -80,6 +80,7 @@ var cmd_deployment_kill = cmd_deployment_systemd("kill", "Kill with systemctl")
 
 func cmd_deployment_systemd(cmd_name, descr string) func() *flaggy.Subcommand {
 	return func() *flaggy.Subcommand {
+		var all bool
 		var ids []string
 		var signal string
 
@@ -90,6 +91,8 @@ func cmd_deployment_systemd(cmd_name, descr string) func() *flaggy.Subcommand {
 		switch cmd_name {
 		case "kill":
 			cmd.String(&signal, "", "signal", "Signal to send")
+		case "status":
+			cmd.Bool(&all, "a", "all", "All units")
 		}
 
 		cmd.CommandUsed = Hook(func() error {
@@ -109,6 +112,12 @@ func cmd_deployment_systemd(cmd_name, descr string) func() *flaggy.Subcommand {
 			}
 			for _, id := range ids {
 				cli = append(cli, deployment.DeploymentUnit(id))
+				if all {
+					cli = append(cli,
+						deployment.DeploymentConfigUnit(id),
+						deployment.CGIFunctionSocketUnit(id),
+						deployment.CGIFunctionServiceUnit(id, "*"))
+				}
 			}
 
 			fmt.Fprintf(os.Stderr, "+ systemctl %s\n", strings.Join(cli, " "))
@@ -159,7 +168,7 @@ func cmd_deployment_env() *flaggy.Subcommand {
 	cmd.CommandUsed = Hook(func() error {
 		log.Default().SetOutput(io.Discard)
 
-		depl, err := deployment.ReadDeploymentByName(depl_name)
+		depl, err := deployment.ReadDeploymentByName(depl_name, true)
 		if err != nil {
 			return err
 		}
@@ -183,7 +192,7 @@ func cmd_deployment_show(name string) *flaggy.Subcommand {
 	cmd.CommandUsed = Hook(func() error {
 		log.Default().SetOutput(io.Discard)
 
-		return deployment_public.Print(depl_name)
+		return deployment_public.Print(depl_name, deployment_public.PrintSettings{})
 	})
 	return cmd
 }

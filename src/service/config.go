@@ -13,7 +13,9 @@ import (
 	"github.com/yookoala/realpath"
 	"golang.org/x/crypto/sha3"
 
+	"github.com/mildred/conductor.go/src/caddy"
 	"github.com/mildred/conductor.go/src/dirs"
+	"github.com/mildred/conductor.go/src/tmpl"
 )
 
 type Hook struct {
@@ -348,8 +350,16 @@ func fix_path(dir string, path *string, is_executable bool) error {
 }
 
 func (service *Service) FillDefaults() error {
-	service.Pods.FillDefaults(service)
-	service.Functions.FillDefaults(service)
+	err := service.Pods.FillDefaults(service)
+	if err != nil {
+		return err
+	}
+
+	err = service.Functions.FillDefaults(service)
+	if err != nil {
+		return err
+	}
+
 	if service.ProxyConfigTemplate == "" {
 		service.ProxyConfigTemplate = filepath.Join(service.BasePath, "proxy-config.template")
 		_, err := os.Stat(service.ProxyConfigTemplate)
@@ -390,6 +400,10 @@ func (service *Service) ComputeId(extra string) (string, error) {
 	}
 
 	return fmt.Sprintf("%x", output), nil
+}
+
+func (service *Service) PartId(part string) (string, error) {
+	return service.ComputeId("part:" + part)
 }
 
 func join_paths(base, path string) string {
@@ -435,4 +449,45 @@ func (service *Service) Parts() ([]string, error) {
 		res = append(res, f.Name)
 	}
 	return res, nil
+}
+
+func (service *Service) ProxyConfig() (caddy.ConfigItems, error) {
+	var configs caddy.ConfigItems
+
+	for _, pod := range service.Pods {
+		for _, proxy := range pod.ReverseProxy {
+			if proxy.UpstreamsPath != "" {
+				configs = append(configs, &caddy.ConfigItem{
+					MountPoint: proxy.MountPoint,
+					Config:     proxy.Route,
+				})
+			}
+		}
+	}
+
+	for _, f := range service.Functions {
+		for _, proxy := range f.ReverseProxy {
+			configs = append(configs, &caddy.ConfigItem{
+				MountPoint: proxy.MountPoint,
+				Config:     proxy.Route,
+			})
+		}
+	}
+
+	if service.ProxyConfigTemplate != "" {
+		var c caddy.ConfigItems
+		err := tmpl.RunTemplateJSON(service.ProxyConfigTemplate, service.Vars(), &c)
+		if err != nil {
+			return nil, err
+		}
+
+		configs = append(configs, c...)
+	}
+
+	err := configs.SetDefaults()
+	if err != nil {
+		return nil, err
+	}
+
+	return configs, nil
 }

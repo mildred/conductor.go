@@ -402,18 +402,14 @@ func CaddyRegister(register bool, service_name string) error {
 		return err
 	}
 
-	if service.ProxyConfigTemplate == "" {
+	configs, err := service.ProxyConfig()
+	if err != nil {
+		return err
+	} else if len(configs) == 0 {
 		return nil
 	}
 
-	var configs []caddy.ConfigItem
-
 	caddy, err := caddy.NewClient(service.CaddyLoadBalancer.ApiEndpoint)
-	if err != nil {
-		return err
-	}
-
-	err = tmpl.RunTemplateJSON(service.ProxyConfigTemplate, service.Vars(), &configs)
 	if err != nil {
 		return err
 	}

@@ -49,7 +49,7 @@ func ReadSeed(fname string) (*DeploymentSeed, error) {
 }
 
 func SeedFromService(service *service.Service, part string) (*DeploymentSeed, error) {
-	part_id, err := service.ComputeId("part:" + part)
+	part_id, err := service.PartId(part)
 	if err != nil {
 		return nil, err
 	}

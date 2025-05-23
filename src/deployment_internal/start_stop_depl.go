@@ -2,7 +2,6 @@ package deployment_internal
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -13,8 +12,8 @@ import (
 	"github.com/coreos/go-systemd/v22/daemon"
 
 	"github.com/mildred/conductor.go/src/caddy"
+	"github.com/mildred/conductor.go/src/dirs"
 	"github.com/mildred/conductor.go/src/service"
-	"github.com/mildred/conductor.go/src/tmpl"
 
 	. "github.com/mildred/conductor.go/src/deployment"
 )
@@ -139,6 +138,8 @@ func Stop() error {
 
 	if depl.Pod != nil {
 		return StopPod(ctx, depl)
+	} else if depl.Function != nil {
+		return StopFunction(ctx, depl)
 	} else {
 		return fmt.Errorf("Cannot stop deployment: not a pod")
 	}
@@ -193,25 +194,16 @@ func CaddyRegister(register bool, dir string) error {
 
 	log.Printf("%s: Loaded deployment %s, service %s-%s\n", prefix, depl.DeploymentName, depl.AppName, depl.InstanceName)
 
-	if depl.ProxyConfigTemplate == "" {
+	configs, err := depl.ProxyConfig()
+	if err != nil {
+		return fmt.Errorf("getting the proxy config, %v", err)
+	} else if len(configs) == 0 {
 		return nil
 	}
-
-	var configs []caddy.ConfigItem
 
 	caddy, err := caddy.NewClient(depl.CaddyLoadBalancer.ApiEndpoint)
 	if err != nil {
 		return fmt.Errorf("while connecting to Caddy, %v", err)
-	}
-
-	config, err := tmpl.RunTemplate(depl.ProxyConfigTemplate, depl.Vars())
-	if err != nil {
-		return fmt.Errorf("while running the proxy-config template, %v", err)
-	}
-
-	err = json.Unmarshal([]byte(config), &configs)
-	if err != nil {
-		return fmt.Errorf("while reading the result of the proxy-config template, %v", err)
 	}
 
 	depl_desc := fmt.Sprintf("deployment %q", depl.DeploymentName)
@@ -223,8 +215,8 @@ func CaddyRegister(register bool, dir string) error {
 		unit_name := fmt.Sprintf(service.ServiceConfigUnit(depl.ServiceDir))
 		log.Printf("%s: Ensure the service config %s is registered", prefix, unit_name)
 
-		fmt.Fprintf(os.Stderr, "+ systemctl start %q\n", unit_name)
-		cmd := exec.CommandContext(ctx, "systemctl", "start", unit_name)
+		fmt.Fprintf(os.Stderr, "+ systemctl %s start %q\n", dirs.SystemdModeFlag(), unit_name)
+		cmd := exec.CommandContext(ctx, "systemctl", dirs.SystemdModeFlag(), "start", unit_name)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		err = cmd.Run()

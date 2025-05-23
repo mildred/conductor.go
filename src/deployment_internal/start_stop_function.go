@@ -29,7 +29,11 @@ func StartFunction(ctx context.Context, depl *Deployment) error {
 	default:
 		err = fmt.Errorf("Unknown CGI function format %s", depl.Function.Format)
 	}
-	return err
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func StartHttpStdioFunction(ctx context.Context, depl *Deployment, f *DeploymentFunction) error {
@@ -120,5 +124,9 @@ func ExecuteDecodedFunction(ctx context.Context, depl *Deployment, f *Deployment
 	} else {
 		return cmd.Run()
 	}
+	return nil
+}
+
+func StopFunction(ctx context.Context, depl *Deployment) error {
 	return nil
 }

@@ -360,16 +360,18 @@ func cmd_service_show(name string) *flaggy.Subcommand {
 	cmd.CommandUsed = Hook(func() error {
 		log.Default().SetOutput(io.Discard)
 
-		return service_public.PrintService(service)
+		return service_public.PrintService(service, service_public.PrintSettings{})
 	})
 	return cmd
 }
 
 func cmd_service_status() *flaggy.Subcommand {
 	var args []string
+	var all bool
 
 	cmd := flaggy.NewSubcommand("status")
 	cmd.Description = "Status from systemctl"
+	cmd.Bool(&all, "a", "all", "All units")
 	cmd.AddExtraValues(&args, "service", "The service to act on")
 
 	cmd.CommandUsed = Hook(func() error {
@@ -377,12 +379,14 @@ func cmd_service_status() *flaggy.Subcommand {
 
 		var cli []string = []string{dirs.SystemdModeFlag(), "status"}
 		for _, arg := range args {
-			unit, err := service.ServiceUnitByName(arg)
+			service_dir, err := service.ServiceDirByName(arg)
 			if err != nil {
 				return err
 			}
-
-			cli = append(cli, unit)
+			cli = append(cli, service.ServiceUnit(service_dir))
+			if all {
+				cli = append(cli, service.ServiceConfigUnit(service_dir))
+			}
 		}
 
 		fmt.Fprintf(os.Stderr, "+ systemctl %s\n", strings.Join(cli, " "))

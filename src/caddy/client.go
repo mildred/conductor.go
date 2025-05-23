@@ -19,16 +19,31 @@ type ConfigSnip struct {
 	Id string `json:"@id"`
 }
 
-type ConfigItem struct {
-	Id           string          `json:"id"`
-	Config       json.RawMessage `json:"config"`
-	RegisterOnly bool            `json:"register_only"`
+type CaddyHandle struct {
+	Handler   string            `json:"handler"`
+	Upstreams []json.RawMessage `json:"upstreams"`
 }
 
+type CaddyRoute struct {
+	Match  []json.RawMessage `json:"match"`
+	Handle []CaddyHandle     `json:"handle"`
+}
+
+type ConfigItem struct {
+	DeprecatedId string          `json:"id"`
+	MountPoint   string          `json:"mount_point"`
+	Config       json.RawMessage `json:"config"`
+	RegisterOnly bool            `json:"register_only"`
+	Id           string          `json:"-"`
+}
+
+type ConfigItems []*ConfigItem
+
 type ConfigStatus struct {
-	Id      string          `json:"id"`
-	Present bool            `json:"present"`
-	Config  json.RawMessage `json:"config"`
+	MountPoint string          `json:"parent_id"`
+	Id         string          `json:"id"`
+	Present    bool            `json:"present"`
+	Config     json.RawMessage `json:"config"`
 }
 
 func NewClient(endpoint string) (*CaddyClient, error) {
@@ -40,7 +55,7 @@ func NewClient(endpoint string) (*CaddyClient, error) {
 	return &CaddyClient{u}, nil
 }
 
-func (client *CaddyClient) Register(register bool, configs []ConfigItem) error {
+func (client *CaddyClient) Register(register bool, configs ConfigItems) error {
 	if !register {
 		slices.Reverse(configs)
 	}
@@ -49,9 +64,9 @@ func (client *CaddyClient) Register(register bool, configs []ConfigItem) error {
 
 	for _, config := range configs {
 		if register {
-			log.Printf("caddy: Register configuration for %s", config.Id)
+			log.Printf("caddy: Register configuration for %s in %s", config.Id, config.MountPoint)
 		} else {
-			log.Printf("caddy: Deregister configuration for %s", config.Id)
+			log.Printf("caddy: Deregister configuration for %s in %s", config.Id, config.MountPoint)
 		}
 		var cfg ConfigSnip
 
@@ -60,6 +75,7 @@ func (client *CaddyClient) Register(register bool, configs []ConfigItem) error {
 			if config.RegisterOnly {
 				log.Printf("caddy: Failed to detect @id property on JSON: %v", err)
 			} else {
+				log.Printf("Failed to get @id from: %v", string(config.Config))
 				return err
 			}
 		}
@@ -70,7 +86,7 @@ func (client *CaddyClient) Register(register bool, configs []ConfigItem) error {
 
 		var config_id string
 		if register {
-			config_id = config.Id
+			config_id = config.MountPoint
 		} else if !config.RegisterOnly {
 			config_id = cfg.Id + "/"
 		}
@@ -101,12 +117,12 @@ func (client *CaddyClient) Register(register bool, configs []ConfigItem) error {
 			if err != nil {
 				return err
 			}
-			log.Printf("caddy: DELETE /id/%s (delete in %s): %s\n", config_id, config.Id, res.Status)
+			log.Printf("caddy: DELETE /id/%s (delete in %s): %s\n", config_id, config.MountPoint, res.Status)
 			num = num + 1
 
 			code_valid = res.StatusCode >= 200 && res.StatusCode < 300 || res.StatusCode == 404
 		} else {
-			log.Printf("caddy: Do not deregister %q in %s (register_only)\n", cfg.Id, config.Id)
+			log.Printf("caddy: Do not deregister %q in %s (register_only)\n", cfg.Id, config.MountPoint)
 			continue
 		}
 
@@ -129,13 +145,40 @@ func (client *CaddyClient) Register(register bool, configs []ConfigItem) error {
 	return nil
 }
 
-func (client *CaddyClient) GetConfig(config ConfigItem) (*ConfigStatus, error) {
-	config_id := config.Id
-	result := &ConfigStatus{
-		Id: config_id,
+func (configs ConfigItems) SetDefaults() error {
+	for _, config := range configs {
+		if config.DeprecatedId != "" && config.MountPoint == "" {
+			config.MountPoint = config.DeprecatedId
+		}
+		config.DeprecatedId = ""
+
+		var err error
+		config.Id, err = config.GetId()
+		if err != nil {
+			return err
+		}
 	}
 
-	url, err := client.endpoint.Parse("/id/" + config_id)
+	return nil
+}
+
+func (config *ConfigItem) GetId() (string, error) {
+	var snip = &ConfigSnip{}
+	err := json.Unmarshal(config.Config, snip)
+	if err != nil {
+		return "", err
+	}
+
+	return snip.Id, nil
+}
+
+func (client *CaddyClient) GetConfig(config *ConfigItem) (*ConfigStatus, error) {
+	result := &ConfigStatus{
+		MountPoint: config.MountPoint,
+		Id:         config.Id,
+	}
+
+	url, err := client.endpoint.Parse("/id/" + config.Id)
 	if err != nil {
 		return nil, err
 	}
@@ -144,7 +187,7 @@ func (client *CaddyClient) GetConfig(config ConfigItem) (*ConfigStatus, error) {
 	if err != nil {
 		return nil, err
 	}
-	log.Printf("caddy: GET /id/%s: %s\n", config_id, res.Status)
+	log.Printf("caddy: GET /id/%s: %s\n", config.Id, res.Status)
 
 	result.Present = res.StatusCode >= 200 && res.StatusCode < 300
 
@@ -156,4 +199,66 @@ func (client *CaddyClient) GetConfig(config ConfigItem) (*ConfigStatus, error) {
 	result.Config = body
 
 	return result, nil
+}
+
+func getDial(upstream_json json.RawMessage) (string, error) {
+	var upstream struct {
+		Dial string `json:"dial"`
+	}
+	err := json.Unmarshal(upstream_json, &upstream)
+	if err != nil {
+		return "", err
+	}
+
+	return upstream.Dial, nil
+}
+
+func (cfg *ConfigStatus) Dial() (string, error) {
+	return getDial(cfg.Config)
+}
+
+func (cfg *ConfigStatus) MatchConfig() ([]json.RawMessage, error) {
+	var route CaddyRoute
+	err := json.Unmarshal(cfg.Config, &route)
+	if err != nil {
+		return nil, err
+	}
+
+	return route.Match, nil
+}
+
+func (cfg *ConfigStatus) Upstreams() ([]json.RawMessage, error) {
+	var upstreams []json.RawMessage
+	var route CaddyRoute
+
+	err := json.Unmarshal(cfg.Config, &route)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, handle := range route.Handle {
+
+		if handle.Handler == "reverse_proxy" {
+			upstreams = append(upstreams, handle.Upstreams...)
+		}
+	}
+
+	return upstreams, nil
+}
+
+func (cfg *ConfigStatus) UpstreamDials() ([]string, error) {
+	var res []string
+	upstreams, err := cfg.Upstreams()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, up := range upstreams {
+		dial, err := getDial(up)
+		if err != nil {
+			return nil, err
+		}
+		res = append(res, dial)
+	}
+	return res, nil
 }

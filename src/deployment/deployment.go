@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mildred/conductor.go/src/caddy"
 	"github.com/mildred/conductor.go/src/dirs"
 	"github.com/mildred/conductor.go/src/service"
 	"github.com/mildred/conductor.go/src/tmpl"
@@ -41,8 +42,12 @@ func DeploymentSocketPath(name string) string {
 	return path.Join(DeploymentRunDir, name, "stream.socket")
 }
 
-func DeploymentDirByName(name string) string {
-	return path.Join(DeploymentRunDir, name)
+func DeploymentDirByName(name string, allow_dir bool) string {
+	if allow_dir && strings.Contains(name, "/") {
+		return name
+	} else {
+		return path.Join(DeploymentRunDir, name)
+	}
 }
 
 type Deployment struct {
@@ -59,6 +64,7 @@ type Deployment struct {
 	TemplatedProxyConfig json.RawMessage     `json:"templated_proxy_config"`
 	Pod                  *DeploymentPod      `json:"pod,omitempty"`
 	Function             *DeploymentFunction `json:"function,omitempty"`
+	ProxyConfigValue     caddy.ConfigItems   `json:"_proxy_config"`
 }
 
 func NewDeploymentFromService(service *service.Service, deployment_name string, seed *DeploymentSeed) *Deployment {
@@ -95,8 +101,8 @@ func NewDeploymentFromService(service *service.Service, deployment_name string, 
 	}
 }
 
-func ReadDeploymentByName(name string) (*Deployment, error) {
-	return ReadDeployment(DeploymentDirByName(name), name)
+func ReadDeploymentByName(name string, allow_dir bool) (*Deployment, error) {
+	return ReadDeployment(DeploymentDirByName(name, allow_dir), name)
 }
 
 func ReadDeployment(dir, deployment_id string) (*Deployment, error) {
@@ -158,7 +164,56 @@ func (depl *Deployment) TemplateAll() error {
 		}
 	}
 
-	return depl.TemplateProxyConfig()
+	err := depl.TemplateProxyConfig()
+	if err != nil {
+		return err
+	}
+
+	depl.ProxyConfigValue, err = depl.ProxyConfig()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (depl *Deployment) ProxyConfig() (caddy.ConfigItems, error) {
+	var configs caddy.ConfigItems
+
+	if depl.Pod != nil {
+		cfg, err := depl.Pod.ProxyConfig(depl)
+		if err != nil {
+			return nil, err
+		}
+
+		configs = append(configs, cfg...)
+	}
+
+	if depl.Function != nil {
+		cfg, err := depl.Function.ProxyConfig(depl)
+		if err != nil {
+			return nil, err
+		}
+
+		configs = append(configs, cfg...)
+	}
+
+	if depl.ProxyConfigTemplate != "" {
+		var c caddy.ConfigItems
+		err := tmpl.RunTemplateJSON(depl.ProxyConfigTemplate, depl.Vars(), &c)
+		if err != nil {
+			return nil, fmt.Errorf("while running the proxy-config template, %v", err)
+		}
+
+		configs = append(configs, c...)
+	}
+
+	err := configs.SetDefaults()
+	if err != nil {
+		return nil, err
+	}
+
+	return configs, nil
 }
 
 func (depl *Deployment) Vars() []string {

@@ -7,17 +7,19 @@ import (
 )
 
 type ServicePod struct {
-	Name              string                `json:"name"`
-	ServiceDirectives []string              `json:"service_directives,omitempty"`
-	PodTemplate       string                `json:"pod_template,omitempty"`        // Template file for pod
-	ConfigMapTemplate string                `json:"config_map_template,omitempty"` // ConfigMap template file
-	ReverseProxy      ServicePodProxyConfig `json:"reverse_proxy"`
+	Name              string                   `json:"name"`
+	ServiceDirectives []string                 `json:"service_directives,omitempty"`
+	PodTemplate       string                   `json:"pod_template,omitempty"`        // Template file for pod
+	ConfigMapTemplate string                   `json:"config_map_template,omitempty"` // ConfigMap template file
+	ReverseProxy      []*ServicePodProxyConfig `json:"reverse_proxy"`
 }
 
 type ServicePodProxyConfig struct {
+	Name          string          `json:"name"`
 	MountPoint    string          `json:"mount_point"`
-	Route         json.RawMessage `json:"proxy_route"` // TODO:
+	Route         json.RawMessage `json:"route"` // TODO:
 	UpstreamsPath string          `json:"upstreams_path"`
+	Port          int             `json:"port"`
 }
 
 type ServicePods []*ServicePod
@@ -52,12 +54,36 @@ func (pods *ServicePods) FixPaths(dir string) error {
 	return nil
 }
 
-func (pods *ServicePods) FillDefaults(service *Service) {
+func (pods *ServicePods) FillDefaults(service *Service) error {
 	for _, pod := range *pods {
 		if pod.PodTemplate == "" {
 			pod.PodTemplate = filepath.Join(service.BasePath, "pod.template")
 		}
+
+		for i, proxy := range pod.ReverseProxy {
+			if proxy.Name == "" {
+				proxy.Name = fmt.Sprintf("%d", i)
+			}
+
+			if proxy.UpstreamsPath != "" {
+
+				if proxy.MountPoint == "" {
+					proxy.MountPoint = "conductor-server/routes"
+				}
+				if len(proxy.Route) != 0 {
+					err := caddyConfigSetId(&proxy.Route, pod.CaddyConfigName(service, proxy.Name))
+					if err != nil {
+						return err
+					}
+				}
+			}
+		}
 	}
+	return nil
+}
+
+func (pod *ServicePod) CaddyConfigName(service *Service, name string) string {
+	return fmt.Sprintf("conductor-pod.%s.%s.%s.%s", service.AppName, service.InstanceName, pod.Name, name)
 }
 
 func (pods *ServicePods) UnmarshalJSON(data []byte) error {

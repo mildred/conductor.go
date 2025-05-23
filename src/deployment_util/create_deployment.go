@@ -271,7 +271,7 @@ StandardOutput=socket
 StandardError=journal
 CollectMode=inactive-or-failed
 
-WorkingDirectory=` + DeploymentDirByName(name) + `
+WorkingDirectory=` + DeploymentDirByName(name, false) + `
 Environment=CONDUCTOR_DEPLOYMENT=` + name + `
 Environment=CONDUCTOR_SYSTEMD_UNIT=%n
 
@@ -280,7 +280,10 @@ ExecStart=/bin/sh -xc 'PID=$$$$; exec conductor _ deployment start'
 
 	var socket = `[Unit]
 Description=Conductor CGI Function socket for ` + name + `
+Requires=` + DeploymentUnit(name) + `
+After=` + DeploymentUnit(name) + `
 Requires=` + DeploymentConfigUnit(name) + `
+Before=` + DeploymentConfigUnit(name) + `
 
 [Socket]
 ListenStream=` + DeploymentSocketPath(name) + `
@@ -288,6 +291,13 @@ Accept=yes
 
 [Install]
 WantedBy=sockets.target
+`
+
+	var function_conf = `[Service]
+Type=oneshot
+ExitType=main
+RemainAfterExit=yes
+Restart=on-failure
 `
 
 	log.Printf("Create %s", dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode()))
@@ -307,5 +317,18 @@ WantedBy=sockets.target
 	if err != nil {
 		return err
 	}
+
+	log.Printf("Create %s", dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode(), DeploymentUnit(name)+".d"))
+	err = os.MkdirAll(dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode(), DeploymentUnit(name)+".d"), 0755)
+	if err != nil {
+		return err
+	}
+
+	log.Printf("Write %s", dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode(), DeploymentUnit(name)+".d", "function.conf"))
+	err = os.WriteFile(dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode(), DeploymentUnit(name)+".d", "function.conf"), []byte(function_conf), 0o644)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }

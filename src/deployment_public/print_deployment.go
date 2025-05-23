@@ -9,6 +9,7 @@ import (
 	"github.com/coreos/go-systemd/v22/dbus"
 	"github.com/rodaine/table"
 
+	"github.com/mildred/conductor.go/src/caddy"
 	"github.com/mildred/conductor.go/src/service"
 	"github.com/mildred/conductor.go/src/utils"
 
@@ -31,14 +32,22 @@ func PrintList(settings PrintListSettings) error {
 		return err
 	}
 
-	units, err := sd.ListUnitsByPatternsContext(ctx, nil, []string{"conductor-deployment@*.service", "conductor-service@*.service", "conductor-deployment-config@*.service"})
+	deployments, err := List(ListOpts{
+		FilterServiceDir: settings.FilterServiceDir,
+	})
 	if err != nil {
 		return err
 	}
 
-	deployments, err := List(ListOpts{
-		FilterServiceDir: settings.FilterServiceDir,
-	})
+	patterns := []string{"conductor-deployment@*.service", "conductor-service@*.service", "conductor-deployment-config@*.service"}
+
+	for _, depl := range deployments {
+		patterns = append(patterns,
+			CGIFunctionServiceUnit(depl.DeploymentName, "*"),
+			CGIFunctionSocketUnit(depl.DeploymentName))
+	}
+
+	units, err := sd.ListUnitsByPatternsContext(ctx, nil, patterns)
 	if err != nil {
 		return err
 	}
@@ -124,7 +133,7 @@ func PrintList(settings PrintListSettings) error {
 		if !settings.QuietServiceInfo {
 			row = append(row, s.AppName, s.InstanceName, ss.LoadState, ss.ActiveState)
 			if settings.ServiceUnit {
-				row = append(row, ss.Name)
+				row = append(row, DeploymentUnit(depl.DeploymentName))
 			}
 			for _, col := range extra_service_cols {
 				row = append(row, s.Config[col])
@@ -136,7 +145,7 @@ func PrintList(settings PrintListSettings) error {
 		}
 		row = append(row, depl.DeploymentName, ds.ActiveState, ds.SubState, ip_addr)
 		if settings.Unit {
-			row = append(row, ds.Name)
+			row = append(row, DeploymentConfigUnit(depl.DeploymentName))
 		}
 		if settings.ConfigStatus {
 			row = append(row, fmt.Sprintf("%s (%s)", dcs.ActiveState, dcs.SubState))
@@ -158,8 +167,13 @@ func PrintInspect(deployments ...string) error {
 		return PrintInspect(".")
 	}
 
-	for _, dir := range deployments {
-		depl, err := ReadDeployment(dir, "")
+	for _, depl_name := range deployments {
+		depl, err := ReadDeploymentByName(depl_name, true)
+		if err != nil {
+			return err
+		}
+
+		err = depl.TemplateAll()
 		if err != nil {
 			return err
 		}
@@ -172,8 +186,12 @@ func PrintInspect(deployments ...string) error {
 	return nil
 }
 
-func Print(depl_name string) error {
-	depl, err := ReadDeploymentByName(depl_name)
+type PrintSettings struct {
+	ShowProxyLocation bool
+}
+
+func Print(depl_name string, settings PrintSettings) error {
+	depl, err := ReadDeploymentByName(depl_name, true)
 	if err != nil {
 		return err
 	}
@@ -186,8 +204,54 @@ func Print(depl_name string) error {
 	tbl.AddRow("Service Id", depl.ServiceId)
 
 	tbl.Print()
-
 	fmt.Println()
+
+	configs, err := depl.ProxyConfig()
+	if err != nil {
+		fmt.Printf("Error getting proxy config: %v\n", err)
+		fmt.Println()
+	} else if len(configs) == 0 {
+		fmt.Println("No reverse-proxy configuration")
+		fmt.Println()
+	} else {
+		caddy, err := caddy.NewClient(depl.CaddyLoadBalancer.ApiEndpoint)
+		if err != nil {
+			return err
+		}
+
+		if settings.ShowProxyLocation {
+			tbl = table.New("Reverse-Proxy configuration", "Present", "Dial")
+		} else {
+			tbl = table.New("Reverse-Proxy configuration", "Present", "Dial")
+		}
+		for _, config := range configs {
+			cfg, err := caddy.GetConfig(config)
+			if err != nil {
+				return fmt.Errorf("while reading caddy config %+v in %+v, %v", config.Id, config.MountPoint, err)
+			}
+
+			if cfg.Present {
+				dial, err := cfg.Dial()
+				if err != nil {
+					return err
+				}
+
+				if settings.ShowProxyLocation {
+					tbl.AddRow(cfg.Id, cfg.MountPoint, "yes", dial)
+				} else {
+					tbl.AddRow(cfg.Id, "yes", dial)
+				}
+			} else {
+				if settings.ShowProxyLocation {
+					tbl.AddRow(cfg.Id, cfg.MountPoint, "no", "")
+				} else {
+					tbl.AddRow(cfg.Id, "no", "")
+				}
+			}
+		}
+		tbl.Print()
+		fmt.Println()
+	}
 
 	var ctx = context.Background()
 	sd, err := utils.NewSystemdClient(ctx)
@@ -195,35 +259,45 @@ func Print(depl_name string) error {
 		return err
 	}
 
-	units, err := sd.ListUnitsByPatternsContext(ctx, nil, []string{
-		service.ServiceUnit(depl.ServiceDir),
-		service.ServiceConfigUnit(depl.ServiceDir),
-		DeploymentUnit(depl.DeploymentName),
-		DeploymentConfigUnit(depl.DeploymentName),
-		CGIFunctionSocketUnit(depl.DeploymentName),
-		CGIFunctionServiceUnit(depl.DeploymentName, "*"),
-	})
-	if err != nil {
+	units := utils.UnitStatusSpecs{
+		&utils.UnitStatusSpec{
+			Name:    "Service",
+			Pattern: service.ServiceUnit(depl.ServiceDir),
+		},
+		&utils.UnitStatusSpec{
+			Name:    "Reverse-Proxy Service Config",
+			Pattern: service.ServiceConfigUnit(depl.ServiceDir),
+		},
+		&utils.UnitStatusSpec{
+			Name:    "Deployment",
+			Pattern: DeploymentUnit(depl.DeploymentName),
+		},
+		&utils.UnitStatusSpec{
+			Name:    "Reverse-Proxy Deployment Config",
+			Pattern: DeploymentConfigUnit(depl.DeploymentName),
+		},
+		&utils.UnitStatusSpec{
+			Name:    "Function Socket",
+			Pattern: CGIFunctionSocketUnit(depl.DeploymentName),
+		},
+		&utils.UnitStatusSpec{
+			Name:    "Function Instance",
+			Pattern: CGIFunctionServiceUnit(depl.DeploymentName, "*"),
+		},
+	}
+	if _, err := utils.UnitsStatus(ctx, sd, units); err != nil {
 		return err
 	}
 
-	tbl = table.New("", "Unit", "Loaded", "Active", "")
-	for _, u := range units {
-		var name string
-		if u.Name == service.ServiceUnit(depl.ServiceDir) {
-			name = "Service"
-		} else if u.Name == service.ServiceConfigUnit(depl.ServiceDir) {
-			name = "Reverse-Proxy Service Config"
-		} else if u.Name == DeploymentUnit(depl.DeploymentName) {
-			name = "Deployment"
-		} else if u.Name == DeploymentConfigUnit(depl.DeploymentName) {
-			name = "Reverse-Proxy Deployment Config"
-		} else if name == CGIFunctionSocketUnit(depl.DeploymentName) {
-			name = "CGI Function socket"
-		}
-		tbl.AddRow(name, u.Name, u.LoadState, u.ActiveState, "("+u.SubState+")")
-	}
-	tbl.Print()
+	units.ToTable().Print()
 
 	return nil
+}
+
+func stringsFromJSON(jsons []json.RawMessage) []string {
+	var result []string
+	for _, json := range jsons {
+		result = append(result, string(json))
+	}
+	return result
 }

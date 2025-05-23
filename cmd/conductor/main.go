@@ -155,7 +155,7 @@ func cmd_run() *flaggy.Subcommand {
 		log.Default().SetOutput(io.Discard)
 
 		if d != "" && s == "" {
-			depl, err := deployment.ReadDeploymentByName(d)
+			depl, err := deployment.ReadDeploymentByName(d, true)
 			if err != nil {
 				return err
 			}

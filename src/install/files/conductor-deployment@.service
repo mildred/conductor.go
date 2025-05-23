@@ -7,7 +7,8 @@ NotifyAccess=all
 ExitType=cgroup
 TimeoutStartSec=0
 Restart=always
-RestartPreventExitStatus=10
+SuccessExitStatus=10
+RestartPreventExitStatus=10 11
 
 WorkingDirectory=%t/conductor/deployments/%i
 Environment=CONDUCTOR_DEPLOYMENT=%i

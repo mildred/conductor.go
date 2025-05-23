@@ -1,8 +1,11 @@
 package deployment
 
 import (
+	"encoding/json"
+	"fmt"
 	"log"
 
+	"github.com/mildred/conductor.go/src/caddy"
 	"github.com/mildred/conductor.go/src/service"
 	"github.com/mildred/conductor.go/src/tmpl"
 )
@@ -27,4 +30,29 @@ func (pod *DeploymentPod) TemplatePod(depl *Deployment) error {
 	depl.TemplatedConfigMap = res
 
 	return nil
+}
+
+func (pod *DeploymentPod) ProxyConfig(depl *Deployment) (caddy.ConfigItems, error) {
+	var result caddy.ConfigItems
+	for _, reverse := range pod.ReverseProxy {
+		if reverse.UpstreamsPath == "" {
+			continue
+		}
+
+		config_id := pod.CaddyConfigName(depl.Service, reverse.Name)
+		config, err := json.Marshal(map[string]interface{}{
+			"@id":  config_id + ".upstream",
+			"dial": fmt.Sprintf("%s:%d", pod.IPAddress, reverse.Port),
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		result = append(result, &caddy.ConfigItem{
+			MountPoint: reverse.UpstreamsPath,
+			Config:     config,
+		})
+	}
+
+	return result, nil
 }
