@@ -63,6 +63,16 @@ func (functions *ServiceFunctions) FixPaths(dir string) error {
 }
 
 func (functions *ServiceFunctions) FillDefaults(service *Service) error {
+	for _, f := range *functions {
+		err := f.FillDefaults(service)
+		if err != nil {
+			return fmt.Errorf("on function %v, %v", f.Name, err)
+		}
+	}
+	return nil
+}
+
+func (f *ServiceFunction) FillDefaults(service *Service) error {
 	return nil
 }
 

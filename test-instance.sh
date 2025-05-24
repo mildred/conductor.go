@@ -44,8 +44,8 @@ CONF
 mkdir -p bin
 ln -sf "$srcdir/conductor bin/conductor"
 
-mkdir -p etc/conductor/dirs
-ln -sf "$srcdir"/examples/* etc/conductor/dirs
+mkdir -p etc/conductor/services
+ln -sf "$srcdir"/examples/* etc/conductor/services
 
 cat <<SHELL >caddy.sh
 #!/bin/bash

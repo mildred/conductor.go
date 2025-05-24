@@ -25,9 +25,13 @@ func StartFunction(ctx context.Context, depl *Deployment, function bool) error {
 			// Nothing to start, this is started on demand
 		}
 	case "http-stdio":
-		err = StartHttpStdioFunction(ctx, depl, depl.Function)
-		if err != nil {
-			return fmt.Errorf("while starting HTTP stdio function, %v", err)
+		if function {
+			err = StartHttpStdioFunction(ctx, depl, depl.Function)
+			if err != nil {
+				return fmt.Errorf("while starting HTTP stdio function, %v", err)
+			}
+		} else {
+			// Nothing to start, this is started on demand
 		}
 	default:
 		err = fmt.Errorf("Unknown function format %s", depl.Function.Format)
@@ -40,6 +44,14 @@ func StartFunction(ctx context.Context, depl *Deployment, function bool) error {
 }
 
 func StartHttpStdioFunction(ctx context.Context, depl *Deployment, f *DeploymentFunction) error {
+	if f.NoResponseHeaders {
+		return fmt.Errorf("http-stdio function incompatible with no_response_headers")
+	}
+
+	if len(f.ResponseHeaders) > 0 {
+		return fmt.Errorf("http-stdio function incompatible with response_headers (%v)", f.ResponseHeaders)
+	}
+
 	return ExecuteDecodedFunction(ctx, depl, f, os.Stdin, nil)
 }
 
