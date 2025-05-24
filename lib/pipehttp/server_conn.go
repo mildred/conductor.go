@@ -33,26 +33,30 @@ func (s *ConnServer) onConnState(c net.Conn, cs http.ConnState) {
 	}
 }
 
-func (s *ConnServer) ServeConnAndShutdown(conn net.Conn) error {
-	listener := newPipeListener()
+func (s *ConnServer) ServeConnAndShutdown(ctx context.Context, conn net.Conn) error {
+	listener := NewPipeListenerContext(ctx)
 	err := listener.ServeConn(conn)
 	if err != nil {
 		return err
 	}
 
+	if ctx != nil {
+		s.BaseContext = func(l net.Listener) context.Context { return ctx }
+	}
+
 	err = s.Serve(listener)
-	if err != nil {
+	if err != nil && err != http.ErrServerClosed {
 		return err
 	}
 
 	return nil
 }
 
-func (s *ConnServer) ServeStdioConnAndShutdown() error {
+func (s *ConnServer) ServeStdioConnAndShutdown(ctx context.Context) error {
 	conn, err := net.FileConn(os.Stdin)
 	if err != nil {
 		return err
 	}
 
-	return s.ServeConnAndShutdown(conn)
+	return s.ServeConnAndShutdown(ctx, conn)
 }
