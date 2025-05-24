@@ -1,58 +1,9 @@
-package main
+package pipehttp
 
 import (
-	"fmt"
-	"log"
 	"net"
-	"net/http"
-	"os"
 	"sync"
 )
-
-func main() {
-	log.SetOutput(os.Stderr)
-
-	err := runMain()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
-}
-
-func runMain() error {
-	server := &http.Server{
-		Handler: http.HandlerFunc(handleRequest),
-	}
-
-	conn, err := net.FileConn(os.Stdin)
-	if err != nil {
-		return err
-	}
-
-	log.Printf("conn: %+v", conn)
-
-	listener := newPipeListener()
-	err = listener.ServeConn(conn)
-	if err != nil {
-		return err
-	}
-
-	log.Printf("listener: %+v", listener)
-
-	err = server.Serve(listener)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func handleRequest(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Request handled")
-	// Handle the request and write the response
-	r.Header.Set("Hello", "World")
-	fmt.Fprintf(w, "Hello, World!")
-}
 
 // pipeListener is a hack to workaround the lack of http.Server.ServeConn.
 // See: https://github.com/golang/go/issues/36673
