@@ -1,0 +1,18 @@
+{
+  "app_name": "hello-world-cgi",
+  "instance_name": "default",
+  "functions": [
+    {
+      "name": "f",
+      "format": "cgi",
+      "exec": ["./cgi-script.sh"],
+      "stderr_as_stdout": false,
+      "response_headers": [
+        "Content-Type: text/plain; charset=utf-8"
+      ],
+      "no_response_headers": false,
+      "path_info_strip": 2,
+      "service_directives": []
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "app_name": "hello-stdio",
+  "instance_name": "default",
+  "functions": [
+    {
+      "name": "f",
+      "format": "http-stdio",
+      "exec": ["./stdio-script.sh"],
+      "stderr_as_stdout": false,
+      "path_info_strip": 2,
+      "service_directives": []
+    }
+  ]
+}
