@@ -2,6 +2,7 @@ package idlehttp
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -65,7 +66,7 @@ func (t *IdleTracker) GoShutdown(server *http.Server) {
 	}()
 }
 
-func (t *IdleTracker) ServeIdle(server *http.Server, listenernum int) {
+func (t *IdleTracker) ServeIdle(server *http.Server, listenernum int) error {
 	listeners, err := activation.Listeners()
 	if err != nil {
 		return err
