@@ -73,7 +73,7 @@ func (t *IdleTracker) ServeIdle(server *http.Server, listenernum int) error {
 	}
 
 	if len(listeners) < listenernum+1 {
-		return fmt.Errorf("Unexpected number of socket activation fds: %d < %d", len(listeners), listenernum+1)
+		return fmt.Errorf("unexpected number of socket activation fds: %d < %d", len(listeners), listenernum+1)
 	}
 
 	t.GoShutdown(server)

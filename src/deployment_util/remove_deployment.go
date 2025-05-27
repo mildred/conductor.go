@@ -8,37 +8,58 @@ import (
 	"os/exec"
 	"time"
 
+	"github.com/taigrr/systemctl"
+	"github.com/taigrr/systemctl/properties"
+
 	"github.com/mildred/conductor.go/src/dirs"
-	"github.com/mildred/conductor.go/src/utils"
+	_ "github.com/mildred/conductor.go/src/utils"
 
 	. "github.com/mildred/conductor.go/src/deployment"
 )
 
 func RemoveTimeout(ctx0 context.Context, deployment_name string, timeout, term_timeout time.Duration) error {
-	sd, err := utils.NewSystemdClient(ctx0)
+	// sd, err := utils.NewSystemdClient(ctx0)
+	// if err != nil {
+	//   return err
+	// }
+
+	// statuses, err := sd.ListUnitsByNamesContext(ctx0, []string{
+	// 	DeploymentUnit(deployment_name),
+	// 	DeploymentConfigUnit(deployment_name),
+	// 	CGIFunctionSocketUnit(deployment_name)})
+	// if err != nil {
+	// 	return err
+	// }
+
+	// var has_deployment = false
+	// var has_config = false
+	// var has_cgi_function = false
+	// for _, status := range statuses {
+	// 	if status.Name == DeploymentUnit(deployment_name) {
+	// 		has_deployment = status.LoadState == "loaded"
+	// 	} else if status.Name == DeploymentConfigUnit(deployment_name) {
+	// 		has_config = status.LoadState == "loaded"
+	// 	} else if status.Name == CGIFunctionSocketUnit(deployment_name) {
+	// 		has_cgi_function = status.LoadState == "loaded"
+	// 	}
+	// }
+
+	load_state, err := systemctl.Show(ctx0, DeploymentUnit(deployment_name), properties.LoadState, systemctl.Options{UserMode: !dirs.AsRoot})
+	has_deployment := load_state == "loaded"
 	if err != nil {
 		return err
 	}
 
-	statuses, err := sd.ListUnitsByNamesContext(ctx0, []string{
-		DeploymentUnit(deployment_name),
-		DeploymentConfigUnit(deployment_name),
-		CGIFunctionSocketUnit(deployment_name)})
+	load_state, err = systemctl.Show(ctx0, DeploymentConfigUnit(deployment_name), properties.LoadState, systemctl.Options{UserMode: !dirs.AsRoot})
+	has_config := load_state == "loaded"
 	if err != nil {
 		return err
 	}
 
-	var has_deployment = false
-	var has_config = false
-	var has_cgi_function = false
-	for _, status := range statuses {
-		if status.Name == DeploymentUnit(deployment_name) {
-			has_deployment = status.LoadState == "loaded"
-		} else if status.Name == DeploymentConfigUnit(deployment_name) {
-			has_config = status.LoadState == "loaded"
-		} else if status.Name == CGIFunctionSocketUnit(deployment_name) {
-			has_cgi_function = status.LoadState == "loaded"
-		}
+	load_state, err = systemctl.Show(ctx0, CGIFunctionSocketUnit(deployment_name), properties.LoadState, systemctl.Options{UserMode: !dirs.AsRoot})
+	has_cgi_function := load_state == "loaded"
+	if err != nil {
+		return err
 	}
 
 	var cancel context.CancelFunc = func() {}

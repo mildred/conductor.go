@@ -276,14 +276,23 @@ func Print(depl_name string, settings PrintSettings) error {
 			Name:    "Reverse-Proxy Deployment Config",
 			Pattern: DeploymentConfigUnit(depl.DeploymentName),
 		},
-		&utils.UnitStatusSpec{
+	}
+	if depl.Function != nil {
+		units = append(units, &utils.UnitStatusSpec{
 			Name:    "Function Socket",
 			Pattern: CGIFunctionSocketUnit(depl.DeploymentName),
-		},
-		&utils.UnitStatusSpec{
-			Name:    "Function Instance",
-			Pattern: CGIFunctionServiceUnit(depl.DeploymentName, "*"),
-		},
+		})
+		if depl.Function.IsSingle() {
+			units = append(units, &utils.UnitStatusSpec{
+				Name:    "Function Instance",
+				Pattern: CGIFunctionServiceUnitSingle(depl.DeploymentName),
+			})
+		} else {
+			units = append(units, &utils.UnitStatusSpec{
+				Name:    "Function Instances",
+				Pattern: CGIFunctionServiceUnit(depl.DeploymentName, "*"),
+			})
+		}
 	}
 	if _, err := utils.UnitsStatus(ctx, sd, units); err != nil {
 		return err

@@ -23,6 +23,7 @@ require (
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/inconshreveable/go-update v0.0.0-20160112193335-8152e7eb6ccf // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
+	github.com/taigrr/systemctl v1.0.10 // indirect
 	github.com/tcnksm/go-gitconfig v0.1.2 // indirect
 	github.com/ulikunitz/xz v0.5.12 // indirect
 	golang.org/x/net v0.34.0 // indirect
