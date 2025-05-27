@@ -26,6 +26,10 @@ func CGIFunctionSocketUnit(name string) string {
 	return fmt.Sprintf("conductor-cgi-function-%s.socket", name)
 }
 
+func CGIFunctionServiceUnitSingle(name string) string {
+	return fmt.Sprintf("conductor-cgi-function-%s.service", name)
+}
+
 func CGIFunctionServiceUnit(name string, instance string) string {
 	return fmt.Sprintf("conductor-cgi-function-%s@%s.service", name, instance)
 }

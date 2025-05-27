@@ -210,13 +210,17 @@ func CreateDeploymentFromService(name string, svc *service.Service, seed *Deploy
 		pod := svc.Pods.FindPod(seed.PartName)
 		service_directives = pod.ServiceDirectives
 	} else if seed.IsFunction {
-		err = CreateCGIFunctionUnits(name)
+		fct := svc.Functions.FindFunction(seed.PartName)
+		if fct.IsSingle() {
+			unit_name = CGIFunctionServiceUnitSingle(name)
+		} else {
+			unit_name = CGIFunctionServiceUnit(name, "")
+		}
+		service_directives = fct.ServiceDirectives
+		err = CreateCGIFunctionUnits(name, fct)
 		if err != nil {
 			return "", err
 		}
-		unit_name = CGIFunctionServiceUnit(name, "")
-		fct := svc.Functions.FindFunction(seed.PartName)
-		service_directives = fct.ServiceDirectives
 	}
 
 	if unit_name != "" {
@@ -259,7 +263,16 @@ func CreateDeploymentFromService(name string, svc *service.Service, seed *Deploy
 	return dir, nil
 }
 
-func CreateCGIFunctionUnits(name string) error {
+func CreateCGIFunctionUnits(name string, f *service.ServiceFunction) error {
+	var unit_name, accept string
+	if f.IsSingle() {
+		unit_name = CGIFunctionServiceUnitSingle(name)
+		accept = "no"
+	} else {
+		unit_name = CGIFunctionServiceUnit(name, "")
+		accept = "yes"
+	}
+
 	var service = `[Unit]
 Description=Conductor CGI Function ` + name + `
 CollectMode=inactive-or-failed
@@ -284,7 +297,7 @@ Requires=` + DeploymentConfigUnit(name) + `
 
 [Socket]
 ListenStream=` + DeploymentSocketPath(name) + `
-Accept=yes
+Accept=` + accept + `
 
 [Install]
 WantedBy=sockets.target
@@ -313,8 +326,8 @@ Restart=on-failure
 		return err
 	}
 
-	log.Printf("Write %s", dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode(), CGIFunctionServiceUnit(name, "")))
-	err = os.WriteFile(dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode(), CGIFunctionServiceUnit(name, "")), []byte(service), 0o644)
+	log.Printf("Write %s", dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode(), unit_name))
+	err = os.WriteFile(dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode(), unit_name), []byte(service), 0o644)
 	if err != nil {
 		return err
 	}

@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"syscall"
 
 	"github.com/mildred/conductor.go/src/cgi"
 
@@ -33,6 +34,15 @@ func StartFunction(ctx context.Context, depl *Deployment, function bool) error {
 		} else {
 			// Nothing to start, this is started on demand
 		}
+	case "sdactivate":
+		if function {
+			err = StartSDActivateFunction(ctx, depl, depl.Function)
+			if err != nil {
+				return fmt.Errorf("while starting Systemd socket activated function, %v", err)
+			}
+		} else {
+			// Nothing to start, this is started on demand
+		}
 	default:
 		err = fmt.Errorf("Unknown function format %s", depl.Function.Format)
 	}
@@ -53,6 +63,18 @@ func StartHttpStdioFunction(ctx context.Context, depl *Deployment, f *Deployment
 	}
 
 	return ExecuteDecodedFunction(ctx, depl, f, os.Stdin, nil)
+}
+
+func StartSDActivateFunction(ctx context.Context, depl *Deployment, f *DeploymentFunction) error {
+	if f.NoResponseHeaders {
+		return fmt.Errorf("http-stdio function incompatible with no_response_headers")
+	}
+
+	if len(f.ResponseHeaders) > 0 {
+		return fmt.Errorf("http-stdio function incompatible with response_headers (%v)", f.ResponseHeaders)
+	}
+
+	return syscall.Exec(f.Exec[0], f.Exec[1:], os.Environ())
 }
 
 func StartCGIFunction(ctx context.Context, depl *Deployment, f *DeploymentFunction) error {

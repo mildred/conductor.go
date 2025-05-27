@@ -116,6 +116,7 @@ func cmd_deployment_systemd(cmd_name, descr string) func() *flaggy.Subcommand {
 					cli = append(cli,
 						deployment.DeploymentConfigUnit(id),
 						deployment.CGIFunctionSocketUnit(id),
+						deployment.CGIFunctionServiceUnitSingle(id),
 						deployment.CGIFunctionServiceUnit(id, "*"))
 				}
 			}

@@ -129,6 +129,7 @@ func RemoveTimeout(ctx0 context.Context, deployment_name string, timeout, term_t
 		dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode(), DeploymentUnit(deployment_name)+".d"),
 		dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode(), CGIFunctionSocketUnit(deployment_name)+".d"),
 		dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode(), CGIFunctionSocketUnit(deployment_name)),
+		dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode(), CGIFunctionServiceUnitSingle(deployment_name)),
 		dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode(), CGIFunctionServiceUnit(deployment_name, "")),
 	}
 	for _, systemd_run_dir := range systemd_run_dirs {

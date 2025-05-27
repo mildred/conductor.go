@@ -14,7 +14,7 @@ import (
 type ServiceFunction struct {
 	Name                 string                       `json:"name"`
 	ServiceDirectives    []string                     `json:"service_directives,omitempty"`
-	Format               string                       `json:"format,omitempty"` // Format: cgi, http-stdio
+	Format               string                       `json:"format,omitempty"` // Format: cgi, http-stdio, sdactivate
 	Exec                 []string                     `json:"exec,omitempty"`
 	StderrAsStdout       bool                         `json:"stderr_as_stdout,omitempty"`
 	ResponseHeaders      []string                     `json:"response_headers,omitempty"`    // Additional response headers
@@ -70,6 +70,10 @@ func (functions *ServiceFunctions) FillDefaults(service *Service) error {
 		}
 	}
 	return nil
+}
+
+func (f *ServiceFunction) IsSingle() bool {
+	return f.Format == "sdactivate"
 }
 
 func (f *ServiceFunction) FillDefaults(service *Service) error {
@@ -254,7 +258,10 @@ func (f *ServiceFunction) CaddyConfig(service *Service, name string) (json.RawMe
 		"@id": config_id,
 		"match": []interface{}{
 			map[string]interface{}{
-				"path": []string{"/cgi/" + part_id + "/*"},
+				"path": []string{fmt.Sprintf("/cgi/%s/*", part_id)},
+			},
+			map[string]interface{}{
+				"path": []string{fmt.Sprintf("/cgi/%s.%s.%s/*", service.AppName, service.InstanceName, f.Name)},
 			},
 		},
 		"handle": handlers,
