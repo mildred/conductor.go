@@ -10,6 +10,7 @@ import (
 
 	"github.com/integrii/flaggy"
 
+	"github.com/mildred/conductor.go/src/api"
 	"github.com/mildred/conductor.go/src/deployment"
 	"github.com/mildred/conductor.go/src/deployment_public"
 	"github.com/mildred/conductor.go/src/install"
@@ -19,6 +20,16 @@ import (
 )
 
 var version = "dev"
+
+func cmd_private_api_server() *flaggy.Subcommand {
+	cmd := flaggy.NewSubcommand("api-server")
+	cmd.Description = "Run an API server"
+
+	cmd.CommandUsed = Hook(func() error {
+		return api.RunServer()
+	})
+	return cmd
+}
 
 func cmd_private_policy_server() *flaggy.Subcommand {
 	cmd := flaggy.NewSubcommand("policy-server")
@@ -36,6 +47,7 @@ func cmd_private() *flaggy.Subcommand {
 	cmd.AttachSubcommand(cmd_private_service(), 1)
 	cmd.AttachSubcommand(cmd_private_deployment(), 1)
 	cmd.AttachSubcommand(cmd_private_policy_server(), 1)
+	cmd.AttachSubcommand(cmd_private_api_server(), 1)
 	cmd.RequireSubcommand = true
 	return cmd
 }

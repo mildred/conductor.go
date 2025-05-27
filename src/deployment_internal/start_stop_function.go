@@ -89,7 +89,9 @@ func StartSDActivateFunction(ctx context.Context, depl *Deployment, f *Deploymen
 		}
 	}
 
-	return syscall.Exec(f.Exec[0], f.Exec[1:], os.Environ())
+	env := append(os.Environ(), depl.Vars()...)
+
+	return syscall.Exec(f.Exec[0], f.Exec[1:], env)
 }
 
 func StartCGIFunction(ctx context.Context, depl *Deployment, f *DeploymentFunction) error {

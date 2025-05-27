@@ -27,7 +27,7 @@ func main() {
 }
 
 func runMain(ctx context.Context) error {
-	idle := idlehttp.NewIdleTracker(5 * time.Second)
+	idle := idlehttp.NewIdleTracker(ctx, 5*time.Second)
 	server := &http.Server{
 		Handler:   http.HandlerFunc(handleRequest),
 		ConnState: idle.ConnState,

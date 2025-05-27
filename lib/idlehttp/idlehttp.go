@@ -13,17 +13,37 @@ import (
 )
 
 type IdleTracker struct {
-	mu     sync.Mutex
-	active map[net.Conn]bool
-	idle   time.Duration
-	timer  *time.Timer
+	Context context.Context
+	mu      sync.Mutex
+	active  map[net.Conn]bool
+	idle    time.Duration
+	timer   *time.Timer
 }
 
-func NewIdleTracker(idle time.Duration) *IdleTracker {
+type Server struct {
+	http.Server
+	Idle *IdleTracker
+}
+
+func (s *Server) ServeIdle(fdnum int) error {
+	if s.ConnState != nil {
+		return fmt.Errorf("ConnState should be nil")
+	}
+	s.ConnState = s.Idle.ConnState
+
+	if s.BaseContext == nil {
+		s.BaseContext = func(l net.Listener) context.Context { return s.Idle.Context }
+	}
+
+	return s.Idle.ServeIdle(&s.Server, fdnum)
+}
+
+func NewIdleTracker(ctx context.Context, idle time.Duration) *IdleTracker {
 	return &IdleTracker{
-		active: make(map[net.Conn]bool),
-		idle:   idle,
-		timer:  time.NewTimer(idle),
+		Context: ctx,
+		active:  make(map[net.Conn]bool),
+		idle:    idle,
+		timer:   time.NewTimer(idle),
 	}
 }
 
@@ -53,13 +73,20 @@ func (t *IdleTracker) Done() <-chan time.Time {
 }
 
 func (t *IdleTracker) Shutdown(server *http.Server, ctx context.Context) error {
-	<-t.Done()
+	select {
+	case <-t.Done():
+	case <-t.Context.Done():
+	}
 	return server.Shutdown(ctx)
 }
 
 func (t *IdleTracker) GoShutdown(server *http.Server) {
 	go func() {
-		err := t.Shutdown(server, context.Background())
+		ctx := t.Context
+		if ctx.Err() != nil {
+			ctx = context.Background()
+		}
+		err := t.Shutdown(server, ctx)
 		if err != nil {
 			log.Fatalf("error shutting down: %v\n", err)
 		}
