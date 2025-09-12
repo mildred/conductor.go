@@ -81,9 +81,9 @@ func PrintService(name string, settings PrintSettings) error {
 		}
 
 		if settings.ShowProxyLocation {
-			tbl = table.New("Reverse-Proxy configuration", "Location", "Present", "Matchers", "Upstreams")
+			tbl = table.New("Reverse-Proxy configuration", "Location", "Present", "Configuration (matchers)", "Upstreams")
 		} else {
-			tbl = table.New("Reverse-Proxy configuration", "Present", "Matchers", "Upstreams")
+			tbl = table.New("Reverse-Proxy configuration", "Present", "Configuration (matchers)", "Upstreams")
 		}
 		for _, config := range configs {
 			cfg, err := caddy.GetConfig(config)
@@ -94,22 +94,26 @@ func PrintService(name string, settings PrintSettings) error {
 			if cfg.Present {
 				matches, err := cfg.MatchConfig()
 				if err != nil {
-					return err
+					// ignore err
 				}
 
 				upstreams, err := cfg.UpstreamDials()
 				if err != nil {
-					return err
+					// ignore err
 				}
 
 				if settings.ShowProxyLocation {
 					tbl.AddRow(cfg.Id, cfg.MountPoint, "yes", strings.Join(stringsFromJSON(matches), "\n"), strings.Join(upstreams, "\n"))
+				} else if cfg.Id == "" {
+					tbl.AddRow(cfg.MountPoint, "yes", string(cfg.Config))
 				} else {
 					tbl.AddRow(cfg.Id, "yes", strings.Join(stringsFromJSON(matches), "\n"), strings.Join(upstreams, "\n"))
 				}
 			} else {
 				if settings.ShowProxyLocation {
 					tbl.AddRow(cfg.Id, cfg.MountPoint, "no", "")
+				} else if cfg.Id == "" {
+					tbl.AddRow(cfg.MountPoint, "?", string(cfg.Item.Config))
 				} else {
 					tbl.AddRow(cfg.Id, "no", "")
 				}

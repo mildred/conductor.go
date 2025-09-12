@@ -44,6 +44,7 @@ type ConfigStatus struct {
 	Id         string          `json:"id"`
 	Present    bool            `json:"present"`
 	Config     json.RawMessage `json:"config"`
+	Item       *ConfigItem     `json:"-"`
 }
 
 func NewClient(endpoint string) (*CaddyClient, error) {
@@ -166,7 +167,12 @@ func (config *ConfigItem) GetId() (string, error) {
 	var snip = &ConfigSnip{}
 	err := json.Unmarshal(config.Config, snip)
 	if err != nil {
-		return "", err
+		if config.RegisterOnly {
+			log.Printf("caddy: Failed to detect @id property on JSON: %v", err)
+			return "", nil
+		} else {
+			return "", fmt.Errorf("Failed to get @id from: %v", string(config.Config))
+		}
 	}
 
 	return snip.Id, nil
@@ -176,9 +182,19 @@ func (client *CaddyClient) GetConfig(config *ConfigItem) (*ConfigStatus, error) 
 	result := &ConfigStatus{
 		MountPoint: config.MountPoint,
 		Id:         config.Id,
+		Item:       config,
 	}
 
-	url, err := client.endpoint.Parse("/id/" + config.Id)
+	var id_url string
+	if config.Id == "" && !config.RegisterOnly {
+		return result, nil
+	} else if config.Id == "" {
+		id_url = config.MountPoint
+	} else {
+		id_url = config.Id
+	}
+
+	url, err := client.endpoint.Parse("/id/" + id_url)
 	if err != nil {
 		return nil, err
 	}
@@ -187,7 +203,7 @@ func (client *CaddyClient) GetConfig(config *ConfigItem) (*ConfigStatus, error) 
 	if err != nil {
 		return nil, err
 	}
-	log.Printf("caddy: GET /id/%s: %s\n", config.Id, res.Status)
+	log.Printf("caddy: GET /id/%s: %s\n", id_url, res.Status)
 
 	result.Present = res.StatusCode >= 200 && res.StatusCode < 300
 
@@ -197,6 +213,22 @@ func (client *CaddyClient) GetConfig(config *ConfigItem) (*ConfigStatus, error) 
 	}
 
 	result.Config = body
+
+	if result.Present && config.RegisterOnly && config.Id == "" {
+		var arr []json.RawMessage
+		err := json.Unmarshal(body, &arr)
+		if err != nil {
+			return nil, fmt.Errorf("cannot unmarshal actual config in an array for register_only proxy config, %v", err)
+		}
+
+		result.Present = false
+		for _, item := range arr {
+			if bytes.Equal(item, config.Config) {
+				result.Present = true
+				result.Config = item
+			}
+		}
+	}
 
 	return result, nil
 }
