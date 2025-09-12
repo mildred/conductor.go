@@ -84,10 +84,15 @@ func PrintList(settings PrintListSettings) error {
 		list_depl_status = append(list_depl_status, unit)
 		list_depl_config_status = append(list_depl_config_status, config_unit)
 
+		displayServiceConfig := depl.DisplayServiceConfig
+		if depl.DisplayServiceDepConfig != nil {
+			displayServiceConfig = *depl.DisplayServiceDepConfig
+		}
+
 		if extra_service_cols == nil {
-			extra_service_cols = depl.DisplayServiceConfig
+			extra_service_cols = displayServiceConfig
 		} else {
-			utils.IntersectHoles(&extra_service_cols, depl.DisplayServiceConfig)
+			utils.IntersectHoles(&extra_service_cols, displayServiceConfig)
 		}
 
 		if extra_depl_cols == nil {

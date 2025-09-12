@@ -53,7 +53,8 @@ To declare a service, just put a JSON file in
   "config": {
     "BEAUTIFUL_APP_ENV": "staging",
     "DOCKER_IMAGE": "example.org/beautiful/app",
-    "DOCKER_TAG": "latest"
+    "DOCKER_TAG": "latest",
+    "SERVICE_TOGGLE": "true"
   },
   "pods": [
     {
@@ -85,7 +86,8 @@ To declare a service, just put a JSON file in
       "exec": ["./migrate.cmd"]
     }
   },
-  "display_service_config": ["BEAUTIFUL_APP_ENV", "DOCKER_TAG"],
+  "display_service_config": ["BEAUTIFUL_APP_ENV", "DOCKER_TAG", "SERVICE_TOGGLE"],
+  "display_service_deployment_config": ["BEAUTIFUL_APP_ENV", "DOCKER_TAG"],
   "display_deployment_config": ["DOCKER_VERSION"]
 }
 ```

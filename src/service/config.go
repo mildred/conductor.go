@@ -55,6 +55,7 @@ type Service struct {
 	Hooks                   []*Hook                    `json:"hooks,omitempty"`
 	CaddyLoadBalancer       CaddyConfig                `json:"caddy_load_balancer"`
 	DisplayServiceConfig    []string                   `json:"display_service_config"`
+	DisplayServiceDepConfig *[]string                  `json:"display_service_deployment_config"`
 	DisplayDeploymentConfig []string                   `json:"display_deployment_config"`
 	Commands                map[string]*ServiceCommand `json:"commands"`
 }
