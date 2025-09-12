@@ -31,8 +31,8 @@ builds:
       - CGO_ENABLED=0
     goos:
       - linux
-      - windows
-      - darwin
+      # - windows
+      # - darwin
     binary: conductor
     main: ./cmd/conductor
 

@@ -5,6 +5,8 @@ package deployment_internal
 import (
 	"context"
 	"fmt"
+
+	. "github.com/mildred/conductor.go/src/deployment"
 )
 
 func StartSDActivateFunction(ctx context.Context, depl *Deployment, f *DeploymentFunction) error {
