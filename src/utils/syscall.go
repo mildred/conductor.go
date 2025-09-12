@@ -1,3 +1,5 @@
+//go:build dragonfly || freebsd || linux || netbsd
+
 package utils
 
 import (
