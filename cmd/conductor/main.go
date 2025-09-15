@@ -152,6 +152,7 @@ func cmd_run() *flaggy.Subcommand {
 	var direct bool
 	var cmdname string
 	var args []string
+	var strictVersion bool
 
 	cmd := flaggy.NewSubcommand("run")
 	cmd.ShortName = "r"
@@ -160,6 +161,7 @@ func cmd_run() *flaggy.Subcommand {
 	cmd.String(&s, "s", "service", "Specify service")
 	cmd.Var(&env, "e", "env", "Environment to add to the command")
 	cmd.Bool(&direct, "", "direct", "If command fails, do not add error message and keep exit status")
+	cmd.Bool(&strictVersion, "", "strict-version", "Fail to run a command in a outdated deployment")
 	cmd.AddPositionalValue(&cmdname, "command", 1, false, "Command to run")
 	cmd.AddExtraValues(&args, "args", "Command arguments")
 
@@ -186,7 +188,7 @@ func cmd_run() *flaggy.Subcommand {
 			if cmdname == "" {
 				return service_public.PrintListCommands(service)
 			} else {
-				return service_public.RunServiceCommand(service, direct, env, cmdname, args...)
+				return service_public.RunServiceCommand(service, direct, strictVersion, env, cmdname, args...)
 			}
 		}
 
