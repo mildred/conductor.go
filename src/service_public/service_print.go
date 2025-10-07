@@ -10,6 +10,7 @@ import (
 
 	"github.com/mildred/conductor.go/src/caddy"
 	"github.com/mildred/conductor.go/src/deployment_public"
+	"github.com/mildred/conductor.go/src/service_util"
 	"github.com/mildred/conductor.go/src/utils"
 
 	. "github.com/mildred/conductor.go/src/service"
@@ -45,7 +46,12 @@ func PrintService(name string, settings PrintSettings) error {
 
 	tbl = table.New("", "")
 	for _, col := range service.DisplayServiceConfig {
-		tbl.AddRow(col, service.Config[col])
+		val, err := service.GetDisplayColumn(col, &service_util.ServiceCommandRunner{service})
+		if err != nil {
+			return err
+		}
+
+		tbl.AddRow(col, val)
 	}
 	tbl.Print()
 	fmt.Println()

@@ -1,25 +1,61 @@
 package service_util
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
 
+	"github.com/mildred/conductor.go/src/deployment"
 	. "github.com/mildred/conductor.go/src/service"
 )
 
-func RunCommand(command *ServiceCommand, direct bool, cwd string, vars []string, cmd_name string, args ...string) error {
+type ServiceCommandRunner struct {
+	*Service
+}
+
+func (s *ServiceCommandRunner) RunCommandGetValue(c *ServiceCommand, cmd_name string, args ...string) (string, error) {
+	cmd, err := PrepareCommand(c, s.BasePath, s.Vars(), cmd_name, args...)
+	if err != nil {
+		return "", err
+	}
+
+	var buf bytes.Buffer
+
+	cmd.Stdout = &buf
+	err = cmd.Run()
+	return buf.String(), err
+}
+
+type DeploymentCommandRunner struct {
+	*deployment.Deployment
+}
+
+func (depl *DeploymentCommandRunner) RunCommandGetValue(c *ServiceCommand, cmd_name string, args ...string) (string, error) {
+	cmd, err := PrepareCommand(c, deployment.DeploymentDirByName(depl.DeploymentName, false), depl.Vars(), cmd_name, args...)
+	if err != nil {
+		return "", err
+	}
+
+	var buf bytes.Buffer
+
+	cmd.Stdout = &buf
+	err = cmd.Run()
+	return buf.String(), err
+}
+
+func PrepareCommand(command *ServiceCommand, cwd string, vars []string, cmd_name string, args ...string) (*exec.Cmd, error) {
 	if command == nil {
-		return fmt.Errorf("Command %q does not exists", cmd_name)
+		return nil, fmt.Errorf("Command %q does not exists", cmd_name)
 	}
 
 	if len(command.Exec) == 0 {
-		return fmt.Errorf("Command %q is not executable", cmd_name)
+		return nil, fmt.Errorf("Command %q is not executable", cmd_name)
 	}
 
 	wd, err := os.Getwd()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	args = append(command.Exec, args...)
@@ -33,6 +69,15 @@ func RunCommand(command *ServiceCommand, direct bool, cwd string, vars []string,
 	cmd.Env = append(cmd.Env, fmt.Sprintf("CONDUCTOR_COMMAND=%s", cmd_name))
 	cmd.Env = append(cmd.Env, fmt.Sprintf("CONDUCTOR_COMMAND_DIR=%s", wd))
 	cmd.Env = append(cmd.Env, vars...)
+
+	return cmd, nil
+}
+
+func RunCommand(command *ServiceCommand, direct bool, cwd string, vars []string, cmd_name string, args ...string) error {
+	cmd, err := PrepareCommand(command, cwd, vars, cmd_name, args...)
+	if err != nil {
+		return err
+	}
 
 	err = cmd.Run()
 	if !direct {

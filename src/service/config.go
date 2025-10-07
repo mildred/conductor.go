@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 
@@ -54,10 +55,20 @@ type Service struct {
 	Functions               ServiceFunctions           `json:"functions,omitempty"`
 	Hooks                   []*Hook                    `json:"hooks,omitempty"`
 	CaddyLoadBalancer       CaddyConfig                `json:"caddy_load_balancer"`
-	DisplayServiceConfig    []string                   `json:"display_service_config"`
-	DisplayServiceDepConfig *[]string                  `json:"display_service_deployment_config"`
-	DisplayDeploymentConfig []string                   `json:"display_deployment_config"`
+	DisplayServiceConfig    []DisplayColumn            `json:"display_service_config"`
+	DisplayServiceDepConfig *[]DisplayColumn           `json:"display_service_deployment_config"`
+	DisplayDeploymentConfig []DisplayColumn            `json:"display_deployment_config"`
 	Commands                map[string]*ServiceCommand `json:"commands"`
+}
+
+type DisplayColumn struct {
+	DisplayColumnData
+}
+
+type DisplayColumnData struct {
+	Name    string   `json:"name"`
+	Config  string   `json:"config"`
+	Command []string `json:"command"`
 }
 
 const ConfigName = "conductor-service.json"
@@ -501,4 +512,61 @@ func (service *Service) ProxyConfig() (caddy.ConfigItems, error) {
 	}
 
 	return configs, nil
+}
+
+func (c *DisplayColumn) UnmarshalJSON(data []byte) error {
+	var value interface{}
+	err := json.Unmarshal(data, &value)
+	if err != nil {
+		return err
+	}
+
+	switch val := value.(type) {
+	case string:
+		c.DisplayColumnData = DisplayColumnData{
+			Name:   val,
+			Config: val,
+		}
+	default:
+		return json.Unmarshal(data, &c.DisplayColumnData)
+	}
+
+	return nil
+}
+
+func (c *DisplayColumn) MarshalJSON() ([]byte, error) {
+	if c.Name == c.Config && len(c.Command) == 0 {
+		return json.Marshal(c.Config)
+	}
+
+	return json.Marshal(c.DisplayColumnData)
+}
+
+func DisplayColumnEqual(v1, v2 DisplayColumn) bool {
+	return reflect.DeepEqual(v1, v2)
+}
+
+func DisplayColumnIsEmpty(v DisplayColumn) bool {
+	return reflect.DeepEqual(v, DisplayColumn{})
+}
+
+type CommandRunnerDisplayCol interface {
+	RunCommandGetValue(c *ServiceCommand, cmd_name string, args ...string) (string, error)
+}
+
+func (s *Service) GetDisplayColumn(c DisplayColumn, runner CommandRunnerDisplayCol) (string, error) {
+	if c.Config != "" {
+		return s.Config[c.Config].String(), nil
+	} else if len(c.Command) > 0 {
+		cmd := s.Commands[c.Command[0]]
+		if cmd == nil {
+			return "", nil
+		}
+
+		args := c.Command[1:]
+
+		return runner.RunCommandGetValue(cmd, c.Command[0], args...)
+	} else {
+		return "", nil
+	}
 }

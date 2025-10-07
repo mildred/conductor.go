@@ -15,6 +15,7 @@ import (
 	"github.com/coreos/go-systemd/v22/dbus"
 	"github.com/rodaine/table"
 
+	"github.com/mildred/conductor.go/src/service_util"
 	"github.com/mildred/conductor.go/src/utils"
 
 	. "github.com/mildred/conductor.go/src/service"
@@ -139,7 +140,7 @@ func PrintList(settings PrintListSettings) error {
 	var list_service_dirs []string
 	var list_services []*Service
 	var list_status []dbus.UnitStatus
-	var extra_cols []string
+	var extra_cols []DisplayColumn
 
 	for _, u := range units {
 		service_dir := ServiceDirFromUnit(u.Name)
@@ -166,7 +167,7 @@ func PrintList(settings PrintListSettings) error {
 		if extra_cols == nil {
 			extra_cols = service.DisplayServiceConfig
 		} else {
-			utils.IntersectHoles(&extra_cols, service.DisplayServiceConfig)
+			utils.IntersectHolesFunc(&extra_cols, service.DisplayServiceConfig, DisplayColumnEqual)
 		}
 	}
 
@@ -214,12 +215,12 @@ func PrintList(settings PrintListSettings) error {
 			if extra_cols == nil {
 				extra_cols = service.DisplayServiceConfig
 			} else {
-				utils.IntersectHoles(&extra_cols, service.DisplayServiceConfig)
+				utils.IntersectHolesFunc(&extra_cols, service.DisplayServiceConfig, DisplayColumnEqual)
 			}
 		}
 	}
 
-	extra_cols = utils.Compact(extra_cols...)
+	extra_cols = utils.CompactFunc(DisplayColumnIsEmpty, extra_cols...)
 
 	var list_ordered []int
 	for i := range list_services {
@@ -241,7 +242,7 @@ func PrintList(settings PrintListSettings) error {
 		row = append(row, "Unit")
 	}
 	for _, col := range extra_cols {
-		row = append(row, col)
+		row = append(row, col.Name)
 	}
 
 	tbl := table.New(row...)
@@ -332,7 +333,12 @@ func PrintList(settings PrintListSettings) error {
 					row = append(row, u.Name)
 				}
 				for _, col := range extra_cols {
-					row = append(row, service.Config[col])
+					val, err := service.GetDisplayColumn(col, &service_util.ServiceCommandRunner{service})
+					if err != nil {
+						return err
+					}
+
+					row = append(row, val)
 				}
 				tbl.AddRow(row...)
 				rows = append(rows, row)

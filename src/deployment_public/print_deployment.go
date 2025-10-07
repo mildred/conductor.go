@@ -11,6 +11,7 @@ import (
 
 	"github.com/mildred/conductor.go/src/caddy"
 	"github.com/mildred/conductor.go/src/service"
+	"github.com/mildred/conductor.go/src/service_util"
 	"github.com/mildred/conductor.go/src/utils"
 
 	. "github.com/mildred/conductor.go/src/deployment"
@@ -57,8 +58,8 @@ func PrintList(settings PrintListSettings) error {
 	var list_service_status []dbus.UnitStatus
 	var list_depl_status []dbus.UnitStatus
 	var list_depl_config_status []dbus.UnitStatus
-	var extra_service_cols []string
-	var extra_depl_cols []string
+	var extra_service_cols []service.DisplayColumn
+	var extra_depl_cols []service.DisplayColumn
 
 	for _, depl := range deployments {
 		var unit, service_unit, config_unit dbus.UnitStatus
@@ -72,12 +73,12 @@ func PrintList(settings PrintListSettings) error {
 			}
 		}
 
-		service, err := service.LoadServiceDir(depl.ServiceDir)
+		svc, err := service.LoadServiceDir(depl.ServiceDir)
 		if err != nil {
 			return err
 		}
 
-		list_services = append(list_services, service)
+		list_services = append(list_services, svc)
 
 		list_depl = append(list_depl, depl)
 		list_service_status = append(list_service_status, service_unit)
@@ -92,18 +93,18 @@ func PrintList(settings PrintListSettings) error {
 		if extra_service_cols == nil {
 			extra_service_cols = displayServiceConfig
 		} else {
-			utils.IntersectHoles(&extra_service_cols, displayServiceConfig)
+			utils.IntersectHolesFunc(&extra_service_cols, displayServiceConfig, service.DisplayColumnEqual)
 		}
 
 		if extra_depl_cols == nil {
 			extra_depl_cols = depl.DisplayDeploymentConfig
 		} else {
-			utils.IntersectHoles(&extra_depl_cols, depl.DisplayDeploymentConfig)
+			utils.IntersectHolesFunc(&extra_depl_cols, depl.DisplayDeploymentConfig, service.DisplayColumnEqual)
 		}
 	}
 
-	extra_service_cols = utils.Compact(extra_service_cols...)
-	extra_depl_cols = utils.Compact(extra_depl_cols...)
+	extra_service_cols = utils.CompactFunc(service.DisplayColumnIsEmpty, extra_service_cols...)
+	extra_depl_cols = utils.CompactFunc(service.DisplayColumnIsEmpty, extra_depl_cols...)
 
 	row := []interface{}{}
 	if !settings.QuietServiceInfo {
@@ -112,7 +113,7 @@ func PrintList(settings PrintListSettings) error {
 			row = append(row, "Service")
 		}
 		for _, col := range extra_service_cols {
-			row = append(row, col)
+			row = append(row, col.Name)
 		}
 	}
 	row = append(row, "Deployment", "Active", "State", "IP")
@@ -123,7 +124,7 @@ func PrintList(settings PrintListSettings) error {
 		row = append(row, "Reverse-Proxy")
 	}
 	for _, col := range extra_depl_cols {
-		row = append(row, col)
+		row = append(row, col.Name)
 	}
 
 	tbl := table.New(row...)
@@ -141,7 +142,12 @@ func PrintList(settings PrintListSettings) error {
 				row = append(row, DeploymentUnit(depl.DeploymentName))
 			}
 			for _, col := range extra_service_cols {
-				row = append(row, s.Config[col])
+				val, err := s.GetDisplayColumn(col, &service_util.ServiceCommandRunner{s})
+				if err != nil {
+					return err
+				}
+
+				row = append(row, val)
 			}
 		}
 		var ip_addr string
@@ -156,7 +162,12 @@ func PrintList(settings PrintListSettings) error {
 			row = append(row, fmt.Sprintf("%s (%s)", dcs.ActiveState, dcs.SubState))
 		}
 		for _, col := range extra_depl_cols {
-			row = append(row, depl.Config[col])
+			val, err := depl.GetDisplayColumn(col, &service_util.DeploymentCommandRunner{depl})
+			if err != nil {
+				return err
+			}
+
+			row = append(row, val)
 		}
 		tbl.AddRow(row...)
 	}
