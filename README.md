@@ -1,6 +1,9 @@
 Conductor
 =========
 
+TODO:
+- timeouts on templates
+
 Light orchestrator for Containers and CGI scripts for systemd servers running
 Podman and a Caddy reverse-proxy.
 

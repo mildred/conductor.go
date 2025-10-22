@@ -300,7 +300,8 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 		}
 
 		if !all_parts_ok {
-			return fmt.Errorf("deployment has gone missing for service %q (id: %q):\n%s", service_name, service.Id, strings.Join(diagnostics, "\n"))
+			return fmt.Errorf("deployment has gone missing for service %q or service configuration changed during %s:\n  - service id: %q\n  - %s",
+				service_name, prefix, service.Id, strings.Join(diagnostics, "\n  - "))
 		}
 
 		time.Sleep(30 * time.Second)
