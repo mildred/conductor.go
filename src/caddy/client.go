@@ -2,6 +2,7 @@ package caddy
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -9,10 +10,14 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
+	"time"
 )
+
+var DefaultTimeout time.Duration = 10 * time.Second
 
 type CaddyClient struct {
 	endpoint *url.URL
+	timeout  time.Duration
 }
 
 type ConfigSnip struct {
@@ -47,16 +52,20 @@ type ConfigStatus struct {
 	Item       *ConfigItem     `json:"-"`
 }
 
-func NewClient(endpoint string) (*CaddyClient, error) {
+func NewClient(endpoint string, timeout time.Duration) (*CaddyClient, error) {
+	if timeout == 0 {
+		timeout = DefaultTimeout
+	}
+
 	u, err := url.Parse(endpoint)
 	if err != nil {
 		return nil, err
 	}
 
-	return &CaddyClient{u}, nil
+	return &CaddyClient{u, timeout}, nil
 }
 
-func (client *CaddyClient) Register(register bool, configs ConfigItems) error {
+func (client *CaddyClient) Register(ctx context.Context, register bool, configs ConfigItems) error {
 	if !register {
 		slices.Reverse(configs)
 	}
@@ -97,10 +106,23 @@ func (client *CaddyClient) Register(register bool, configs ConfigItems) error {
 			return err
 		}
 
+		reqCtx := ctx
+		if client.timeout > 0 {
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, client.timeout)
+			defer cancel()
+		}
+
 		var res *http.Response
 		var code_valid bool
 		if register {
-			res, err = http.Post(url.String(), "application/json", bytes.NewBuffer(config.Config))
+			req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, url.String(), bytes.NewBuffer(config.Config))
+			if err != nil {
+				return err
+			}
+			req.Header.Set("Content-Type", "application/json")
+
+			res, err = http.DefaultClient.Do(req.WithContext(reqCtx))
 			if err != nil {
 				return err
 			}
@@ -109,12 +131,12 @@ func (client *CaddyClient) Register(register bool, configs ConfigItems) error {
 
 			code_valid = res.StatusCode >= 200 && res.StatusCode < 300
 		} else if !config.RegisterOnly {
-			req, err := http.NewRequest(http.MethodDelete, url.String(), nil)
+			req, err := http.NewRequestWithContext(ctx, http.MethodDelete, url.String(), nil)
 			if err != nil {
 				return err
 			}
 
-			res, err = http.DefaultClient.Do(req)
+			res, err = http.DefaultClient.Do(req.WithContext(reqCtx))
 			if err != nil {
 				return err
 			}
@@ -178,7 +200,7 @@ func (config *ConfigItem) GetId() (string, error) {
 	return snip.Id, nil
 }
 
-func (client *CaddyClient) GetConfig(config *ConfigItem) (*ConfigStatus, error) {
+func (client *CaddyClient) GetConfig(ctx context.Context, config *ConfigItem) (*ConfigStatus, error) {
 	result := &ConfigStatus{
 		MountPoint: config.MountPoint,
 		Id:         config.Id,
@@ -199,7 +221,19 @@ func (client *CaddyClient) GetConfig(config *ConfigItem) (*ConfigStatus, error) 
 		return nil, err
 	}
 
-	res, err := http.Get(url.String())
+	reqCtx := ctx
+	if client.timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, client.timeout)
+		defer cancel()
+	}
+
+	req, err := http.NewRequestWithContext(reqCtx, "GET", url.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err
 	}

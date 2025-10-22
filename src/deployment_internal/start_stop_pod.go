@@ -156,5 +156,5 @@ func Template(dir string, template string) error {
 		return err
 	}
 
-	return tmpl.RunTemplateStdout(template, depl.Vars())
+	return tmpl.RunTemplateStdout(context.Background(), template, depl.Vars())
 }

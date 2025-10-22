@@ -2,6 +2,7 @@ package service_public
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 
@@ -16,32 +17,39 @@ type InspectState struct {
 	UnitStatus dbus.UnitStatus `json:"unit_status"`
 }
 
-func Inspect(service *Service, state *InspectState) (json.RawMessage, error) {
-	proxy_config, err := service.ProxyConfig()
+func Inspect(ctx context.Context, service *Service, state *InspectState) (json.RawMessage, error) {
+	condition_matched, _, err := service.EvaluateCondition(false)
+	if err != nil {
+		return nil, err
+	}
+
+	proxy_config, err := service.ProxyConfig(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	exported := struct {
 		*Service
-		Inherit       []*InheritFile    `json:"inherit"`
-		State         *InspectState     `json:"_state,omitempty"`
-		BasePath      string            `json:"_base_path"`
-		FileName      string            `json:"_file_name"`
-		ConfigSetFile string            `json:"_config_set_file"`
-		Name          string            `json:"_name"`
-		Id            string            `json:"_id"`
-		ProxyConfig   caddy.ConfigItems `json:"_proxy_config"`
+		Inherit          []*InheritFile    `json:"inherit"`
+		State            *InspectState     `json:"_state,omitempty"`
+		BasePath         string            `json:"_base_path"`
+		FileName         string            `json:"_file_name"`
+		ConfigSetFile    string            `json:"_config_set_file"`
+		Name             string            `json:"_name"`
+		Id               string            `json:"_id"`
+		ProxyConfig      caddy.ConfigItems `json:"_proxy_config"`
+		ConditionMatched bool              `json:"_condition_matched"`
 	}{
-		Service:       service,
-		State:         state,
-		Inherit:       service.Inherit.Inherit,
-		BasePath:      service.BasePath,
-		FileName:      service.FileName,
-		ConfigSetFile: service.ConfigSetFile,
-		Name:          service.Name,
-		Id:            service.Id,
-		ProxyConfig:   proxy_config,
+		Service:          service,
+		State:            state,
+		Inherit:          service.Inherit.Inherit,
+		BasePath:         service.BasePath,
+		FileName:         service.FileName,
+		ConfigSetFile:    service.ConfigSetFile,
+		Name:             service.Name,
+		Id:               service.Id,
+		ProxyConfig:      proxy_config,
+		ConditionMatched: condition_matched,
 	}
 
 	var buf bytes.Buffer
@@ -66,7 +74,7 @@ func PrintInspect(services ...string) error {
 			return err
 		}
 
-		msg, err := Inspect(service, nil)
+		msg, err := Inspect(context.Background(), service, nil)
 		if err != nil {
 			return err
 		}

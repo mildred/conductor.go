@@ -310,7 +310,7 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 
 var LookupPaths []string = dirs.MultiJoin("services", append(append([]string{dirs.SelfRuntimeDir}, dirs.SelfConfigDirs...), dirs.SelfDataDirs...)...)
 
-func CaddyRegister(register bool, service_name string) error {
+func CaddyRegister(ctx context.Context, register bool, service_name string) error {
 	var prefix = "register"
 	if !register {
 		prefix = "deregister"
@@ -321,14 +321,14 @@ func CaddyRegister(register bool, service_name string) error {
 		return err
 	}
 
-	configs, err := service.ProxyConfig()
+	configs, err := service.ProxyConfig(ctx)
 	if err != nil {
 		return err
 	} else if len(configs) == 0 {
 		return nil
 	}
 
-	caddy, err := caddy.NewClient(service.CaddyLoadBalancer.ApiEndpoint)
+	caddy, err := caddy.NewClient(service.CaddyLoadBalancer.ApiEndpoint, time.Duration(service.CaddyLoadBalancer.Timeout))
 	if err != nil {
 		return err
 	}
@@ -339,7 +339,7 @@ func CaddyRegister(register bool, service_name string) error {
 		log.Printf("deregister: Deregistering service...")
 	}
 
-	err = caddy.Register(register, configs)
+	err = caddy.Register(ctx, register, configs)
 	if err != nil {
 		return err
 	}
@@ -348,11 +348,11 @@ func CaddyRegister(register bool, service_name string) error {
 	return nil
 }
 
-func Template(service_name string, template string) error {
+func Template(ctx context.Context, service_name string, template string) error {
 	service, err := LoadServiceByName(service_name)
 	if err != nil {
 		return err
 	}
 
-	return tmpl.RunTemplateStdout(template, service.Vars())
+	return tmpl.RunTemplateStdout(ctx, template, service.Vars())
 }

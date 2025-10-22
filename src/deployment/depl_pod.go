@@ -1,6 +1,7 @@
 package deployment
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -15,15 +16,15 @@ type DeploymentPod struct {
 	IPAddress string `json:"ip_address"`
 }
 
-func (pod *DeploymentPod) TemplatePod(depl *Deployment) error {
+func (pod *DeploymentPod) TemplatePod(ctx context.Context, depl *Deployment) error {
 	log.Printf("prepare: Templating the pod\n")
-	res, err := tmpl.RunTemplate(pod.PodTemplate, depl.Vars())
+	res, err := tmpl.RunTemplate(ctx, pod.PodTemplate, depl.Vars())
 	if err != nil {
 		return err
 	}
 	depl.TemplatedPod = res
 
-	res, err = tmpl.RunTemplate(pod.ConfigMapTemplate, depl.Vars())
+	res, err = tmpl.RunTemplate(ctx, pod.ConfigMapTemplate, depl.Vars())
 	if err != nil {
 		return err
 	}

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -18,6 +19,7 @@ import (
 	"github.com/mildred/conductor.go/src/caddy"
 	"github.com/mildred/conductor.go/src/dirs"
 	"github.com/mildred/conductor.go/src/tmpl"
+	"github.com/mildred/conductor.go/src/utils"
 )
 
 type Hook struct {
@@ -28,7 +30,8 @@ type Hook struct {
 }
 
 type CaddyConfig struct {
-	ApiEndpoint string `json:"api_endpoint"`
+	ApiEndpoint string             `json:"api_endpoint"`
+	Timeout     utils.JSONDuration `json:"timeout"`
 }
 
 type ServiceCommand struct {
@@ -480,7 +483,7 @@ func (service *Service) Parts() ([]string, error) {
 	return res, nil
 }
 
-func (service *Service) ProxyConfig() (caddy.ConfigItems, error) {
+func (service *Service) ProxyConfig(ctx context.Context) (caddy.ConfigItems, error) {
 	var configs caddy.ConfigItems
 
 	for _, pod := range service.Pods {
@@ -501,7 +504,7 @@ func (service *Service) ProxyConfig() (caddy.ConfigItems, error) {
 
 	if service.ProxyConfigTemplate != "" {
 		var c caddy.ConfigItems
-		err := tmpl.RunTemplateJSON(service.ProxyConfigTemplate, service.Vars(), &c)
+		err := tmpl.RunTemplateJSON(ctx, service.ProxyConfigTemplate, service.Vars(), &c)
 		if err != nil {
 			return nil, err
 		}

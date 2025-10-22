@@ -145,14 +145,14 @@ func ReadDeployment(dir, deployment_id string) (*Deployment, error) {
 	}
 }
 
-func (depl *Deployment) TemplateProxyConfig() error {
+func (depl *Deployment) TemplateProxyConfig(ctx context.Context) error {
 	if depl.ProxyConfigTemplate == "" {
 		depl.TemplatedProxyConfig = nil
 		return nil
 	}
 
 	log.Printf("prepare: Templating the proxy config\n")
-	res, err := tmpl.RunTemplate(depl.ProxyConfigTemplate, depl.Vars())
+	res, err := tmpl.RunTemplate(ctx, depl.ProxyConfigTemplate, depl.Vars())
 	if err != nil {
 		return err
 	}
@@ -160,20 +160,20 @@ func (depl *Deployment) TemplateProxyConfig() error {
 	return json.Unmarshal([]byte(res), &depl.TemplatedProxyConfig)
 }
 
-func (depl *Deployment) TemplateAll() error {
+func (depl *Deployment) TemplateAll(ctx context.Context) error {
 	if depl.Pod != nil {
-		err := depl.Pod.TemplatePod(depl)
+		err := depl.Pod.TemplatePod(ctx, depl)
 		if err != nil {
 			return err
 		}
 	}
 
-	err := depl.TemplateProxyConfig()
+	err := depl.TemplateProxyConfig(ctx)
 	if err != nil {
 		return err
 	}
 
-	depl.ProxyConfigValue, err = depl.ProxyConfig()
+	depl.ProxyConfigValue, err = depl.ProxyConfig(ctx)
 	if err != nil {
 		return err
 	}
@@ -181,7 +181,7 @@ func (depl *Deployment) TemplateAll() error {
 	return nil
 }
 
-func (depl *Deployment) ProxyConfig() (caddy.ConfigItems, error) {
+func (depl *Deployment) ProxyConfig(ctx context.Context) (caddy.ConfigItems, error) {
 	var configs caddy.ConfigItems
 
 	if depl.Pod != nil {
@@ -204,7 +204,7 @@ func (depl *Deployment) ProxyConfig() (caddy.ConfigItems, error) {
 
 	if depl.ProxyConfigTemplate != "" {
 		var c caddy.ConfigItems
-		err := tmpl.RunTemplateJSON(depl.ProxyConfigTemplate, depl.Vars(), &c)
+		err := tmpl.RunTemplateJSON(ctx, depl.ProxyConfigTemplate, depl.Vars(), &c)
 		if err != nil {
 			return nil, fmt.Errorf("while running the proxy-config template, %v", err)
 		}

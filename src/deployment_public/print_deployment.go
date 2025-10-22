@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/coreos/go-systemd/v22/dbus"
 	"github.com/rodaine/table"
@@ -142,7 +143,7 @@ func PrintList(settings PrintListSettings) error {
 				row = append(row, DeploymentUnit(depl.DeploymentName))
 			}
 			for _, col := range extra_service_cols {
-				val, err := s.GetDisplayColumn(col, &service_util.ServiceCommandRunner{s})
+				val, err := s.GetDisplayColumn(col, &service_util.ServiceCommandRunner{Service: s})
 				if err != nil {
 					return err
 				}
@@ -162,7 +163,7 @@ func PrintList(settings PrintListSettings) error {
 			row = append(row, fmt.Sprintf("%s (%s)", dcs.ActiveState, dcs.SubState))
 		}
 		for _, col := range extra_depl_cols {
-			val, err := depl.GetDisplayColumn(col, &service_util.DeploymentCommandRunner{depl})
+			val, err := depl.GetDisplayColumn(col, &service_util.DeploymentCommandRunner{Deployment: depl})
 			if err != nil {
 				return err
 			}
@@ -179,6 +180,8 @@ func PrintList(settings PrintListSettings) error {
 }
 
 func PrintInspect(deployments ...string) error {
+	ctx := context.Background()
+
 	if len(deployments) == 0 {
 		return PrintInspect(".")
 	}
@@ -189,7 +192,7 @@ func PrintInspect(deployments ...string) error {
 			return err
 		}
 
-		err = depl.TemplateAll()
+		err = depl.TemplateAll(ctx)
 		if err != nil {
 			return err
 		}
@@ -207,6 +210,8 @@ type PrintSettings struct {
 }
 
 func Print(depl_name string, settings PrintSettings) error {
+	ctx := context.Background()
+
 	depl, err := ReadDeploymentByName(depl_name, true)
 	if err != nil {
 		return err
@@ -222,7 +227,7 @@ func Print(depl_name string, settings PrintSettings) error {
 	tbl.Print()
 	fmt.Println()
 
-	configs, err := depl.ProxyConfig()
+	configs, err := depl.ProxyConfig(ctx)
 	if err != nil {
 		fmt.Printf("Error getting proxy config: %v\n", err)
 		fmt.Println()
@@ -230,7 +235,7 @@ func Print(depl_name string, settings PrintSettings) error {
 		fmt.Println("No reverse-proxy configuration")
 		fmt.Println()
 	} else {
-		caddy, err := caddy.NewClient(depl.CaddyLoadBalancer.ApiEndpoint)
+		caddy, err := caddy.NewClient(depl.CaddyLoadBalancer.ApiEndpoint, time.Duration(depl.CaddyLoadBalancer.Timeout))
 		if err != nil {
 			return err
 		}
@@ -241,7 +246,7 @@ func Print(depl_name string, settings PrintSettings) error {
 			tbl = table.New("Reverse-Proxy configuration", "Present", "Dial")
 		}
 		for _, config := range configs {
-			cfg, err := caddy.GetConfig(config)
+			cfg, err := caddy.GetConfig(context.Background(), config)
 			if err != nil {
 				return fmt.Errorf("while reading caddy config %+v in %+v, %v", config.Id, config.MountPoint, err)
 			}
@@ -269,7 +274,6 @@ func Print(depl_name string, settings PrintSettings) error {
 		fmt.Println()
 	}
 
-	var ctx = context.Background()
 	sd, err := utils.NewSystemdClient(ctx)
 	if err != nil {
 		return err

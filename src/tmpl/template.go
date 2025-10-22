@@ -1,20 +1,27 @@
 package tmpl
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"os"
 	"os/exec"
+	"time"
 )
 
-func RunTemplate(fname string, vars []string) (string, error) {
+var DefaultTimeout time.Duration = 30 * time.Second
+
+func RunTemplate(ctx context.Context, fname string, vars []string) (string, error) {
 	if fname == "" {
 		return "", nil
 	}
 
+	ctx, cancel := context.WithTimeout(ctx, DefaultTimeout)
+	defer cancel()
+
 	log.Printf("templating: execute %s\n", fname)
-	cmd := exec.Command(fname, vars...)
+	cmd := exec.CommandContext(ctx, fname, vars...)
 	cmd.Env = append(cmd.Environ(), vars...)
 	cmd.Stderr = os.Stderr
 	res, err := cmd.Output()
@@ -25,20 +32,24 @@ func RunTemplate(fname string, vars []string) (string, error) {
 	return string(res), nil
 }
 
-func RunTemplateStdout(fname string, vars []string) error {
+func RunTemplateStdout(ctx context.Context, fname string, vars []string) error {
 	if fname == "" {
 		return nil
 	}
 
-	cmd := exec.Command(fname, vars...)
+	ctx, cancel := context.WithTimeout(ctx, DefaultTimeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, fname, vars...)
 	cmd.Env = append(cmd.Environ(), vars...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	defer cancel()
 	return cmd.Run()
 }
 
-func RunTemplateJSON(fname string, vars []string, res interface{}) error {
-	data, err := RunTemplate(fname, vars)
+func RunTemplateJSON(ctx context.Context, fname string, vars []string, res interface{}) error {
+	data, err := RunTemplate(ctx, fname, vars)
 	if err != nil {
 		return err
 	}

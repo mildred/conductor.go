@@ -46,7 +46,7 @@ func Prepare() error {
 		return err
 	}
 
-	err = depl.TemplateAll()
+	err = depl.TemplateAll(ctx)
 	if err != nil {
 		return err
 	}
@@ -194,14 +194,14 @@ func CaddyRegister(register bool, dir string) error {
 
 	log.Printf("%s: Loaded deployment %s, service %s-%s\n", prefix, depl.DeploymentName, depl.AppName, depl.InstanceName)
 
-	configs, err := depl.ProxyConfig()
+	configs, err := depl.ProxyConfig(ctx)
 	if err != nil {
 		return fmt.Errorf("getting the proxy config, %v", err)
 	} else if len(configs) == 0 {
 		return nil
 	}
 
-	caddy, err := caddy.NewClient(depl.CaddyLoadBalancer.ApiEndpoint)
+	caddy, err := caddy.NewClient(depl.CaddyLoadBalancer.ApiEndpoint, time.Duration(depl.CaddyLoadBalancer.Timeout))
 	if err != nil {
 		return fmt.Errorf("while connecting to Caddy, %v", err)
 	}
@@ -229,7 +229,7 @@ func CaddyRegister(register bool, dir string) error {
 		log.Printf("deregister: Deregistering %s", depl_desc)
 	}
 
-	err = caddy.Register(register, configs)
+	err = caddy.Register(ctx, register, configs)
 	if err != nil {
 		return fmt.Errorf("while registering Caddy config, %v", err)
 	}

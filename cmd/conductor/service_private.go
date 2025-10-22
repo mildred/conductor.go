@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/integrii/flaggy"
@@ -60,7 +61,7 @@ func cmd_private_service_template() *flaggy.Subcommand {
 	cmd.AddPositionalValue(&template, "template", 2, true, "The template file to run")
 
 	cmd.CommandUsed = Hook(func() error {
-		return service_internal.Template(service, template)
+		return service_internal.Template(context.Background(), service, template)
 	})
 	return cmd
 }
@@ -140,7 +141,7 @@ func cmd_private_service_register() *flaggy.Subcommand {
 	cmd.Description = "Register service to load balancer"
 	cmd.AddPositionalValue(&service, "service", 1, true, "The service to act on")
 	cmd.CommandUsed = Hook(func() error {
-		return service_internal.CaddyRegister(true, service)
+		return service_internal.CaddyRegister(context.Background(), true, service)
 	})
 	return cmd
 }
@@ -152,7 +153,7 @@ func cmd_private_service_deregister() *flaggy.Subcommand {
 	cmd.Description = "Deregister service from load balancer"
 	cmd.AddPositionalValue(&service, "service", 1, true, "The service to act on")
 	cmd.CommandUsed = Hook(func() error {
-		return service_internal.CaddyRegister(false, service)
+		return service_internal.CaddyRegister(context.Background(), false, service)
 	})
 	return cmd
 }

@@ -256,7 +256,7 @@ func PrintList(settings PrintListSettings) error {
 		service := list_services[i]
 		u := list_status[i]
 
-		msg, err := Inspect(service, &InspectState{
+		msg, err := Inspect(ctx, service, &InspectState{
 			UnitStatus: u,
 		})
 		if err != nil {
@@ -333,7 +333,7 @@ func PrintList(settings PrintListSettings) error {
 					row = append(row, u.Name)
 				}
 				for _, col := range extra_cols {
-					val, err := service.GetDisplayColumn(col, &service_util.ServiceCommandRunner{service})
+					val, err := service.GetDisplayColumn(col, &service_util.ServiceCommandRunner{Service: service})
 					if err != nil {
 						return err
 					}

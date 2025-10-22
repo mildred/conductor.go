@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/rodaine/table"
 
@@ -21,6 +22,8 @@ type PrintSettings struct {
 }
 
 func PrintService(name string, settings PrintSettings) error {
+	ctx := context.Background()
+
 	service, err := LoadServiceByName(name)
 	if err != nil {
 		return err
@@ -38,7 +41,6 @@ func PrintService(name string, settings PrintSettings) error {
 	tbl.AddRow("Id", service.Id)
 	tbl.Print()
 
-	var ctx = context.Background()
 	sd, err := utils.NewSystemdClient(ctx)
 	if err != nil {
 		return err
@@ -46,7 +48,7 @@ func PrintService(name string, settings PrintSettings) error {
 
 	tbl = table.New("", "")
 	for _, col := range service.DisplayServiceConfig {
-		val, err := service.GetDisplayColumn(col, &service_util.ServiceCommandRunner{service})
+		val, err := service.GetDisplayColumn(col, &service_util.ServiceCommandRunner{Service: service})
 		if err != nil {
 			return err
 		}
@@ -73,7 +75,7 @@ func PrintService(name string, settings PrintSettings) error {
 	units.ToTable().Print()
 	fmt.Println()
 
-	configs, err := service.ProxyConfig()
+	configs, err := service.ProxyConfig(ctx)
 	if err != nil {
 		fmt.Printf("Error getting proxy config: %v\n", err)
 		fmt.Println()
@@ -81,7 +83,7 @@ func PrintService(name string, settings PrintSettings) error {
 		fmt.Println("No reverse-proxy configuration")
 		fmt.Println()
 	} else {
-		caddy, err := caddy.NewClient(service.CaddyLoadBalancer.ApiEndpoint)
+		caddy, err := caddy.NewClient(service.CaddyLoadBalancer.ApiEndpoint, time.Duration(service.CaddyLoadBalancer.Timeout))
 		if err != nil {
 			return err
 		}
@@ -92,7 +94,7 @@ func PrintService(name string, settings PrintSettings) error {
 			tbl = table.New("Reverse-Proxy configuration", "Present", "Configuration (matchers)", "Upstreams")
 		}
 		for _, config := range configs {
-			cfg, err := caddy.GetConfig(config)
+			cfg, err := caddy.GetConfig(ctx, config)
 			if err != nil {
 				return fmt.Errorf("while reading caddy config %+v in %+v, %v", config.Id, config.MountPoint, err)
 			}
