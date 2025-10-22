@@ -299,7 +299,7 @@ func cmd_service_ls() *flaggy.Subcommand {
 	cmd.String(&app_flag, "", "app", "Filter by app name")
 	cmd.Bool(&json_flag, "", "json", "Return a JSON array")
 	cmd.Bool(&jsons_flag, "", "jsons", "Return a list of JSON objects")
-	cmd.Bool(&unit, "", "unit", "Show systemd unit column")
+	cmd.Bool(&unit, "u", "unit", "Show systemd unit column (do not use shorthand -u in scripts)")
 	cmd.Var(&c, "c", "config", "Filter by configuration, same key multiple times is an OR, allowed selectors: '=', '~=', '~json=', '*=', '^=', '$='")
 	cmd.Var(&filter_jsonpaths, "", "filter-jsonpath", "Filter by JSONPath returning boolean, multiple filteres are ORed")
 	cmd.Bool(&csv, "", "csv", "Print as CSV")
