@@ -91,6 +91,7 @@ type PrintListSettings struct {
 	JSONs             bool
 	CSV               bool
 	CSVSeparator      string
+	All               bool
 	JSONPath          string
 	ResumeBefore      *Selector
 	ResumeAfter       *Selector
@@ -252,9 +253,20 @@ func PrintList(settings PrintListSettings) error {
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 
+	var num_excluded = 0
+
 	for _, i := range list_ordered {
 		service := list_services[i]
 		u := list_status[i]
+
+		var filtered_out = false
+		if !settings.All {
+			condition, _, err := service.EvaluateCondition(false)
+			if err != nil {
+				return err
+			}
+			filtered_out = !condition && u.LoadState == "" && u.ActiveState == ""
+		}
 
 		msg, err := Inspect(ctx, service, &InspectState{
 			UnitStatus: u,
@@ -288,8 +300,7 @@ func PrintList(settings PrintListSettings) error {
 				}
 			}
 
-			filtered_out := false
-			if len(settings.FilterJSONPaths) > 0 {
+			if !filtered_out && len(settings.FilterJSONPaths) > 0 {
 				filtered_out = true
 				for _, p := range settings.FilterJSONPaths {
 					jpvalue, err := jsonpath.Get(p, jsonvalue)
@@ -309,6 +320,7 @@ func PrintList(settings PrintListSettings) error {
 
 			if filtered_out {
 				// do nothing
+				num_excluded += 1
 			} else if settings.JSONPath != "" {
 				jpvalue, err := jsonpath.Get(settings.JSONPath, jsonvalue)
 				if err != nil {
@@ -383,7 +395,7 @@ func PrintList(settings PrintListSettings) error {
 		if len(list_services) > 0 {
 			tbl.Print()
 		}
-		fmt.Printf("(%d services)\n", len(list_services))
+		fmt.Printf("(%d services)\n", len(list_services)-num_excluded)
 	}
 
 	return nil

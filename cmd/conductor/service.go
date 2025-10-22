@@ -287,6 +287,7 @@ func cmd_service_ls() *flaggy.Subcommand {
 	var jsons_flag bool
 	var unit bool
 	var csv bool
+	var all bool
 	var csv_sep string = ","
 	var stop_b string
 	var stop_a string
@@ -303,6 +304,7 @@ func cmd_service_ls() *flaggy.Subcommand {
 	cmd.Var(&c, "c", "config", "Filter by configuration, same key multiple times is an OR, allowed selectors: '=', '~=', '~json=', '*=', '^=', '$='")
 	cmd.Var(&filter_jsonpaths, "", "filter-jsonpath", "Filter by JSONPath returning boolean, multiple filteres are ORed")
 	cmd.Bool(&csv, "", "csv", "Print as CSV")
+	cmd.Bool(&all, "", "all", "Include disabled services that does not match the conditions")
 	cmd.String(&csv_sep, "", "csv-sep", "CSV separator")
 	cmd.String(&stop_b, "", "stop-before", "Stop list before this item as specified by JSONPath returning boolean")
 	cmd.String(&stop_a, "", "stop-after", "Stop list after this item as specified by JSONPath returning boolean")
@@ -340,6 +342,7 @@ func cmd_service_ls() *flaggy.Subcommand {
 			JSONs:             jsons_flag,
 			CSV:               csv,
 			CSVSeparator:      csv_sep,
+			All:               all,
 			ResumeBefore:      resume_before,
 			ResumeAfter:       resume_after,
 			StopBefore:        stop_before,
