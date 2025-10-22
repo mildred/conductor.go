@@ -3,6 +3,7 @@ package service
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -47,8 +48,10 @@ type Service struct {
 	Name                    string                     `json:"-"`
 	Id                      string                     `json:"-"`
 	Inherit                 *InheritedFile             `json:"-"`
-	AppName                 string                     `json:"app_name,omitempty"`              // my-app
-	InstanceName            string                     `json:"instance_name,omitempty"`         // staging
+	AppName                 string                     `json:"app_name,omitempty"`      // my-app
+	InstanceName            string                     `json:"instance_name,omitempty"` // staging
+	Disable                 *bool                      `json:"disable"`
+	Conditions              []ServiceCondition         `json:"conditions"`
 	Config                  map[string]*ConfigValue    `json:"config,omitempty"`                // key-value pairs for config and templating, CHANNEL=staging
 	ProxyConfigTemplate     string                     `json:"proxy_config_template,omitempty"` // Template file for the load-balancer config
 	Pods                    ServicePods                `json:"pods,omitempty"`
@@ -569,4 +572,18 @@ func (s *Service) GetDisplayColumn(c DisplayColumn, runner CommandRunnerDisplayC
 	} else {
 		return "", nil
 	}
+}
+
+func (s *Service) EvaluateCondition(verbose bool) (condition bool, disable bool, err error) {
+	disable = false
+	if s.Disable != nil {
+		disable = *s.Disable
+		if verbose {
+			log.Printf("Check service disabled: %v", disable)
+		}
+	}
+
+	condition, err = EvaluateConditions(s.Conditions, verbose)
+
+	return condition, disable, err
 }

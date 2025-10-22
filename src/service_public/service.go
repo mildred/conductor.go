@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path"
@@ -16,7 +17,7 @@ import (
 	. "github.com/mildred/conductor.go/src/service"
 )
 
-func ReloadServices(inclusive bool) error {
+func ReloadServices(inclusive bool, verbose bool) error {
 	var ctx = context.Background()
 	sd, err := utils.NewSystemdClient(ctx)
 	if err != nil {
@@ -27,7 +28,7 @@ func ReloadServices(inclusive bool) error {
 	// Reload services in well-known dirs
 	//
 
-	var service_dirs []string
+	var seen_service_dirs []string
 	var start_list []string
 	var stop_list []string
 
@@ -37,11 +38,16 @@ func ReloadServices(inclusive bool) error {
 			return err
 		}
 
+		log_prefix := log.Prefix()
+
 		for _, ent := range entries {
 			service_dir := path.Join(dir, ent.Name())
+			log.SetPrefix(fmt.Sprintf("%s%s: ", log_prefix, service_dir))
+
 			_, err = os.Stat(path.Join(service_dir, ConfigName))
 			if err != nil && !os.IsNotExist(err) {
-				return err
+				log.Printf("ignore service, error while querying service file: %v\n", err)
+				continue
 			} else if err != nil {
 				// ignore error, this is not a valid service dir
 				continue
@@ -52,9 +58,39 @@ func ReloadServices(inclusive bool) error {
 				return err
 			}
 
-			service_dirs = append(service_dirs, service_dir)
-			start_list = append(start_list, ServiceUnit(service_dir))
+			serv, err := LoadServiceDir(service_dir)
+			if err != nil {
+				log.Printf("ignore service, cannot load configuration: %v\n", err)
+				continue
+			}
+
+			seen_service_dirs = append(seen_service_dirs, service_dir)
+
+			if verbose {
+				log.Printf("evaluate conditions...")
+			}
+			condition, disable, err := serv.EvaluateCondition(verbose)
+			if err != nil {
+				log.Printf("ignore service, cannot evaluate conditions: %v\n", err)
+				continue
+			}
+
+			if disable || !condition {
+				stop_list = append(stop_list, ServiceUnit(service_dir))
+				if verbose && disable {
+					log.Printf("service is disabled explicitely")
+				} else if verbose && !condition {
+					log.Printf("service is disabled because conditions do not match")
+				}
+			} else {
+				start_list = append(start_list, ServiceUnit(service_dir))
+				if verbose {
+					log.Printf("service is enabled")
+				}
+			}
 		}
+
+		log.SetPrefix(log_prefix)
 	}
 
 	if !inclusive {
@@ -65,7 +101,7 @@ func ReloadServices(inclusive bool) error {
 
 		for _, u := range existing_units {
 			service := ServiceDirFromUnit(u.Name)
-			if service == "" || slices.Contains(service_dirs, service) {
+			if service == "" || slices.Contains(seen_service_dirs, service) {
 				continue
 			}
 
@@ -98,7 +134,33 @@ func ReloadServices(inclusive bool) error {
 	return nil
 }
 
+func setDisableConfig(definition_path string, disable bool) error {
+	serv, err := LoadServiceDir(definition_path)
+	if err != nil {
+		return err
+	}
+
+	service, err := readConfigSetFile(serv.ConfigSetFile)
+	if err != nil {
+		return err
+	}
+
+	service["disable"] = disable
+
+	err = writeConfigSetFile(serv.ConfigSetFile, service)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func Enable(definition_path string, now bool) error {
+	err := setDisableConfig(definition_path, false)
+	if err != nil {
+		return err
+	}
+
 	unit, err := ServiceUnitByName(definition_path)
 	if err != nil {
 		return err
@@ -118,6 +180,11 @@ func Enable(definition_path string, now bool) error {
 }
 
 func Disable(definition_path string, now bool) error {
+	err := setDisableConfig(definition_path, true)
+	if err != nil {
+		return err
+	}
+
 	unit, err := ServiceUnitByName(definition_path)
 	if err != nil {
 		return err
@@ -237,30 +304,50 @@ func Reload(definition_path string, opts ReloadOpts) error {
 	return cmd.Run()
 }
 
-func ServiceSetConfig(filename string, config map[string]string) error {
+func readConfigSetFile(filename string) (map[string]interface{}, error) {
 	var service = map[string]interface{}{}
 
+	f, err := os.Open(filename)
+	if err != nil && !os.IsNotExist(err) {
+		return nil, err
+	} else if err == nil {
+		defer f.Close()
+
+		err = json.NewDecoder(f).Decode(&service)
+		if err != nil {
+			return nil, err
+		}
+
+		return service, nil
+	} else {
+		return service, nil
+	}
+}
+
+func writeConfigSetFile(filename string, service map[string]interface{}) error {
+	f, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.ModePerm-0o111)
+	if err != nil {
+		return err
+	}
+
+	defer f.Close()
+
+	err = json.NewEncoder(f).Encode(service)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func ServiceSetConfig(filename string, config map[string]string) error {
 	//
 	// Read service file if it exists
 	//
 
-	f, err := os.Open(filename)
-	if err != nil && !os.IsNotExist(err) {
+	service, err := readConfigSetFile(filename)
+	if err != nil {
 		return err
-	} else if err == nil {
-		err = func() error {
-			defer f.Close()
-
-			err := json.NewDecoder(f).Decode(&service)
-			if err != nil {
-				return err
-			}
-
-			return nil
-		}()
-		if err != nil {
-			return err
-		}
 	}
 
 	//
@@ -282,17 +369,5 @@ func ServiceSetConfig(filename string, config map[string]string) error {
 		service_config[k] = v
 	}
 
-	f, err = os.OpenFile(filename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.ModePerm-0o111)
-	if err != nil {
-		return err
-	}
-
-	defer f.Close()
-
-	err = json.NewEncoder(f).Encode(service)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return writeConfigSetFile(filename, service)
 }

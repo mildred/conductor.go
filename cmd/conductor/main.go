@@ -54,6 +54,7 @@ func cmd_private() *flaggy.Subcommand {
 
 func cmd_reload() *flaggy.Subcommand {
 	var inclusive bool
+	var verbose bool
 
 	cmd := flaggy.NewSubcommand("reload")
 	cmd.Description = "Reload and start services in well-known locations"
@@ -63,9 +64,10 @@ func cmd_reload() *flaggy.Subcommand {
 	}
 
 	cmd.Bool(&inclusive, "", "inclusive", "Allow services from other directories (do not stop them)")
+	cmd.Bool(&verbose, "v", "verbose", "Be verbose")
 
 	cmd.CommandUsed = Hook(func() error {
-		return service_public.ReloadServices(inclusive)
+		return service_public.ReloadServices(inclusive, verbose)
 	})
 	return cmd
 }
@@ -199,6 +201,8 @@ func cmd_run() *flaggy.Subcommand {
 }
 
 func Main(ctx context.Context) error {
+	log.SetFlags(log.Lmsgprefix)
+
 	f := flaggy.NewParser(os.Args[0])
 	f.Version = version
 	f.AttachSubcommand(cmd_service(), 1)
