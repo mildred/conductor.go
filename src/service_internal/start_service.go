@@ -237,6 +237,11 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 	if opts.Restart {
 		log.Printf("restart: Restart sequence completed\n")
 		deferred() // execute without defer statement in case it cause an issue with the PID and systemd cannot attribute the notify message
+		if err == nil {
+			log.Printf("restart: completed with no error\n")
+		} else {
+			log.Printf("restart: completed with an error: %v\n", err)
+		}
 		return err
 	}
 

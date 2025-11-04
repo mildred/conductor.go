@@ -39,6 +39,22 @@ func PrintService(name string, settings PrintSettings) error {
 	tbl.AddRow("Path", service.BasePath)
 	tbl.AddRow("Filename", service.FileName)
 	tbl.AddRow("Id", service.Id)
+	if service.Disable != nil && *service.Disable {
+		tbl.AddRow("Disable", "yes")
+	} else {
+		tbl.AddRow("Disable", "no")
+	}
+
+	condition, _, err := service.EvaluateCondition(false)
+	if err != nil {
+		return err
+	}
+	if condition {
+		tbl.AddRow("Condition", "allowing")
+	} else {
+		tbl.AddRow("Condition", "blocking")
+	}
+
 	tbl.Print()
 
 	sd, err := utils.NewSystemdClient(ctx)
@@ -53,7 +69,7 @@ func PrintService(name string, settings PrintSettings) error {
 			return err
 		}
 
-		tbl.AddRow(col, val)
+		tbl.AddRow(col.Name, val)
 	}
 	tbl.Print()
 	fmt.Println()

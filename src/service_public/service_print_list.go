@@ -259,12 +259,13 @@ func PrintList(settings PrintListSettings) error {
 		service := list_services[i]
 		u := list_status[i]
 
+		condition, _, err := service.EvaluateCondition(false)
+		if err != nil {
+			return err
+		}
+
 		var filtered_out = false
 		if !settings.All {
-			condition, _, err := service.EvaluateCondition(false)
-			if err != nil {
-				return err
-			}
 			filtered_out = !condition && u.LoadState == "" && u.ActiveState == ""
 		}
 
@@ -340,7 +341,22 @@ func PrintList(settings PrintListSettings) error {
 					name = service.BasePath
 				}
 
-				row = []interface{}{name, service.AppName, service.InstanceName, u.LoadState, u.ActiveState, u.SubState}
+				enabled_state := u.LoadState
+				if service.Disable != nil && *service.Disable {
+					if enabled_state == "" {
+						enabled_state = "disabled"
+					} else {
+						enabled_state = "disabled(" + enabled_state + ")"
+					}
+				} else if !condition {
+					if enabled_state == "" {
+						enabled_state = "blocked"
+					} else {
+						enabled_state = "blocked(" + enabled_state + ")"
+					}
+				}
+
+				row = []interface{}{name, service.AppName, service.InstanceName, enabled_state, u.ActiveState, u.SubState}
 				if settings.Unit {
 					row = append(row, u.Name)
 				}
