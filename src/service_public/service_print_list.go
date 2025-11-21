@@ -3,6 +3,7 @@ package service_public
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -127,6 +128,8 @@ func PrintListFilter(service *Service, settings PrintListSettings) (bool, error)
 }
 
 func PrintList(settings PrintListSettings) error {
+	var errs error
+
 	var ctx = context.Background()
 	sd, err := utils.NewSystemdClient(ctx)
 	if err != nil {
@@ -151,12 +154,14 @@ func PrintList(settings PrintListSettings) error {
 
 		service, err := LoadServiceDir(service_dir)
 		if err != nil {
-			return err
+			errs = errors.Join(errs, fmt.Errorf("Cannot load %+v for %+v: %v", service_dir, u.Name, err))
+			continue
 		}
 
 		filter, err := PrintListFilter(service, settings)
 		if err != nil {
-			return err
+			errs = errors.Join(errs, fmt.Errorf("Cannot filter %+v: %v", u.Name, err))
+			continue
 		} else if !filter {
 			continue
 		}
@@ -175,14 +180,16 @@ func PrintList(settings PrintListSettings) error {
 	for _, dir := range ServiceDirs {
 		entries, err := os.ReadDir(dir)
 		if err != nil && !os.IsNotExist(err) {
-			return err
+			errs = errors.Join(errs, fmt.Errorf("Cannot read %+v: %v", dir, err))
+			continue
 		}
 
 		for _, ent := range entries {
 			service_dir := path.Join(dir, ent.Name())
 			_, err = os.Stat(path.Join(service_dir, ConfigName))
 			if err != nil && !os.IsNotExist(err) {
-				return err
+				errs = errors.Join(errs, fmt.Errorf("Cannot read %+v: %v", path.Join(service_dir, ConfigName), err))
+				continue
 			} else if err != nil {
 				// ignore error, this is not a valid service dir
 				continue
@@ -190,7 +197,8 @@ func PrintList(settings PrintListSettings) error {
 
 			service_dir, err = ServiceRealpath(service_dir)
 			if err != nil {
-				return err
+				errs = errors.Join(errs, fmt.Errorf("Error reading %+v: %v", service_dir, err))
+				continue
 			}
 
 			if slices.Contains(list_service_dirs, service_dir) {
@@ -199,12 +207,14 @@ func PrintList(settings PrintListSettings) error {
 
 			service, err := LoadServiceDir(service_dir)
 			if err != nil {
-				return err
+				errs = errors.Join(errs, fmt.Errorf("Error reading %+v: %v", service_dir, err))
+				continue
 			}
 
 			filter, err := PrintListFilter(service, settings)
 			if err != nil {
-				return err
+				errs = errors.Join(errs, fmt.Errorf("Error reading %+v: %v", service_dir, err))
+				continue
 			} else if !filter {
 				continue
 			}
@@ -261,7 +271,8 @@ func PrintList(settings PrintListSettings) error {
 
 		condition, _, err := service.EvaluateCondition(false)
 		if err != nil {
-			return err
+			errs = errors.Join(errs, fmt.Errorf("Error evaluating condition for %v-%v: %v", service.AppName, service.InstanceName, err))
+			continue
 		}
 
 		var filtered_out = false
@@ -273,21 +284,24 @@ func PrintList(settings PrintListSettings) error {
 			UnitStatus: u,
 		})
 		if err != nil {
-			return err
+			errs = errors.Join(errs, fmt.Errorf("Error inspecting %v-%v: %v", service.AppName, service.InstanceName, err))
+			continue
 		}
 
 		var jsonvalue interface{}
 		if settings.JSONPath != "" || len(settings.FilterJSONPaths) > 0 {
 			err := json.Unmarshal(msg, &jsonvalue)
 			if err != nil {
-				return err
+				errs = errors.Join(errs, fmt.Errorf("Error for %v-%v: %v", service.AppName, service.InstanceName, err))
+				continue
 			}
 		}
 
 		if !resume && settings.ResumeBefore != nil {
 			resume, err = settings.ResumeBefore.Match(string(msg))
 			if err != nil {
-				return err
+				errs = errors.Join(errs, fmt.Errorf("Error for %v-%v: %v", service.AppName, service.InstanceName, err))
+				continue
 			}
 		}
 
@@ -295,7 +309,8 @@ func PrintList(settings PrintListSettings) error {
 			if settings.StopBefore != nil {
 				stop, err := settings.StopBefore.Match(string(msg))
 				if err != nil {
-					return err
+					errs = errors.Join(errs, fmt.Errorf("Error for %v-%v: %v", service.AppName, service.InstanceName, err))
+					continue
 				} else if stop {
 					break
 				}
@@ -414,5 +429,5 @@ func PrintList(settings PrintListSettings) error {
 		fmt.Printf("(%d services)\n", len(list_services)-num_excluded)
 	}
 
-	return nil
+	return errs
 }
