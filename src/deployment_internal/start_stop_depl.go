@@ -211,27 +211,51 @@ func CaddyRegister(register bool, dir string) error {
 		depl_desc += fmt.Sprintf(" pod IP %s", depl.Pod.IPAddress)
 	}
 
-	if register {
-		unit_name := fmt.Sprintf(service.ServiceConfigUnit(depl.ServiceDir))
-		log.Printf("%s: Ensure the service config %s is registered", prefix, unit_name)
+	retry := false
+	for {
+		if register {
+			unit_name := fmt.Sprintf(service.ServiceConfigUnit(depl.ServiceDir))
+			log.Printf("%s: Ensure the service config %s is registered", prefix, unit_name)
 
-		fmt.Fprintf(os.Stderr, "+ systemctl %s start %q\n", dirs.SystemdModeFlag(), unit_name)
-		cmd := exec.CommandContext(ctx, "systemctl", dirs.SystemdModeFlag(), "start", unit_name)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		err = cmd.Run()
-		if err != nil {
-			return fmt.Errorf("while starting the systemd unit %+v, %v", unit_name, err)
+			start := "start"
+			if retry {
+				start = "restart"
+			}
+
+			fmt.Fprintf(os.Stderr, "+ systemctl %s %s %q\n", dirs.SystemdModeFlag(), start, unit_name)
+			cmd := exec.CommandContext(ctx, "systemctl", dirs.SystemdModeFlag(), start, unit_name)
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			err = cmd.Run()
+			if err != nil {
+				err = fmt.Errorf("while %sing the systemd unit %+v, %v", start, unit_name, err)
+				SdNotifyOrLog(err.Error())
+				if retry {
+					return err
+				} else {
+					log.Printf("ERROR, will retry: %v", err)
+					retry = true
+					continue
+				}
+			}
+
+			log.Printf("register: Registering %s", depl_desc)
+		} else {
+			log.Printf("deregister: Deregistering %s", depl_desc)
 		}
 
-		log.Printf("register: Registering %s", depl_desc)
-	} else {
-		log.Printf("deregister: Deregistering %s", depl_desc)
-	}
-
-	err = caddy.Register(ctx, register, configs)
-	if err != nil {
-		return fmt.Errorf("while registering Caddy config, %v", err)
+		err = caddy.Register(ctx, register, configs)
+		if err != nil {
+			err = fmt.Errorf("while registering Caddy config, %v", err)
+			SdNotifyOrLog(err.Error())
+			if retry {
+				return err
+			} else {
+				log.Printf("ERROR, will retry: %v", err)
+				retry = true
+				continue
+			}
+		}
 	}
 
 	log.Printf("%s: Completed", prefix)
