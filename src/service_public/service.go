@@ -3,6 +3,7 @@ package service_public
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/mildred/conductor.go/src/deployment_util"
 	"github.com/mildred/conductor.go/src/dirs"
 	"github.com/mildred/conductor.go/src/utils"
 
@@ -216,17 +218,56 @@ func Start(definition_path string) error {
 	return cmd.Run()
 }
 
-func Stop(definition_path string) error {
+type StopOpts struct {
+	NoBlock              bool
+	RemoveAllDeployments bool
+}
+
+func Stop(definition_path string, opts StopOpts) error {
+	ctx := context.Background()
 	unit, err := ServiceUnitByName(definition_path)
 	if err != nil {
 		return err
 	}
 
-	fmt.Fprintf(os.Stderr, "+ systemctl %s stop %q\n", dirs.SystemdModeFlag(), unit)
-	cmd := exec.Command("systemctl", dirs.SystemdModeFlag(), "stop", unit)
+	service_dir, err := ServiceDirByName(definition_path)
+	if err != nil {
+		return err
+	}
+
+	var args []string = []string{dirs.SystemdModeFlag(), "stop"}
+	if opts.NoBlock {
+		args = append(args, "--no-block")
+	}
+	args = append(args, unit)
+
+	fmt.Fprintf(os.Stderr, "+ systemctl %s\n", strings.Join(args, " "))
+	cmd := exec.CommandContext(ctx, "systemctl", args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	errs := cmd.Run()
+
+	if opts.RemoveAllDeployments {
+		deployments, err := deployment_util.List(deployment_util.ListOpts{
+			FilterServiceDir: service_dir,
+		})
+		if err != nil {
+			return err
+		}
+
+		for _, d := range deployments {
+			fmt.Fprintf(os.Stderr, "+ conductor deployment rm %s\n", d.DeploymentName)
+			err := deployment_util.RemoveTimeout(ctx, d.DeploymentName, 0, 0)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "ERROR removing deployment %s: %v\n", d.DeploymentName, err)
+			} else {
+				fmt.Fprintf(os.Stderr, "SUCCESS removing deployment %s\n", d.DeploymentName)
+			}
+			errs = errors.Join(errs, err)
+		}
+	}
+
+	return errs
 }
 
 type RestartOpts struct {
@@ -243,7 +284,6 @@ func Restart(definition_path string, opts RestartOpts) error {
 	var args []string = []string{dirs.SystemdModeFlag(), "restart"}
 	if opts.NoBlock {
 		args = append(args, "--no-block")
-
 	}
 	args = append(args, unit)
 

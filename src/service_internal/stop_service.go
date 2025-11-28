@@ -87,12 +87,14 @@ func Stop(service_name string) error {
 }
 
 func Cleanup(service_name string) error {
+	errs := Stop(service_name)
+
 	//
 	// Remove temp files if there is any
 	//
 
-	// log.Printf("cleanup: Cleaning up...\n")
+	log.Printf("cleanup: Cleaning up...\n")
 
 	log.Printf("cleanup: Cleanup sequence completed\n")
-	return nil
+	return errs
 }

@@ -131,13 +131,20 @@ func cmd_service_start() *flaggy.Subcommand {
 
 func cmd_service_stop() *flaggy.Subcommand {
 	var service string
+	var no_block bool
+	var force bool
 
 	cmd := flaggy.NewSubcommand("stop") // "SERVICE",
 	cmd.Description = "Stop a service"
+	cmd.Bool(&no_block, "", "no-block", "Do not block while restarting")
+	cmd.Bool(&force, "", "force", "Do not block and remove all deployments")
 	cmd.AddPositionalValue(&service, "service", 1, true, "The service to act on")
 
 	cmd.CommandUsed = Hook(func() error {
-		return service_public.Stop(service)
+		return service_public.Stop(service, service_public.StopOpts{
+			NoBlock:              no_block || force,
+			RemoveAllDeployments: force,
+		})
 	})
 	return cmd
 }
