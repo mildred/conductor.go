@@ -83,6 +83,7 @@ func cmd_deployment_systemd(cmd_name, descr string) func() *flaggy.Subcommand {
 		var all bool
 		var ids []string
 		var signal string
+		var kill bool
 
 		cmd := flaggy.NewSubcommand(cmd_name)
 		cmd.AddExtraValues(&ids, "deployment", "The deployment to use")
@@ -91,6 +92,7 @@ func cmd_deployment_systemd(cmd_name, descr string) func() *flaggy.Subcommand {
 		switch cmd_name {
 		case "kill":
 			cmd.String(&signal, "", "signal", "Signal to send")
+			cmd.Bool(&kill, "-9", "KILL", "Use SIGKILL signal")
 		case "status":
 			cmd.Bool(&all, "a", "all", "All units")
 		}
@@ -107,6 +109,9 @@ func cmd_deployment_systemd(cmd_name, descr string) func() *flaggy.Subcommand {
 			}
 
 			var cli []string = []string{dirs.SystemdModeFlag(), cmd_name}
+			if cmd_name == "kill" && kill {
+				cli = append(cli, "--signal=KILL")
+			}
 			if cmd_name == "kill" && signal != "" {
 				cli = append(cli, "--signal="+signal)
 			}

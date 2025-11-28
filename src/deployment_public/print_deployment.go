@@ -3,6 +3,7 @@ package deployment_public
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -28,6 +29,8 @@ type PrintListSettings struct {
 }
 
 func PrintList(settings PrintListSettings) error {
+	var errs error
+
 	var ctx = context.Background()
 	sd, err := utils.NewSystemdClient(ctx)
 	if err != nil {
@@ -37,8 +40,10 @@ func PrintList(settings PrintListSettings) error {
 	deployments, err := List(ListOpts{
 		FilterServiceDir: settings.FilterServiceDir,
 	})
-	if err != nil {
+	if err != nil && deployments == nil {
 		return err
+	} else {
+		errs = errors.Join(errs, err)
 	}
 
 	patterns := []string{"conductor-deployment@*.service", "conductor-service@*.service", "conductor-deployment-config@*.service"}
@@ -76,7 +81,8 @@ func PrintList(settings PrintListSettings) error {
 
 		svc, err := service.LoadServiceDir(depl.ServiceDir)
 		if err != nil {
-			return err
+			errs = errors.Join(errs, err)
+			continue
 		}
 
 		list_services = append(list_services, svc)
@@ -145,7 +151,9 @@ func PrintList(settings PrintListSettings) error {
 			for _, col := range extra_service_cols {
 				val, err := s.GetDisplayColumn(col, &service_util.ServiceCommandRunner{Service: s})
 				if err != nil {
-					return err
+					errs = errors.Join(errs, err)
+					row = append(row, "ERROR")
+					continue
 				}
 
 				row = append(row, val)
@@ -165,7 +173,9 @@ func PrintList(settings PrintListSettings) error {
 		for _, col := range extra_depl_cols {
 			val, err := depl.GetDisplayColumn(col, &service_util.DeploymentCommandRunner{Deployment: depl})
 			if err != nil {
-				return err
+				errs = errors.Join(errs, err)
+				row = append(row, "ERROR")
+				continue
 			}
 
 			row = append(row, val)
@@ -176,7 +186,7 @@ func PrintList(settings PrintListSettings) error {
 		tbl.Print()
 	}
 	fmt.Printf("(%d deployments in %q)\n", len(list_depl), DeploymentRunDir)
-	return nil
+	return errs
 }
 
 func PrintInspect(deployments ...string) error {

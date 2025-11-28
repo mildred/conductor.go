@@ -2,6 +2,7 @@ package deployment_util
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path"
 
@@ -20,6 +21,8 @@ type ListOpts struct {
 }
 
 func List(opts ListOpts) ([]*Deployment, error) {
+	var errs error
+
 	entries, err := os.ReadDir(DeploymentRunDir)
 	if err != nil && !os.IsNotExist(err) {
 		return nil, err
@@ -29,7 +32,8 @@ func List(opts ListOpts) ([]*Deployment, error) {
 	for _, ent := range entries {
 		depl, err := ReadDeployment(path.Join(DeploymentRunDir, ent.Name()), ent.Name())
 		if err != nil {
-			return nil, err
+			errs = errors.Join(errs, err)
+			continue
 		}
 
 		if opts.FilterServiceDir != "" && opts.FilterServiceDir != depl.ServiceDir {
@@ -51,7 +55,7 @@ func List(opts ListOpts) ([]*Deployment, error) {
 		res = append(res, depl)
 	}
 
-	return res, nil
+	return res, errs
 }
 
 func ListUnitStatus(ctx context.Context, deployments []*Deployment, config_unit bool) ([]dbus.UnitStatus, error) {
