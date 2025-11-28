@@ -34,6 +34,8 @@ func StartPod(ctx context.Context, depl *Deployment) error {
 	log.Printf("start: Start the deployment pod\n")
 	err := depl.StartStopPod(true, ".")
 	if err != nil {
+		err = fmt.Errorf("failed to start deployment pod, %v", err)
+		SdNotifyOrLog(err.Error())
 		return err
 	}
 
@@ -44,6 +46,8 @@ func StartPod(ctx context.Context, depl *Deployment) error {
 	log.Printf("start: Looking up pod IP address...\n")
 	addr, err := depl.FindPodIPAddress()
 	if err != nil {
+		err = fmt.Errorf("failed to find pod IP address, %v", err)
+		SdNotifyOrLog(err.Error())
 		return err
 	}
 	log.Printf("start: Found pod IP address: %s\n", addr)
@@ -52,6 +56,8 @@ func StartPod(ctx context.Context, depl *Deployment) error {
 
 	err = depl.Save(ConfigName)
 	if err != nil {
+		err = fmt.Errorf("failed to save pod IP address, %v", err)
+		SdNotifyOrLog(err.Error())
 		return err
 	}
 
@@ -92,6 +98,8 @@ func StartPod(ctx context.Context, depl *Deployment) error {
 	cmd.Stderr = os.Stderr
 	err = cmd.Run()
 	if err != nil {
+		err = fmt.Errorf("failed to add deployment to load-balancer, %v", err)
+		SdNotifyOrLog(err.Error())
 		return err
 	}
 
@@ -143,6 +151,8 @@ func StopPod(ctx context.Context, depl *Deployment) error {
 	log.Printf("stop: Stopping the containers...\n")
 	err = depl.StartStopPod(false, ".")
 	if err != nil {
+		err = fmt.Errorf("failed to stop pod, %v", err)
+		SdNotifyOrLog(err.Error())
 		return err
 	}
 
