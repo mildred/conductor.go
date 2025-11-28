@@ -95,6 +95,18 @@ func Update(version string, desired_version string, check bool) error {
 		return nil
 	}
 
+	if path.Dir(exe) == "/usr/local/bin" {
+		cmd := exec.Command(exe, "system", "install")
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		fmt.Fprintf(os.Stderr, "+ %s system install\n", exe)
+		err := cmd.Run()
+		if err != nil {
+			log.Println("%s system install failed: %v", exe, err)
+			return err
+		}
+	}
+
 	return nil
 
 }
