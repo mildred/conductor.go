@@ -256,6 +256,7 @@ func CaddyRegister(register bool, dir string) error {
 				continue
 			}
 		}
+		break
 	}
 
 	log.Printf("%s: Completed", prefix)
