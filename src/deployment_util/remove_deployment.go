@@ -140,8 +140,8 @@ func RemoveTimeout(ctx0 context.Context, deployment_name string, timeout, term_t
 		return err
 	}
 
-	fmt.Fprintf(os.Stderr, "+ rm -rf %q\n", DeploymentDirByName(deployment_name, false))
-	err = os.RemoveAll(DeploymentDirByName(deployment_name, false))
+	fmt.Fprintf(os.Stderr, "+ rm -rf %q\n", DeploymentDirByNameOnly(deployment_name))
+	err = os.RemoveAll(DeploymentDirByNameOnly(deployment_name))
 	if err != nil {
 		return err
 	}

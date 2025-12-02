@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -46,12 +47,17 @@ func DeploymentSocketPath(name string) string {
 	return path.Join(DeploymentRunDir, name, "stream.socket")
 }
 
-func DeploymentDirByName(name string, allow_dir bool) string {
-	if allow_dir && strings.Contains(name, "/") {
-		return name
+func DeploymentDirByName(name string, allow_dir bool) (string, string, error) {
+	if allow_dir && (strings.Contains(name, "/") || name == ".") {
+		depl_dir, err := filepath.Abs(name)
+		return depl_dir, path.Base(depl_dir), err
 	} else {
-		return path.Join(DeploymentRunDir, name)
+		return DeploymentDirByNameOnly(name), name, nil
 	}
+}
+
+func DeploymentDirByNameOnly(name string) string {
+	return path.Join(DeploymentRunDir, name)
 }
 
 type Deployment struct {
@@ -106,7 +112,12 @@ func NewDeploymentFromService(service *service.Service, deployment_name string, 
 }
 
 func ReadDeploymentByName(name string, allow_dir bool) (*Deployment, error) {
-	return ReadDeployment(DeploymentDirByName(name, allow_dir), name)
+	path, depl_name, err := DeploymentDirByName(name, allow_dir)
+	if err != nil {
+		return nil, err
+	}
+
+	return ReadDeployment(path, depl_name)
 }
 
 func ReadDeployment(dir, deployment_id string) (*Deployment, error) {

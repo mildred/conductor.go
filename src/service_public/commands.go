@@ -85,7 +85,7 @@ func RunServiceCommand(service *Service, direct bool, strictVersion bool, env []
 			for i, depl := range deployments {
 				st := statuses[i]
 				if st.ActiveState == "active" {
-					return RunCommand(command, direct, deployment.DeploymentDirByName(depl.DeploymentName, false), append(depl.Vars(), env...), cmd_name, args...)
+					return RunCommand(command, direct, deployment.DeploymentDirByNameOnly(depl.DeploymentName), append(depl.Vars(), env...), cmd_name, args...)
 				}
 			}
 		}

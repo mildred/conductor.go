@@ -6,12 +6,12 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"path"
 	"time"
 
 	"github.com/coreos/go-systemd/v22/daemon"
 
 	"github.com/mildred/conductor.go/src/caddy"
+	"github.com/mildred/conductor.go/src/deployment"
 	"github.com/mildred/conductor.go/src/dirs"
 	"github.com/mildred/conductor.go/src/service"
 
@@ -27,21 +27,21 @@ import (
 //
 // - or as a HTTP query to the pod IP address with a retry mechanism
 
-func Prepare() error {
+func Prepare(deployment_name_or_dir string) error {
 	ctx := context.Background()
-	cwd, err := os.Getwd()
+
+	dir, deployment_name, err := deployment.DeploymentDirByName(deployment_name_or_dir, true)
 	if err != nil {
 		return err
 	}
-	deployment := path.Base(cwd)
 
-	log.Printf("prepare: Prepare deployment %s\n", cwd)
+	log.Printf("prepare: Prepare deployment %s\n", dir)
 
 	//
 	// Create deployment config from service and run the templates
 	//
 
-	depl, err := ReadDeployment(".", deployment)
+	depl, err := ReadDeployment(".", deployment_name)
 	if err != nil {
 		return err
 	}
@@ -95,9 +95,10 @@ func Prepare() error {
 	return nil
 }
 
-func Start(function bool) error {
+func Start(deployment_name string, function bool) error {
 	ctx := context.Background()
-	depl, err := LoadDeployment(ConfigName)
+
+	depl, err := deployment.ReadDeploymentByName(deployment_name, true)
 	if err != nil {
 		return err
 	}
@@ -113,7 +114,7 @@ func Start(function bool) error {
 	}
 }
 
-func Stop(function bool) error {
+func Stop(deployment_name string, function bool) error {
 	ctx := context.Background()
 
 	//
@@ -129,7 +130,7 @@ func Stop(function bool) error {
 	// Load deployment configuration
 	//
 
-	depl, err := LoadDeployment(ConfigName)
+	depl, err := deployment.ReadDeploymentByName(deployment_name, true)
 	if err != nil {
 		return err
 	}
@@ -145,20 +146,21 @@ func Stop(function bool) error {
 	}
 }
 
-func Cleanup() error {
+func Cleanup(deployment_name_or_dir string) error {
 	ctx := context.Background()
 
-	cwd, err := os.Getwd()
+	dir, deployment_name, err := deployment.DeploymentDirByName(deployment_name_or_dir, true)
 	if err != nil {
 		return err
 	}
-	log.Printf("cleanup: Cleaning up %s\n", cwd)
+
+	log.Printf("cleanup: Cleaning up %s\n", dir)
 
 	//
 	// Run the post-stop hooks (via systemd-run specific scope), just in case
 	//
 
-	depl, err := LoadDeployment(ConfigName)
+	depl, err := deployment.ReadDeployment(dir, deployment_name)
 	if err != nil {
 		return err
 	}
@@ -175,19 +177,19 @@ func Cleanup() error {
 	// Remove deployment files
 	//
 
-	log.Printf("cleanup: Files left behind in %q\n", cwd)
+	log.Printf("cleanup: Files left behind in %q\n", dir)
 	log.Printf("cleanup: Cleanup sequence completed (deployment removal is up to the service)\n")
 	return nil
 }
 
-func CaddyRegister(register bool, dir string) error {
+func CaddyRegister(register bool, deployment_name_or_dir string) error {
 	ctx := context.Background()
 	var prefix = "register"
 	if !register {
 		prefix = "deregister"
 	}
 
-	depl, err := LoadDeployment(ConfigName)
+	depl, err := deployment.ReadDeploymentByName(deployment_name_or_dir, true)
 	if err != nil {
 		return fmt.Errorf("while loading deployment %+v, %v", ConfigName, err)
 	}
@@ -219,7 +221,7 @@ func CaddyRegister(register bool, dir string) error {
 
 			start := "start"
 			if retry {
-				start = "restart"
+				start = "reload"
 			}
 
 			fmt.Fprintf(os.Stderr, "+ systemctl %s %s %q\n", dirs.SystemdModeFlag(), start, unit_name)

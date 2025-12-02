@@ -298,7 +298,7 @@ CollectMode=inactive-or-failed
 
 [Service]
 ` + service_config + `
-WorkingDirectory=` + DeploymentDirByName(name, false) + `
+WorkingDirectory=` + DeploymentDirByNameOnly(name) + `
 Environment=CONDUCTOR_DEPLOYMENT=` + name + `
 Environment=CONDUCTOR_SYSTEMD_UNIT=%n
 

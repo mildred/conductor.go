@@ -39,5 +39,10 @@ func RunDeploymentCommand(depl *Deployment, direct bool, env []string, cmd_name 
 		return fmt.Errorf("Command %q does not run on deployments", cmd_name)
 	}
 
-	return service_util.RunCommand(command, direct, DeploymentDirByName(depl.DeploymentName, true), append(depl.Vars(), env...), cmd_name, args...)
+	depl_path, _, err := DeploymentDirByName(depl.DeploymentName, true)
+	if err != nil {
+		return err
+	}
+
+	return service_util.RunCommand(command, direct, depl_path, append(depl.Vars(), env...), cmd_name, args...)
 }

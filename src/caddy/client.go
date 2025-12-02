@@ -6,10 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
-	"slices"
 	"time"
 )
 
@@ -18,38 +16,6 @@ var DefaultTimeout time.Duration = 10 * time.Second
 type CaddyClient struct {
 	endpoint *url.URL
 	timeout  time.Duration
-}
-
-type ConfigSnip struct {
-	Id string `json:"@id"`
-}
-
-type CaddyHandle struct {
-	Handler   string            `json:"handler"`
-	Upstreams []json.RawMessage `json:"upstreams"`
-}
-
-type CaddyRoute struct {
-	Match  []json.RawMessage `json:"match"`
-	Handle []CaddyHandle     `json:"handle"`
-}
-
-type ConfigItem struct {
-	DeprecatedId string          `json:"id"`
-	MountPoint   string          `json:"mount_point"`
-	Config       json.RawMessage `json:"config"`
-	RegisterOnly bool            `json:"register_only"`
-	Id           string          `json:"-"`
-}
-
-type ConfigItems []*ConfigItem
-
-type ConfigStatus struct {
-	MountPoint string          `json:"parent_id"`
-	Id         string          `json:"id"`
-	Present    bool            `json:"present"`
-	Config     json.RawMessage `json:"config"`
-	Item       *ConfigItem     `json:"-"`
 }
 
 func NewClient(endpoint string, timeout time.Duration) (*CaddyClient, error) {
@@ -65,266 +31,147 @@ func NewClient(endpoint string, timeout time.Duration) (*CaddyClient, error) {
 	return &CaddyClient{u, timeout}, nil
 }
 
-func (client *CaddyClient) Register(ctx context.Context, register bool, configs ConfigItems) error {
-	if !register {
-		slices.Reverse(configs)
-	}
-
-	var num = 0
-
-	for _, config := range configs {
-		if register {
-			log.Printf("caddy: Register configuration for %s in %s", config.Id, config.MountPoint)
-		} else {
-			log.Printf("caddy: Deregister configuration for %s in %s", config.Id, config.MountPoint)
-		}
-		var cfg ConfigSnip
-
-		err := json.Unmarshal(config.Config, &cfg)
-		if err != nil {
-			if config.RegisterOnly {
-				log.Printf("caddy: Failed to detect @id property on JSON: %v", err)
-			} else {
-				log.Printf("Failed to get @id from: %v", string(config.Config))
-				return err
-			}
-		}
-
-		if !config.RegisterOnly && cfg.Id == "" {
-			return fmt.Errorf("Cannot detect @id for Caddy configuration")
-		}
-
-		var config_id string
-		if register {
-			config_id = config.MountPoint
-		} else if !config.RegisterOnly {
-			config_id = cfg.Id + "/"
-		}
-
-		url, err := client.endpoint.Parse("/id/" + config_id)
-		if err != nil {
-			return err
-		}
-
-		reqCtx := ctx
-		if client.timeout > 0 {
-			var cancel context.CancelFunc
-			ctx, cancel = context.WithTimeout(ctx, client.timeout)
-			defer cancel()
-		}
-
-		var res *http.Response
-		var code_valid bool
-		if register {
-			req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, url.String(), bytes.NewBuffer(config.Config))
-			if err != nil {
-				return err
-			}
-			req.Header.Set("Content-Type", "application/json")
-
-			res, err = http.DefaultClient.Do(req.WithContext(reqCtx))
-			if err != nil {
-				return err
-			}
-			log.Printf("caddy: POST /id/%s (create %q): %s\n", config_id, cfg.Id, res.Status)
-			num = num + 1
-
-			code_valid = res.StatusCode >= 200 && res.StatusCode < 300
-		} else if !config.RegisterOnly {
-			req, err := http.NewRequestWithContext(ctx, http.MethodDelete, url.String(), nil)
-			if err != nil {
-				return err
-			}
-
-			res, err = http.DefaultClient.Do(req.WithContext(reqCtx))
-			if err != nil {
-				return err
-			}
-			log.Printf("caddy: DELETE /id/%s (delete in %s): %s\n", config_id, config.MountPoint, res.Status)
-			num = num + 1
-
-			code_valid = res.StatusCode >= 200 && res.StatusCode < 300 || res.StatusCode == 404
-		} else {
-			log.Printf("caddy: Do not deregister %q in %s (register_only)\n", cfg.Id, config.MountPoint)
-			continue
-		}
-
-		if !code_valid {
-			body, err := io.ReadAll(res.Body)
-			if err != nil {
-				return err
-			}
-
-			return fmt.Errorf("cannot update Caddy config; HTTP error %s: %s", res.Status, string(body))
-		}
-	}
-
-	if register {
-		log.Printf("caddy: Register %d config snippets", num)
-	} else {
-		log.Printf("caddy: Deregister %d config snippets", num)
-	}
-
-	return nil
-}
-
-func (configs ConfigItems) SetDefaults() error {
-	for _, config := range configs {
-		if config.DeprecatedId != "" && config.MountPoint == "" {
-			config.MountPoint = config.DeprecatedId
-		}
-		config.DeprecatedId = ""
-
-		var err error
-		config.Id, err = config.GetId()
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (config *ConfigItem) GetId() (string, error) {
-	var snip = &ConfigSnip{}
-	err := json.Unmarshal(config.Config, snip)
-	if err != nil {
-		if config.RegisterOnly {
-			log.Printf("caddy: Failed to detect @id property on JSON: %v", err)
-			return "", nil
-		} else {
-			return "", fmt.Errorf("Failed to get @id from: %v", string(config.Config))
-		}
-	}
-
-	return snip.Id, nil
-}
-
-func (client *CaddyClient) GetConfig(ctx context.Context, config *ConfigItem) (*ConfigStatus, error) {
-	result := &ConfigStatus{
-		MountPoint: config.MountPoint,
-		Id:         config.Id,
-		Item:       config,
-	}
-
-	var id_url string
-	if config.Id == "" && !config.RegisterOnly {
-		return result, nil
-	} else if config.Id == "" {
-		id_url = config.MountPoint
-	} else {
-		id_url = config.Id
-	}
-
-	url, err := client.endpoint.Parse("/id/" + id_url)
-	if err != nil {
-		return nil, err
-	}
-
-	reqCtx := ctx
+func (client *CaddyClient) getContextTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
 	if client.timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, client.timeout)
-		defer cancel()
+		return context.WithTimeout(ctx, client.timeout)
+	} else {
+		return ctx, func() {}
 	}
+}
+
+func (client *CaddyClient) getConfig(ctx context.Context, id string) (res *http.Response, config json.RawMessage, present bool, etag string, err error) {
+	url, err := client.endpoint.Parse("/id/" + id)
+	if err != nil {
+		return nil, nil, false, "", err
+	}
+
+	reqCtx, cancel := client.getContextTimeout(ctx)
+	defer cancel()
 
 	req, err := http.NewRequestWithContext(reqCtx, "GET", url.String(), nil)
 	if err != nil {
-		return nil, err
+		return nil, nil, false, "", err
 	}
 
-	res, err := http.DefaultClient.Do(req)
+	res, err = http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, nil, false, "", err
 	}
-	log.Printf("caddy: GET /id/%s: %s\n", id_url, res.Status)
 
-	result.Present = res.StatusCode >= 200 && res.StatusCode < 300
+	etag = res.Header.Get("Etag")
+
+	present = res.StatusCode >= 200 && res.StatusCode < 300
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
-		return nil, err
+		return res, nil, present, etag, err
 	}
 
-	result.Config = body
+	config = body
 
-	if result.Present && config.RegisterOnly && config.Id == "" {
-		var arr []json.RawMessage
-		err := json.Unmarshal(body, &arr)
+	return res, config, present, etag, nil
+}
+
+func (client *CaddyClient) postConfig(ctx context.Context, etag string, locationId string, config json.RawMessage) (res *http.Response, retry bool, err error) {
+	return client.sendConfig(ctx, http.MethodPost, etag, locationId, config)
+}
+
+func (client *CaddyClient) patchConfig(ctx context.Context, etag string, locationId string, config json.RawMessage) (res *http.Response, retry bool, err error) {
+	return client.sendConfig(ctx, http.MethodPatch, etag, locationId, config)
+}
+
+func (client *CaddyClient) sendConfig(ctx context.Context, httpMethod string, etag string, locationId string, config json.RawMessage) (res *http.Response, retry bool, err error) {
+	url, err := client.endpoint.Parse("/id/" + locationId)
+	if err != nil {
+		return nil, false, err
+	}
+
+	reqCtx, cancel := client.getContextTimeout(ctx)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(reqCtx, httpMethod, url.String(), bytes.NewBuffer(config))
+	if err != nil {
+		return nil, false, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if etag != "" {
+		req.Header.Set("If-Match", etag)
+	}
+
+	res, err = http.DefaultClient.Do(req.WithContext(reqCtx))
+	if err != nil {
+		return nil, false, err
+	}
+
+	if res.StatusCode == 412 {
+		return res, true, nil
+	}
+
+	code_valid := res.StatusCode >= 200 && res.StatusCode < 300
+	if !code_valid {
+		body, err := io.ReadAll(res.Body)
 		if err != nil {
-			return nil, fmt.Errorf("cannot unmarshal actual config in an array for register_only proxy config, %v", err)
+			return res, false, err
 		}
 
-		result.Present = false
-		for _, item := range arr {
-			if bytes.Equal(item, config.Config) {
-				result.Present = true
-				result.Config = item
-			}
-		}
+		return res, false, fmt.Errorf("cannot update Caddy config; HTTP error %s: %s", res.Status, string(body))
 	}
-
-	return result, nil
+	return res, false, nil
 }
 
-func getDial(upstream_json json.RawMessage) (string, error) {
-	var upstream struct {
-		Dial string `json:"dial"`
-	}
-	err := json.Unmarshal(upstream_json, &upstream)
+func (client *CaddyClient) deleteConfig(ctx context.Context, etag string, locationId string) (res *http.Response, retry bool, err error) {
+	url, err := client.endpoint.Parse("/id/" + locationId + "/")
 	if err != nil {
-		return "", err
+		return nil, false, err
 	}
 
-	return upstream.Dial, nil
-}
+	reqCtx, cancel := client.getContextTimeout(ctx)
+	defer cancel()
 
-func (cfg *ConfigStatus) Dial() (string, error) {
-	return getDial(cfg.Config)
-}
-
-func (cfg *ConfigStatus) MatchConfig() ([]json.RawMessage, error) {
-	var route CaddyRoute
-	err := json.Unmarshal(cfg.Config, &route)
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodDelete, url.String(), nil)
 	if err != nil {
-		return nil, err
+		return nil, false, err
+	}
+	if etag != "" {
+		req.Header.Set("If-Match", etag)
 	}
 
-	return route.Match, nil
-}
-
-func (cfg *ConfigStatus) Upstreams() ([]json.RawMessage, error) {
-	var upstreams []json.RawMessage
-	var route CaddyRoute
-
-	err := json.Unmarshal(cfg.Config, &route)
+	res, err = http.DefaultClient.Do(req.WithContext(reqCtx))
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
-	for _, handle := range route.Handle {
-
-		if handle.Handler == "reverse_proxy" {
-			upstreams = append(upstreams, handle.Upstreams...)
-		}
+	if res.StatusCode == 412 {
+		return res, true, nil
 	}
 
-	return upstreams, nil
-}
-
-func (cfg *ConfigStatus) UpstreamDials() ([]string, error) {
-	var res []string
-	upstreams, err := cfg.Upstreams()
-	if err != nil {
-		return nil, err
-	}
-
-	for _, up := range upstreams {
-		dial, err := getDial(up)
+	code_valid := res.StatusCode >= 200 && res.StatusCode < 300 || res.StatusCode == 404
+	if !code_valid {
+		body, err := io.ReadAll(res.Body)
 		if err != nil {
-			return nil, err
+			return res, false, err
 		}
-		res = append(res, dial)
+
+		return res, false, fmt.Errorf("cannot update Caddy config; HTTP error %s: %s", res.Status, string(body))
 	}
-	return res, nil
+	return res, false, nil
+}
+
+func (client *CaddyClient) getScalarConfig(ctx context.Context, id_parent string, value json.RawMessage) (res *http.Response, present bool, etag string, err error) {
+	res, body, present, etag, err := client.getConfig(ctx, id_parent)
+
+	var arr []json.RawMessage
+	err = json.Unmarshal(body, &arr)
+	if err != nil {
+		return res, false, etag, fmt.Errorf("cannot unmarshal actual config in an array for register_only proxy config, %v", err)
+	}
+
+	present = false
+	for _, item := range arr {
+		if bytes.Equal(item, value) {
+			present = true
+		}
+	}
+
+	return res, present, etag, nil
 }
