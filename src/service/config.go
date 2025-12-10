@@ -13,6 +13,7 @@ import (
 
 	"github.com/coreos/go-systemd/v22/unit"
 	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
+	"github.com/tailscale/hujson"
 	"github.com/yookoala/realpath"
 	"golang.org/x/crypto/sha3"
 
@@ -294,6 +295,11 @@ func loadService(path string, fix_paths bool, base *Service, inh *InheritFile) (
 
 	last_hooks := service.Hooks
 	service.Hooks = []*Hook{}
+
+	data, err = hujson.Standardize(data)
+	if err != nil {
+		return nil, err
+	}
 
 	err = json.Unmarshal(data, service)
 	if err != nil {

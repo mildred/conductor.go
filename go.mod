@@ -1,6 +1,6 @@
 module github.com/mildred/conductor.go
 
-go 1.22.7
+go 1.23
 
 require (
 	github.com/PaesslerAG/jsonpath v0.1.1
@@ -24,6 +24,7 @@ require (
 	github.com/inconshreveable/go-update v0.0.0-20160112193335-8152e7eb6ccf // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/taigrr/systemctl v1.0.10 // indirect
+	github.com/tailscale/hujson v0.0.0-20250605163823-992244df8c5a // indirect
 	github.com/tcnksm/go-gitconfig v0.1.2 // indirect
 	github.com/ulikunitz/xz v0.5.12 // indirect
 	golang.org/x/net v0.34.0 // indirect
