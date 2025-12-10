@@ -101,6 +101,15 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 	}
 
 	//
+	// Run pre-start-service hook
+	//
+
+	err = service.RunHooks(ctx, "pre-start-service", 60*time.Second)
+	if err != nil {
+		return err
+	}
+
+	//
 	// Find or create a suitable deployment
 	//
 
@@ -228,6 +237,15 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 		if err != nil {
 			log.Printf("%s: ERROR removing deployment %s (but continuing): %v", prefix, d.DeploymentName, err)
 		}
+	}
+
+	//
+	// Run post-start-service hook
+	//
+
+	err = service.RunHooks(ctx, "post-start-service", 60*time.Second)
+	if err != nil {
+		return err
 	}
 
 	//

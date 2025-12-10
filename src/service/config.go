@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/coreos/go-systemd/v22/unit"
 	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
@@ -595,4 +597,53 @@ func (s *Service) EvaluateCondition(verbose bool) (condition bool, disable bool,
 	condition, err = EvaluateConditions(s.Conditions, verbose)
 
 	return condition, disable, err
+}
+
+func (s *Service) RunHooks(ctx context.Context, when string, extend_timeout time.Duration) error {
+	for _, hook := range s.Hooks {
+		if hook.When != when {
+			continue
+		}
+		if len(hook.Exec) < 1 {
+			continue
+		}
+
+		var ctx1 context.Context
+		var cancel context.CancelFunc
+		if hook.TimeoutSec > 0 {
+			ctx1, cancel = context.WithTimeout(ctx, time.Duration(hook.TimeoutSec*int64(time.Second)))
+		} else if hook.TimeoutSec == 0 {
+			ctx1 = ctx
+		} else {
+			ctx1, cancel = context.WithCancel(ctx)
+		}
+
+		go utils.ExtendTimeout(ctx1, extend_timeout)
+
+		err := func() error {
+			if cancel != nil {
+				defer cancel()
+			}
+
+			log.Printf("%s hook: Run %v\n", when, hook.Exec)
+			//  cmd := exec.Command("systemd-run",
+			//  	append([]string{
+			//  		"--scope",
+			//  		"--pipe",
+			//  		"--collect",
+			//  		"--unit=" + fmt.Sprintf("hook-%s-%s", depl.DeploymentName, when),
+			//  	}, hook.Exec...)...)
+			cmd := exec.Command(hook.Exec[0], hook.Exec[1:]...)
+			cmd.Env = append(cmd.Environ(), s.Vars()...)
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			return cmd.Run()
+		}()
+		if err != nil {
+			log.Printf("%s hook: ERROR %v", when, err)
+			return err
+		}
+	}
+	log.Printf("%s hook: Completed hooks\n", when)
+	return nil
 }

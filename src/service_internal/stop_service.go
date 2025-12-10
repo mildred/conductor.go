@@ -19,6 +19,8 @@ import (
 )
 
 func Stop(service_name string) error {
+	ctx := context.Background()
+
 	//
 	// Notify stop in progress
 	//
@@ -33,6 +35,15 @@ func Stop(service_name string) error {
 	//
 
 	service, err := LoadServiceByName(service_name)
+	if err != nil {
+		return err
+	}
+
+	//
+	// Run pre-stop-service hook
+	//
+
+	err = service.RunHooks(ctx, "pre-stop-service", 60*time.Second)
 	if err != nil {
 		return err
 	}
@@ -73,13 +84,22 @@ func Stop(service_name string) error {
 	for _, d := range deployments {
 		log.Printf("stop: Stopping deployment %s...\n", d.DeploymentName)
 
-		ctx, cancel := context.WithCancel(context.Background())
-		go utils.ExtendTimeout(ctx, 60*time.Second)
+		ctx1, cancel := context.WithCancel(ctx)
+		go utils.ExtendTimeout(ctx1, 60*time.Second)
 
 		func() {
 			defer cancel()
 			deployment_public.Stop(d.DeploymentName)
 		}()
+	}
+
+	//
+	// Run post-stop-service hook
+	//
+
+	err = service.RunHooks(ctx, "post-stop-service", 60*time.Second)
+	if err != nil {
+		return err
 	}
 
 	log.Printf("stop: Stop sequence completed\n")
