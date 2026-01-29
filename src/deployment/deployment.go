@@ -360,7 +360,9 @@ func (depl *Deployment) StartStopPod(start bool, dir string) error {
 
 func (depl *Deployment) FindPodIPAddressContainer(id string) (string, error) {
 	data, err := exec.Command("podman", "container", "inspect", id).Output()
-	if err != nil {
+	if ee, ok := err.(*exec.ExitError); ok {
+		return "", fmt.Errorf("could not execute podman container inspect %s: %v", id, err, string(ee.Stderr))
+	} else if err != nil {
 		return "", fmt.Errorf("could not execute podman container inspect %s: %v", id, err)
 	}
 
@@ -390,7 +392,9 @@ func (depl *Deployment) FindPodIPAddressContainer(id string) (string, error) {
 
 func (depl *Deployment) FindPodIPAddressOnce() (string, error) {
 	data, err := exec.Command("podman", "pod", "inspect", depl.PodName).Output()
-	if err != nil {
+	if ee, ok := err.(*exec.ExitError); ok {
+		return "", fmt.Errorf("could not execute podman pod inspect %s: %v (%s)", depl.PodName, err, string(ee.Stderr))
+	} else if err != nil {
 		return "", fmt.Errorf("could not execute podman pod inspect %s: %v", depl.PodName, err)
 	}
 
