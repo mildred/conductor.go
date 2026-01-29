@@ -79,7 +79,7 @@ func StartPod(ctx context.Context, depl *Deployment) error {
 	}
 
 	log.Printf("start: executing post-start hooks...")
-	err = depl.RunHooks(ctx, "post-start", 60*time.Second)
+	err = depl.RunHooks(ctx, "post-start", depl.Vars(), 60*time.Second)
 	if err != nil {
 		log.Printf("start: post-start hooks failed, continuing...")
 	}
@@ -125,7 +125,7 @@ func StopPod(ctx context.Context, depl *Deployment) error {
 	//
 
 	log.Printf("stop: executing pre-stop hooks...")
-	err := depl.RunHooks(ctx, "pre-stop", 60*time.Second)
+	err := depl.RunHooks(ctx, "pre-stop", depl.Vars(), 60*time.Second)
 	if err != nil {
 		log.Printf("stop: pre-stop hooks failed, continuing...")
 	}

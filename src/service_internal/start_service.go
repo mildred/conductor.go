@@ -104,7 +104,7 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 	// Run pre-start-service hook
 	//
 
-	err = service.RunHooks(ctx, "pre-start-service", 60*time.Second)
+	err = service.RunHooks(ctx, "pre-start-service", service.Vars(), 60*time.Second)
 	if err != nil {
 		return err
 	}
@@ -243,7 +243,7 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 	// Run post-start-service hook
 	//
 
-	err = service.RunHooks(ctx, "post-start-service", 60*time.Second)
+	err = service.RunHooks(ctx, "post-start-service", service.Vars(), 60*time.Second)
 	if err != nil {
 		return err
 	}

@@ -664,7 +664,7 @@ func (s *Service) EvaluateCondition(verbose bool) (condition bool, disable bool,
 	return condition, disable, err
 }
 
-func (s *Service) RunHooks(ctx context.Context, when string, extend_timeout time.Duration) error {
+func (s *Service) RunHooks(ctx context.Context, when string, vars []string, extend_timeout time.Duration) error {
 	for _, hook := range s.Hooks {
 		if hook.When != when {
 			continue
@@ -699,7 +699,7 @@ func (s *Service) RunHooks(ctx context.Context, when string, extend_timeout time
 			//  		"--unit=" + fmt.Sprintf("hook-%s-%s", depl.DeploymentName, when),
 			//  	}, hook.Exec...)...)
 			cmd := exec.Command(hook.Exec[0], hook.Exec[1:]...)
-			cmd.Env = append(cmd.Environ(), s.Vars()...)
+			cmd.Env = append(cmd.Environ(), vars...)
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 			return cmd.Run()

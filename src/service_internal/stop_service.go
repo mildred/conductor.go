@@ -43,7 +43,7 @@ func Stop(service_name string) error {
 	// Run pre-stop-service hook
 	//
 
-	err = service.RunHooks(ctx, "pre-stop-service", 60*time.Second)
+	err = service.RunHooks(ctx, "pre-stop-service", service.Vars(), 60*time.Second)
 	if err != nil {
 		return err
 	}
@@ -97,7 +97,7 @@ func Stop(service_name string) error {
 	// Run post-stop-service hook
 	//
 
-	err = service.RunHooks(ctx, "post-stop-service", 60*time.Second)
+	err = service.RunHooks(ctx, "post-stop-service", service.Vars(), 60*time.Second)
 	if err != nil {
 		return err
 	}
