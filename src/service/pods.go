@@ -11,6 +11,8 @@ import (
 
 type ServicePod struct {
 	Name                 string                  `json:"name"`
+	PartIdTemplate       string                  `json:"part_id_template"`
+	ExcludeVars          []string                `json:"exclude_vars"`
 	ServiceDirectives    []string                `json:"service_directives,omitempty"`
 	PodTemplate          string                  `json:"pod_template,omitempty"`        // Template file for pod
 	ConfigMapTemplate    string                  `json:"config_map_template,omitempty"` // ConfigMap template file
@@ -46,6 +48,10 @@ func (pods *ServicePods) FindMainPod() *ServicePod {
 
 func (pods *ServicePods) FixPaths(dir string) error {
 	for _, pod := range *pods {
+		if err := fix_path(dir, &pod.PartIdTemplate, false); err != nil {
+			return err
+		}
+
 		if err := fix_path(dir, &pod.PodTemplate, false); err != nil {
 			return err
 		}

@@ -126,7 +126,7 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 
 		log.Printf("%s: Loaded service, configure socket for part %q...\n", prefix, part_name)
 
-		seed, err := deployment.SeedFromService(service, part_name)
+		seed, err := deployment.SeedFromService(ctx, service, part_name)
 		if err != nil {
 			return err
 		}

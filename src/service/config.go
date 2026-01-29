@@ -228,7 +228,7 @@ func LoadServiceFile(path string) (*Service, error) {
 		return nil, err
 	}
 
-	service.Id, err = service.ComputeId("")
+	service.Id, err = service.ComputeId("", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -416,8 +416,22 @@ func (service *Service) ComputeIdData(extra string) ([]byte, error) {
 	return append(canon, []byte(extra)...), nil
 }
 
-func (service *Service) ComputeId(extra string) (string, error) {
-	data, err := json.Marshal(service)
+func (service *Service) ComputeId(extra string, exclude_vars []string) (string, error) {
+	var filtered_service *Service
+	if len(exclude_vars) == 0 {
+		filtered_service = service
+	} else {
+		filtered_service = &Service{}
+		*filtered_service = *service
+		filtered_service.Config = map[string]*ConfigValue{}
+		for k, v := range service.Config {
+			if !slices.Contains(exclude_vars, k) {
+				filtered_service.Config[k] = v
+			}
+		}
+	}
+
+	data, err := json.Marshal(filtered_service)
 	if err != nil {
 		return "", err
 	}
@@ -427,8 +441,12 @@ func (service *Service) ComputeId(extra string) (string, error) {
 		return "", err
 	}
 
+	return computeIdFromData(canon, extra)
+}
+
+func computeIdFromData(data []byte, extra string) (string, error) {
 	shake := sha3.NewShake256()
-	_, err = shake.Write(append(canon, []byte(extra)...))
+	_, err := shake.Write(append(data, []byte(extra)...))
 	if err != nil {
 		return "", err
 	}
@@ -442,8 +460,31 @@ func (service *Service) ComputeId(extra string) (string, error) {
 	return fmt.Sprintf("%x", output), nil
 }
 
-func (service *Service) PartId(part string) (string, error) {
-	return service.ComputeId("part:" + part)
+func (service *Service) PartId(ctx context.Context, part string) (string, error) {
+	var part_id_template string
+	var excluded_vars []string
+
+	if pod := service.FindPod(part); pod != nil {
+		part_id_template = pod.PartIdTemplate
+		excluded_vars = pod.ExcludeVars
+	} else if f := service.FindFunction(part); f != nil {
+		part_id_template = f.PartIdTemplate
+		excluded_vars = f.ExcludeVars
+	}
+
+	if part_id_template != "" {
+		data, err := tmpl.RunTemplate(ctx, part_id_template, append(service.VarsExcluding(excluded_vars),
+			"CONDUCTOR_SERVICE_PART="+part,
+		))
+
+		if err != nil {
+			return "", err
+		}
+
+		return computeIdFromData([]byte(data), "part:"+part)
+	} else {
+		return service.ComputeId("part:"+part, excluded_vars)
+	}
 }
 
 func join_paths(base, path string) string {
@@ -455,6 +496,10 @@ func join_paths(base, path string) string {
 }
 
 func (service *Service) Vars() []string {
+	return service.VarsExcluding(nil)
+}
+
+func (service *Service) VarsExcluding(excluded []string) []string {
 	name := service.Name
 	if name == "" {
 		name = service.BasePath
@@ -469,9 +514,29 @@ func (service *Service) Vars() []string {
 		"CONDUCTOR_SERVICE_CONFIG_UNIT=" + ServiceConfigUnit(service.BasePath),
 	}
 	for k, v := range service.Config {
-		vars = append(vars, fmt.Sprintf("%s=%s", k, v))
+		if !slices.Contains(excluded, k) {
+			vars = append(vars, fmt.Sprintf("%s=%s", k, v))
+		}
 	}
 	return vars
+}
+
+func (service *Service) FindPod(part_name string) *ServicePod {
+	for _, pod := range service.Pods {
+		if pod.Name == part_name {
+			return pod
+		}
+	}
+	return nil
+}
+
+func (service *Service) FindFunction(part_name string) *ServiceFunction {
+	for _, f := range service.Functions {
+		if f.Name == part_name {
+			return f
+		}
+	}
+	return nil
 }
 
 func (service *Service) Parts() ([]string, error) {
@@ -503,7 +568,7 @@ func (service *Service) ProxyConfig(ctx context.Context) (caddy.ConfigItems, err
 	}
 
 	for _, f := range service.Functions {
-		cfgs, err := f.ReverseProxyConfigs(service)
+		cfgs, err := f.ReverseProxyConfigs(ctx, service)
 		if err != nil {
 			return nil, err
 		}

@@ -39,7 +39,7 @@ func StartNewOrExistingFromService(ctx context.Context, svc *service.Service, se
 	deployments, err := List(ListOpts{
 		FilterServiceDir: svc.BasePath,
 		FilterPartName:   &seed.PartName,
-		FilterServiceId:  svc.Id,
+		FilterPartId:     seed.PartId,
 	})
 	if err != nil {
 		return nil, "", err

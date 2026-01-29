@@ -227,7 +227,7 @@ func cmd_service_deploy() *flaggy.Subcommand {
 			return err
 		}
 
-		seed, err := deployment.SeedFromService(service, part)
+		seed, err := deployment.SeedFromService(context.Background(), service, part)
 		if err != nil {
 			return err
 		}

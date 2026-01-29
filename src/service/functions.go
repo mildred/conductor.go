@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -13,6 +14,8 @@ import (
 
 type ServiceFunction struct {
 	Name                 string                       `json:"name"`
+	PartIdTemplate       string                       `json:"part_id_template"`
+	ExcludeVars          []string                     `json:"exclude_vars"`
 	ServiceDirectives    []string                     `json:"service_directives,omitempty"`
 	Format               string                       `json:"format,omitempty"` // Format: cgi, http-stdio, sdactivate
 	Exec                 []string                     `json:"exec,omitempty"`
@@ -54,6 +57,9 @@ func (functions *ServiceFunctions) FindMainFunction() *ServiceFunction {
 func (functions *ServiceFunctions) FixPaths(dir string) error {
 	for _, f := range *functions {
 		if len(f.Exec) > 0 {
+			if err := fix_path(dir, &f.PartIdTemplate, false); err != nil {
+				return err
+			}
 			if err := fix_path(dir, &f.Exec[0], false); err != nil {
 				return err
 			}
@@ -80,7 +86,7 @@ func (f *ServiceFunction) FillDefaults(service *Service) error {
 	return nil
 }
 
-func (f *ServiceFunction) ReverseProxy(service *Service) (res []ServiceFunctionProxyConfig, err error) {
+func (f *ServiceFunction) ReverseProxy(ctx context.Context, service *Service) (res []ServiceFunctionProxyConfig, err error) {
 	var names []string
 
 	for i, proxy := range f.ProvidedReverseProxy {
@@ -99,7 +105,7 @@ func (f *ServiceFunction) ReverseProxy(service *Service) (res []ServiceFunctionP
 				return nil, err
 			}
 		} else {
-			proxy.Route, err = f.CaddyConfig(service, proxy.Name)
+			proxy.Route, err = f.CaddyConfig(ctx, service, proxy.Name)
 			if err != nil {
 				return nil, err
 			}
@@ -118,7 +124,7 @@ func (f *ServiceFunction) ReverseProxy(service *Service) (res []ServiceFunctionP
 			return nil, fmt.Errorf("Reverse proxy configuration %+v appears more than once because default_reverse_proxy is set", name)
 		}
 
-		route, err := f.CaddyConfig(service, name)
+		route, err := f.CaddyConfig(ctx, service, name)
 		if err != nil {
 			return nil, err
 		}
@@ -152,8 +158,8 @@ func caddyConfigSetId(route *json.RawMessage, new_id string) error {
 	return nil
 }
 
-func (f *ServiceFunction) ReverseProxyConfigs(service *Service) (configs caddy.ConfigItems, err error) {
-	proxies, err := f.ReverseProxy(service)
+func (f *ServiceFunction) ReverseProxyConfigs(ctx context.Context, service *Service) (configs caddy.ConfigItems, err error) {
+	proxies, err := f.ReverseProxy(ctx, service)
 	if err != nil {
 		return nil, err
 	}
@@ -172,9 +178,9 @@ func (f *ServiceFunction) CaddyConfigName(service *Service, name string) string 
 	return fmt.Sprintf("conductor-function.%s.%s.%s.%s", service.AppName, service.InstanceName, f.Name, name)
 }
 
-func (f *ServiceFunction) CaddyConfig(service *Service, name string) (json.RawMessage, error) {
+func (f *ServiceFunction) CaddyConfig(ctx context.Context, service *Service, name string) (json.RawMessage, error) {
 	config_id := f.CaddyConfigName(service, name)
-	part_id, err := service.PartId(f.Name)
+	part_id, err := service.PartId(ctx, f.Name)
 	if err != nil {
 		return nil, err
 	}

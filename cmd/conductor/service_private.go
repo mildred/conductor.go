@@ -35,7 +35,7 @@ func cmd_private_service_id() *flaggy.Subcommand {
 			d, err = s.ComputeIdData(extra)
 			data = string(d)
 		} else {
-			data, err = s.ComputeId(extra)
+			data, err = s.ComputeId(extra, nil)
 		}
 		if err != nil {
 			return err

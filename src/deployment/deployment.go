@@ -205,7 +205,7 @@ func (depl *Deployment) ProxyConfig(ctx context.Context) (caddy.ConfigItems, err
 	}
 
 	if depl.Function != nil {
-		cfg, err := depl.Function.ProxyConfig(depl)
+		cfg, err := depl.Function.ProxyConfig(ctx, depl)
 		if err != nil {
 			return nil, err
 		}
@@ -232,7 +232,14 @@ func (depl *Deployment) ProxyConfig(ctx context.Context) (caddy.ConfigItems, err
 }
 
 func (depl *Deployment) Vars() []string {
-	var vars []string = append(depl.Service.Vars(),
+	var excluded []string = nil
+	if depl.Pod != nil {
+		excluded = depl.Pod.ExcludeVars
+	} else if depl.Function != nil {
+		excluded = depl.Function.ExcludeVars
+	}
+
+	var vars []string = append(depl.Service.VarsExcluding(excluded),
 		"CONDUCTOR_SERVICE_PART="+depl.PartName,
 		"CONDUCTOR_DEPLOYMENT="+depl.DeploymentName,
 		"CONDUCTOR_DEPLOYMENT_SERVICE_ID="+depl.ServiceId,

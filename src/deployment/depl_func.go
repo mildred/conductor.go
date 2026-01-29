@@ -1,6 +1,7 @@
 package deployment
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 
@@ -12,9 +13,9 @@ type DeploymentFunction struct {
 	*service.ServiceFunction
 }
 
-func (f *DeploymentFunction) ProxyConfig(depl *Deployment) (caddy.ConfigItems, error) {
+func (f *DeploymentFunction) ProxyConfig(ctx context.Context, depl *Deployment) (caddy.ConfigItems, error) {
 	var result caddy.ConfigItems
-	proxies, err := f.ReverseProxy(depl.Service)
+	proxies, err := f.ReverseProxy(ctx, depl.Service)
 	if err != nil {
 		return nil, err
 	}

@@ -1,6 +1,7 @@
 package deployment
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -48,8 +49,8 @@ func ReadSeed(fname string) (*DeploymentSeed, error) {
 	return res, nil
 }
 
-func SeedFromService(service *service.Service, part string) (*DeploymentSeed, error) {
-	part_id, err := service.PartId(part)
+func SeedFromService(ctx context.Context, service *service.Service, part string) (*DeploymentSeed, error) {
+	part_id, err := service.PartId(ctx, part)
 	if err != nil {
 		return nil, err
 	}
