@@ -85,7 +85,7 @@ func Prepare(deployment_name_or_dir string) error {
 	//
 
 	log.Printf("prepare: executing pre-start hooks...")
-	err = depl.RunHooks(ctx, "pre-start", depl.Vars(), 60*time.Second)
+	err = depl.RunHooks(ctx, "pre-start", depl.PartName, depl.Vars(), 60*time.Second)
 	if err != nil {
 		return err
 	}
@@ -168,7 +168,7 @@ func Cleanup(deployment_name_or_dir string) error {
 	log.Printf("cleanup: Loaded deployment %s, service %s-%s\n", depl.DeploymentName, depl.AppName, depl.InstanceName)
 
 	log.Printf("cleanup: executing post-stop hooks...")
-	err = depl.RunHooks(ctx, "post-stop", depl.Vars(), 60*time.Second)
+	err = depl.RunHooks(ctx, "post-stop", depl.PartName, depl.Vars(), 60*time.Second)
 	if err != nil {
 		return err
 	}

@@ -29,6 +29,7 @@ type Hook struct {
 	Id         string   `json:"id"`
 	When       string   `json:"when"`
 	Exec       []string `json:"exec"`
+	Part       []string `json:"parts"`
 	TimeoutSec int64    `json:"timeout_sec"`
 }
 
@@ -664,13 +665,18 @@ func (s *Service) EvaluateCondition(verbose bool) (condition bool, disable bool,
 	return condition, disable, err
 }
 
-func (s *Service) RunHooks(ctx context.Context, when string, vars []string, extend_timeout time.Duration) error {
+func (s *Service) RunHooks(ctx context.Context, when string, part string, vars []string, extend_timeout time.Duration) error {
 	for _, hook := range s.Hooks {
 		if hook.When != when {
 			continue
 		}
 		if len(hook.Exec) < 1 {
 			continue
+		}
+		if len(hook.Part) > 0 {
+			if !slices.Contains(hook.Part, part) {
+				continue
+			}
 		}
 
 		var ctx1 context.Context
