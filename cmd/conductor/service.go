@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 
@@ -166,22 +168,42 @@ func cmd_service_reload() *flaggy.Subcommand {
 	return cmd
 }
 
+type NegativeBoolFlag struct{ Bool *bool }
+
+func (b *NegativeBoolFlag) Set(s string) error {
+	v, err := strconv.ParseBool(s)
+	if err != nil {
+		err = errors.New("parse error")
+	}
+	*b.Bool = !v
+	return err
+}
+
+func (b *NegativeBoolFlag) Get() any { return !bool(*b.Bool) }
+
+func (b *NegativeBoolFlag) String() string { return strconv.FormatBool(!bool(*b.Bool)) }
+
+func (b *NegativeBoolFlag) IsBoolFlag() bool { return true }
+
 func cmd_service_rolling_restart() *flaggy.Subcommand {
 	var service string
 	var max_index int = 10
 	var stop_timeout, term_timeout time.Duration = 0, 5 * time.Second
+	var fresh bool = true
 
 	cmd := flaggy.NewSubcommand("rolling-restart") // "SERVICE",
 	cmd.Description = "Restart a service by starting the new deployment before terminating the old one"
 	cmd.Int(&max_index, "", "max-deployment-index", "max deployment index to use before erroring out")
 	cmd.Duration(&stop_timeout, "", "stop-timeout", "max duration to wait for the stop to complete (0 to disable timeout)")
 	cmd.Duration(&term_timeout, "", "term-timeout", "max duration to wait for the SIGTERM to kill (0 to disable timeout)")
+	cmd.Bool(&fresh, "", "fresh", "Do not reuse a started deployment is possible [default: true]")
+	cmd.Var(&NegativeBoolFlag{&fresh}, "", "no-fresh", "")
 	cmd.AddPositionalValue(&service, "service", 1, true, "The service to act on")
 
 	cmd.CommandUsed = Hook(func() error {
 		return service_internal.StartOrReload(service, service_internal.StartOrReloadOpts{
 			Restart:            true,
-			WantsFresh:         true,
+			WantsFresh:         fresh,
 			MaxDeploymentIndex: max_index,
 			StopTimeout:        stop_timeout,
 			TermTimeout:        term_timeout,
