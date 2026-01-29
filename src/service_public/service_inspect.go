@@ -39,6 +39,7 @@ func Inspect(ctx context.Context, service *Service, state *InspectState) (json.R
 		Id               string            `json:"_id"`
 		ProxyConfig      caddy.ConfigItems `json:"_proxy_config"`
 		ConditionMatched bool              `json:"_condition_matched"`
+		Vars             []string          `json:"_vars"`
 	}{
 		Service:          service,
 		State:            state,
@@ -50,6 +51,7 @@ func Inspect(ctx context.Context, service *Service, state *InspectState) (json.R
 		Id:               service.Id,
 		ProxyConfig:      proxy_config,
 		ConditionMatched: condition_matched,
+		Vars:             service.Vars(),
 	}
 
 	var buf bytes.Buffer

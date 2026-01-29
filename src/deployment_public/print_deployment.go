@@ -207,7 +207,15 @@ func PrintInspect(deployments ...string) error {
 			return err
 		}
 
-		err = json.NewEncoder(os.Stdout).Encode(depl)
+		exported := struct {
+			*Deployment
+			Vars []string `json:"_vars"`
+		}{
+			Deployment: depl,
+			Vars:       depl.Vars(),
+		}
+
+		err = json.NewEncoder(os.Stdout).Encode(exported)
 		if err != nil {
 			return err
 		}
