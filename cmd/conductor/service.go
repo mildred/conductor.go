@@ -198,7 +198,6 @@ func cmd_service_rolling_restart() *flaggy.Subcommand {
 	cmd.Duration(&stop_timeout, "", "stop-timeout", "max duration to wait for the stop to complete (0 to disable timeout)")
 	cmd.Duration(&term_timeout, "", "term-timeout", "max duration to wait for the SIGTERM to kill (0 to disable timeout)")
 	cmd.Bool(&fresh, "", "fresh", "Do not reuse a started deployment is possible [default: true]")
-	cmd.Var(&NegativeBoolFlag{&fresh}, "", "no-fresh", "")
 	cmd.AddPositionalValue(&service, "service", 1, true, "The service to act on")
 
 	cmd.CommandUsed = Hook(func() error {
