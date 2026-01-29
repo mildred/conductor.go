@@ -3,6 +3,7 @@ package deployment
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -357,10 +358,40 @@ func (depl *Deployment) StartStopPod(start bool, dir string) error {
 	return cmd.Run()
 }
 
+func (depl *Deployment) FindPodIPAddressContainer(id string) (string, error) {
+	data, err := exec.Command("podman", "container", "inspect", id).Output()
+	if err != nil {
+		return "", fmt.Errorf("could not execute podman container inspect %s: %v", id, err)
+	}
+
+	var containers []struct {
+		NetworkSettings struct {
+			Networks map[string]struct {
+				IPAddress string
+			}
+		}
+	}
+
+	err = json.Unmarshal(data, &containers)
+	if err != nil {
+		return "", err
+	}
+
+	for _, cont := range containers {
+		for _, net := range cont.NetworkSettings.Networks {
+			if net.IPAddress != "" {
+				return net.IPAddress, nil
+			}
+		}
+	}
+
+	return "", nil
+}
+
 func (depl *Deployment) FindPodIPAddressOnce() (string, error) {
 	data, err := exec.Command("podman", "pod", "inspect", depl.PodName).Output()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("could not execute podman pod inspect %s: %v", depl.PodName, err)
 	}
 
 	var pod struct {
@@ -374,34 +405,20 @@ func (depl *Deployment) FindPodIPAddressOnce() (string, error) {
 		return "", err
 	}
 
-	if len(pod.Containers) > 0 {
-		data, err := exec.Command("podman", "container", "inspect", pod.Containers[0].Id).Output()
-		if err != nil {
-			return "", err
-		}
-
-		var containers []struct {
-			NetworkSettings struct {
-				Networks map[string]struct {
-					IPAddress string
-				}
-			}
-		}
-
-		err = json.Unmarshal(data, &containers)
-		if err != nil {
-			return "", err
-		}
-
-		if len(containers) > 0 {
-			for _, net := range containers[0].NetworkSettings.Networks {
-				if net.IPAddress != "" {
-					return net.IPAddress, nil
-				}
-			}
+	for _, cont := range pod.Containers {
+		address, e := depl.FindPodIPAddressContainer(cont.Id)
+		if e != nil {
+			err = errors.Join(err, e)
+		} else if address != "" {
+			return address, nil
 		}
 	}
-	return "", fmt.Errorf("could not find pod IP address")
+
+	if err == nil {
+		err = fmt.Errorf("could not find pod IP address")
+	}
+
+	return "", err
 }
 
 func (depl *Deployment) FindPodIPAddress() (string, error) {
