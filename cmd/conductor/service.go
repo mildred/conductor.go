@@ -171,12 +171,14 @@ func cmd_service_reload() *flaggy.Subcommand {
 type NegativeBoolFlag struct{ Bool *bool }
 
 func (b *NegativeBoolFlag) Set(s string) error {
-	v, err := strconv.ParseBool(s)
-	if err != nil {
-		err = errors.New("parse error")
+	if s == "" {
+		*b.Bool = false
+		return nil
+	} else {
+		v, err := strconv.ParseBool(s)
+		*b.Bool = !v
+		return err
 	}
-	*b.Bool = !v
-	return err
 }
 
 func (b *NegativeBoolFlag) Get() any { return !bool(*b.Bool) }
