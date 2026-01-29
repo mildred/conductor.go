@@ -357,58 +357,69 @@ func (depl *Deployment) StartStopPod(start bool, dir string) error {
 	return cmd.Run()
 }
 
+func (depl *Deployment) FindPodIPAddressOnce() (string, error) {
+	data, err := exec.Command("podman", "pod", "inspect", depl.PodName).Output()
+	if err != nil {
+		return "", err
+	}
+
+	var pod struct {
+		Containers []struct {
+			Id string
+		}
+	}
+
+	err = json.Unmarshal(data, &pod)
+	if err != nil {
+		return "", err
+	}
+
+	if len(pod.Containers) > 0 {
+		data, err := exec.Command("podman", "container", "inspect", pod.Containers[0].Id).Output()
+		if err != nil {
+			return "", err
+		}
+
+		var containers []struct {
+			NetworkSettings struct {
+				Networks map[string]struct {
+					IPAddress string
+				}
+			}
+		}
+
+		err = json.Unmarshal(data, &containers)
+		if err != nil {
+			return "", err
+		}
+
+		if len(containers) > 0 {
+			for _, net := range containers[0].NetworkSettings.Networks {
+				if net.IPAddress != "" {
+					return net.IPAddress, nil
+				}
+			}
+		}
+	}
+	return "", fmt.Errorf("could not find pod IP address")
+}
+
 func (depl *Deployment) FindPodIPAddress() (string, error) {
+	var err error
+	var address string
+
 	max := 4
 	for i := 0; i <= max; i++ {
-		data, err := exec.Command("podman", "pod", "inspect", depl.PodName).Output()
-		if err != nil {
-			return "", err
-		}
-
-		var pod struct {
-			Containers []struct {
-				Id string
-			}
-		}
-
-		err = json.Unmarshal(data, &pod)
-		if err != nil {
-			return "", err
-		}
-
-		if len(pod.Containers) > 0 {
-			data, err := exec.Command("podman", "container", "inspect", pod.Containers[0].Id).Output()
-			if err != nil {
-				return "", err
-			}
-
-			var containers []struct {
-				NetworkSettings struct {
-					Networks map[string]struct {
-						IPAddress string
-					}
-				}
-			}
-
-			err = json.Unmarshal(data, &containers)
-			if err != nil {
-				return "", err
-			}
-
-			if len(containers) > 0 {
-				for _, net := range containers[0].NetworkSettings.Networks {
-					if net.IPAddress != "" {
-						return net.IPAddress, nil
-					}
-				}
-			}
+		address, err = depl.FindPodIPAddressOnce()
+		if err == nil {
+			return address, nil
 		}
 
 		if i < max {
-			log.Printf("No IP address found, will retry...")
+			log.Printf("No IP address found (%v), will retry...", err)
 			time.Sleep(time.Second * 5)
 		}
 	}
 
-	return "", fmt.Errorf("could not find pod IP address")
+	return address, err
 }
