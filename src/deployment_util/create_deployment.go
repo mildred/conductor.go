@@ -32,6 +32,8 @@ func StartNewOrExistingFromService(ctx context.Context, svc *service.Service, se
 	//   return nil, "", err
 	// }
 
+	part := seed.PartName
+
 	var started_deployments []*Deployment
 	var starting_deployments []*Deployment
 	var stopped_deployments []*Deployment
@@ -68,19 +70,19 @@ func StartNewOrExistingFromService(ctx context.Context, svc *service.Service, se
 	}
 
 	for _, depl := range deployments {
-		log.Printf("Considering deployment %v...", depl.DeploymentName)
+		log.Printf("[%q] Considering deployment %v...", part, depl.DeploymentName)
 
 		should_match := depl.AppName == svc.AppName && depl.InstanceName == svc.InstanceName
 		if depl.ServiceDir != svc.BasePath {
 			if should_match {
-				log.Printf("Deployment %s do not match (service %q != %q)", depl.DeploymentName, depl.ServiceDir, svc.BasePath)
+				log.Printf("[%q] Deployment %s do not match (service %q != %q)", part, depl.DeploymentName, depl.ServiceDir, svc.BasePath)
 			}
 			continue
 		}
 		part_id, _ := part_ids[depl.PartName]
 		if depl.PartId != part_id {
 			if should_match {
-				log.Printf("Deployment %s do not match (id %q != %q)", depl.DeploymentName, depl.PartId, part_id)
+				log.Printf("[%q] Deployment %s do not match (id %q != %q)", part, depl.DeploymentName, depl.PartId, part_id)
 			}
 			continue
 		}
@@ -99,7 +101,7 @@ func StartNewOrExistingFromService(ctx context.Context, svc *service.Service, se
 		}
 
 		if stat.ActiveState == "failed" {
-			log.Printf("Deployment %s do not match (state is %s / %s)", depl.DeploymentName, stat.ActiveState, stat.SubState)
+			log.Printf("[%q] Deployment %s do not match (state is %s / %s)", part, depl.DeploymentName, stat.ActiveState, stat.SubState)
 			continue
 		} else if stat.ActiveState == "active" {
 			started_deployments = append(started_deployments, depl)
@@ -109,11 +111,11 @@ func StartNewOrExistingFromService(ctx context.Context, svc *service.Service, se
 			stopped_deployments = append(stopped_deployments, depl)
 		} else {
 			// TODO: consider for reuse
-			log.Printf("Deployment %s do not match (state is %s / %s)", depl.DeploymentName, stat.ActiveState, stat.SubState)
+			log.Printf("[%q] Deployment %s do not match (state is %s / %s)", part, depl.DeploymentName, stat.ActiveState, stat.SubState)
 			continue
 		}
 
-		log.Printf("Deployment %s (%s / %s) is considered to reuse", depl.DeploymentName, stat.ActiveState, stat.SubState)
+		log.Printf("[%q] Deployment %s (%s / %s) is considered to reuse", part, depl.DeploymentName, stat.ActiveState, stat.SubState)
 	}
 
 	//
@@ -124,14 +126,14 @@ func StartNewOrExistingFromService(ctx context.Context, svc *service.Service, se
 	var name string
 
 	if len(started_deployments) > 0 && !opts.WantFresh {
-		log.Printf("Found started deployment %q", started_deployments[0].DeploymentName)
+		log.Printf("[%q] Found started deployment %q", part, started_deployments[0].DeploymentName)
 		return started_deployments[0], "active", nil
 	} else if len(starting_deployments) > 0 {
-		log.Printf("Found starting deployment %q", starting_deployments[0].DeploymentName)
+		log.Printf("[%q] Found starting deployment %q", part, starting_deployments[0].DeploymentName)
 		return starting_deployments[0], "activating", nil
 	} else if len(stopped_deployments) > 0 {
-		log.Printf("Found stopped deployment %q", stopped_deployments[0].DeploymentName)
-		log.Printf("Removing deployment...")
+		log.Printf("[%q] Found stopped deployment %q", part, stopped_deployments[0].DeploymentName)
+		log.Printf("[%q] Removing deployment...", part)
 
 		name = stopped_deployments[0].DeploymentName
 		err = RemoveTimeout(ctx, name, 0, 0)
@@ -139,9 +141,13 @@ func StartNewOrExistingFromService(ctx context.Context, svc *service.Service, se
 			return nil, "", err
 		}
 
-		log.Printf("Create a new deployment %q", name)
+		log.Printf("[%q] Create a new deployment %q", part, name)
 	} else {
-		log.Println("Create a new deployment...")
+		if len(started_deployments) > 0 && opts.WantFresh {
+			log.Printf("[%q] Requesting a fresh deployment, create new...", part)
+		} else {
+			log.Printf("[%q] No matching deployment, create new...", part)
+		}
 
 		//
 		// Find a deployment name
@@ -150,7 +156,7 @@ func StartNewOrExistingFromService(ctx context.Context, svc *service.Service, se
 		var i = 1
 		for i <= opts.MaxIndex {
 			name = fmt.Sprintf("%s-%s-%s%d", svc.AppName, svc.InstanceName, seed.Prefix(), i)
-			log.Printf("Trying new deployment name %s", name)
+			log.Printf("[%q] Trying new deployment name %s", part, name)
 			_, err := os.Stat(path.Join(DeploymentRunDir, name))
 			if err != nil && !os.IsNotExist(err) {
 				return nil, "", err
@@ -165,13 +171,13 @@ func StartNewOrExistingFromService(ctx context.Context, svc *service.Service, se
 		}
 
 		if name == "" && len(started_deployments) > 0 {
-			log.Printf("Could not find free deployment name, but found started deployment %q", started_deployments[0].DeploymentName)
+			log.Printf("[%q] Could not find free deployment name, but found started deployment %q", part, started_deployments[0].DeploymentName)
 			return started_deployments[0], "active", nil
 		} else if name == "" {
 			return nil, "", fmt.Errorf("Failed to find free deployment name")
 		}
 
-		log.Printf("Create a new deployment %s from %s", name, svc.BasePath)
+		log.Printf("[%q] Create a new deployment %s from %s", part, name, svc.BasePath)
 	}
 
 	//
