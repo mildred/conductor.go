@@ -285,7 +285,7 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 			return err
 		}
 
-		parts, err := service.Parts()
+		part_ids, err := service.PartIds(ctx)
 		if err != nil {
 			return err
 		}
@@ -293,7 +293,7 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 		var diagnostics []string
 		all_parts_ok := true
 
-		for _, part := range parts {
+		for part, part_id := range part_ids {
 			deployments, err := deployment_util.List(deployment_util.ListOpts{
 				FilterServiceDir: service.BasePath,
 				FilterPartName:   &part,
@@ -310,8 +310,8 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 
 			part_found := false
 			for _, depl := range deployments {
-				if depl.ServiceId != service.Id {
-					diagnostics = append(diagnostics, fmt.Sprintf("part %q: deployment %s id %q is invalid", part, depl.DeploymentName, depl.ServiceId))
+				if depl.PartId != part_id {
+					diagnostics = append(diagnostics, fmt.Sprintf("part %q: deployment %s id %q (service %q) is invalid", part, depl.DeploymentName, depl.PartId, depl.ServiceId))
 				} else {
 					diagnostics = append(diagnostics, fmt.Sprintf("part %q: deployment %s matches", part, depl.DeploymentName))
 					part_found = true
@@ -323,6 +323,9 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 		}
 
 		if !all_parts_ok {
+			for part_name, part_id := range part_ids {
+				diagnostics = append([]string{fmt.Sprintf("service part %q has id %q", part_name, part_id)}, diagnostics...)
+			}
 			return fmt.Errorf("deployment has gone missing for service %q or service configuration changed during %s:\n  - service id: %q\n  - %s",
 				service_name, prefix, service.Id, strings.Join(diagnostics, "\n  - "))
 		}

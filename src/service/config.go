@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -459,6 +460,23 @@ func computeIdFromData(data []byte, extra string) (string, error) {
 	}
 
 	return fmt.Sprintf("%x", output), nil
+}
+
+func (service *Service) PartIds(ctx context.Context) (map[string]string, error) {
+	parts, err := service.Parts()
+	if err != nil {
+		return nil, err
+	}
+
+	var errs error
+	part_ids := map[string]string{}
+	for _, part_name := range parts {
+		part_ids[part_name], err = service.PartId(ctx, part_name)
+		if err != nil {
+			errs = errors.Join(errs, err)
+		}
+	}
+	return part_ids, errs
 }
 
 func (service *Service) PartId(ctx context.Context, part string) (string, error) {

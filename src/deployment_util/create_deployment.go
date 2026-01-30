@@ -62,12 +62,9 @@ func StartNewOrExistingFromService(ctx context.Context, svc *service.Service, se
 	// }
 	// log.Printf("Gathered deployment statuses: %v", statuses)
 
-	var part_ids = map[string]string{}
-	for _, depl := range deployments {
-		part_ids[depl.PartName], err = svc.PartId(ctx, depl.PartName)
-		if err != nil {
-			return nil, "", err
-		}
+	part_ids, err := svc.PartIds(ctx)
+	if err != nil {
+		return nil, "", err
 	}
 
 	for _, depl := range deployments {
@@ -80,9 +77,10 @@ func StartNewOrExistingFromService(ctx context.Context, svc *service.Service, se
 			}
 			continue
 		}
-		if depl.PartId != part_ids[depl.PartName] {
+		part_id, _ := part_ids[depl.PartName]
+		if depl.PartId != part_id {
 			if should_match {
-				log.Printf("Deployment %s do not match (id %q != %q)", depl.DeploymentName, depl.PartId, part_ids[depl.PartName])
+				log.Printf("Deployment %s do not match (id %q != %q)", depl.DeploymentName, depl.PartId, part_id)
 			}
 			continue
 		}
