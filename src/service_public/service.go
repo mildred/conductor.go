@@ -157,8 +157,13 @@ func setDisableConfig(definition_path string, disable bool) error {
 	return nil
 }
 
-func Enable(definition_path string, now bool) error {
-	err := setDisableConfig(definition_path, false)
+func Enable(name string, now bool) error {
+	definition_path, err := ServiceDirByName(name)
+	if err != nil {
+		return err
+	}
+
+	err = setDisableConfig(definition_path, false)
 	if err != nil {
 		return err
 	}
@@ -181,8 +186,13 @@ func Enable(definition_path string, now bool) error {
 	return cmd.Run()
 }
 
-func Disable(definition_path string, now bool) error {
-	err := setDisableConfig(definition_path, true)
+func Disable(name string, now bool) error {
+	definition_path, err := ServiceDirByName(name)
+	if err != nil {
+		return err
+	}
+
+	err = setDisableConfig(definition_path, true)
 	if err != nil {
 		return err
 	}
