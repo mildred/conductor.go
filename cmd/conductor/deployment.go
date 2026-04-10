@@ -17,20 +17,22 @@ import (
 )
 
 func cmd_deployment_ls() *flaggy.Subcommand {
-	var unit, terse bool
+	var unit, terse, json bool
 
 	cmd := flaggy.NewSubcommand("ls")
 	cmd.Bool(&unit, "", "unit", "Show systemd units column")
 	cmd.Bool(&terse, "", "terse", "Show minimum details")
+	cmd.Bool(&json, "", "json", "Show JSON output")
 	cmd.Description = "List all deployments"
 
 	cmd.CommandUsed = Hook(func() error {
 		log.Default().SetOutput(io.Discard)
 
 		return deployment_public.PrintList(deployment_public.PrintListSettings{
-			Unit:         unit,
-			ServiceUnit:  unit,
+			Unit:         unit || (json && !terse),
+			ServiceUnit:  unit || (json && !terse),
 			ConfigStatus: !terse,
+			PrintJson:    json,
 		})
 	})
 	return cmd

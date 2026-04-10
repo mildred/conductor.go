@@ -581,9 +581,9 @@ func cmd_service_config_set() *flaggy.Subcommand {
 		for k, v := range changed_args {
 			cfg, ok := serv.Config[k]
 			if !ok {
-				failures = append(failures, fmt.Sprintf("%q in unset, should be %q", k, v))
+				failures = append(failures, fmt.Sprintf("%q is unset, should be %q", k, v))
 			} else if cfg.String() != v {
-				failures = append(failures, fmt.Sprintf("%q in %q, should be %q", k, cfg.String(), v))
+				failures = append(failures, fmt.Sprintf("%q is %q, should be %q", k, cfg.String(), v))
 			}
 		}
 		if len(failures) > 0 {

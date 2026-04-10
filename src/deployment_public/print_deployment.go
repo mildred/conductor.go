@@ -26,6 +26,7 @@ type PrintListSettings struct {
 	ConfigStatus     bool
 	FilterServiceDir string
 	QuietServiceInfo bool
+	PrintJson        bool
 }
 
 func PrintList(settings PrintListSettings) error {
@@ -135,6 +136,7 @@ func PrintList(settings PrintListSettings) error {
 	}
 
 	tbl := table.New(row...)
+	data := []interface{}{}
 
 	for i, depl := range list_depl {
 		s := list_services[i]
@@ -143,11 +145,18 @@ func PrintList(settings PrintListSettings) error {
 		dcs := list_depl_config_status[i]
 
 		row := []interface{}{}
+		d := map[string]interface{}{}
 		if !settings.QuietServiceInfo {
 			row = append(row, s.AppName, s.InstanceName, ss.LoadState, ss.ActiveState)
+			d["App"] = s.AppName
+			d["Instance"] = s.InstanceName
+			d["ServiceEnabled"] = ss.LoadState
+			d["ServiceActive"] = ss.ActiveState
 			if settings.ServiceUnit {
 				row = append(row, DeploymentUnit(depl.DeploymentName))
+				d["ServiceUnit"] = DeploymentUnit(depl.DeploymentName)
 			}
+			dd := map[string]interface{}{}
 			for _, col := range extra_service_cols {
 				val, err := s.GetDisplayColumn(col, &service_util.ServiceCommandRunner{Service: s})
 				if err != nil {
@@ -157,19 +166,28 @@ func PrintList(settings PrintListSettings) error {
 				}
 
 				row = append(row, val)
+				dd[col.Name] = val
 			}
+			d["Service"] = dd
 		}
 		var ip_addr string
 		if depl.Pod != nil {
 			ip_addr = depl.Pod.IPAddress
 		}
+		d["DeploymentName"] = depl.DeploymentName
+		d["Active"] = ds.ActiveState
+		d["State"] = ds.SubState
+		d["IP"] = ip_addr
 		row = append(row, depl.DeploymentName, ds.ActiveState, ds.SubState, ip_addr)
 		if settings.Unit {
 			row = append(row, DeploymentConfigUnit(depl.DeploymentName))
+			d["Unit"] = ip_addr
 		}
 		if settings.ConfigStatus {
 			row = append(row, fmt.Sprintf("%s (%s)", dcs.ActiveState, dcs.SubState))
+			d["ReverseProxy"] = ip_addr
 		}
+		dd := map[string]interface{}{}
 		for _, col := range extra_depl_cols {
 			val, err := depl.GetDisplayColumn(col, &service_util.DeploymentCommandRunner{Deployment: depl})
 			if err != nil {
@@ -179,13 +197,23 @@ func PrintList(settings PrintListSettings) error {
 			}
 
 			row = append(row, val)
+			dd[col.Name] = val
 		}
+		d["Deployment"] = dd
+		data = append(data, d)
 		tbl.AddRow(row...)
 	}
-	if len(list_depl) > 0 {
-		tbl.Print()
+	if settings.PrintJson {
+		err := json.NewEncoder(os.Stdout).Encode(data)
+		if err != nil {
+			errs = errors.Join(errs, err)
+		}
+	} else {
+		if len(list_depl) > 0 {
+			tbl.Print()
+		}
+		fmt.Printf("(%d deployments in %q)\n", len(list_depl), DeploymentRunDir)
 	}
-	fmt.Printf("(%d deployments in %q)\n", len(list_depl), DeploymentRunDir)
 	return errs
 }
 
