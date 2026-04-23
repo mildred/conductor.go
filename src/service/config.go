@@ -59,6 +59,7 @@ type Service struct {
 	AppName                 string                     `json:"app_name,omitempty"`      // my-app
 	InstanceName            string                     `json:"instance_name,omitempty"` // staging
 	Disable                 *bool                      `json:"disable"`
+	AutoRestart             *bool                      `json:"auto_restart"`
 	Conditions              []ServiceCondition         `json:"conditions"`
 	Config                  map[string]*ConfigValue    `json:"config,omitempty"`                // key-value pairs for config and templating, CHANNEL=staging
 	ProxyConfigTemplate     string                     `json:"proxy_config_template,omitempty"` // Template file for the load-balancer config
@@ -138,6 +139,15 @@ func ServiceUnitByName(name string) (string, error) {
 	}
 
 	return ServiceUnit(file), err
+}
+
+func ServiceConfigUnitByName(name string) (string, error) {
+	file, err := ServiceDirByName(name)
+	if err != nil {
+		return "", err
+	}
+
+	return ServiceConfigUnit(file), err
 }
 
 func ServiceRealpath(service_dir string) (string, error) {
@@ -386,6 +396,11 @@ func (service *Service) FillDefaults() error {
 	err = service.Functions.FillDefaults(service)
 	if err != nil {
 		return err
+	}
+
+	if service.AutoRestart == nil {
+		var auto_restart = true
+		service.AutoRestart = &auto_restart
 	}
 
 	if service.ProxyConfigTemplate == "" {

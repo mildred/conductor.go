@@ -14,6 +14,7 @@ import (
 
 	"github.com/mildred/conductor.go/src/deployment_util"
 	"github.com/mildred/conductor.go/src/dirs"
+	"github.com/mildred/conductor.go/src/service_internal"
 	"github.com/mildred/conductor.go/src/utils"
 
 	. "github.com/mildred/conductor.go/src/service"
@@ -215,10 +216,52 @@ func Disable(name string, now bool) error {
 	return cmd.Run()
 }
 
-func Start(definition_path string) error {
+type StartOpts struct {
+	Foreground bool
+	Background bool
+}
+
+func Start(definition_path string, opts StartOpts) error {
+	if opts.Foreground && opts.Background {
+		return fmt.Errorf("cannot specify both backgroudn and foreground operation")
+	}
+
+	svc, err := LoadServiceByName(definition_path)
+	if err != nil {
+		return err
+	}
+
+	background := opts.Background || svc.AutoRestart == nil || *svc.AutoRestart
+	if opts.Foreground {
+		background = false
+	}
+
 	unit, err := ServiceUnitByName(definition_path)
 	if err != nil {
 		return err
+	}
+
+	if !background {
+		config_unit, err := ServiceConfigUnitByName(definition_path)
+		if err != nil {
+			return err
+		}
+
+		fmt.Fprintf(os.Stderr, "+ systemctl %s start %q\n", dirs.SystemdModeFlag(), config_unit)
+		cmd := exec.Command("systemctl", dirs.SystemdModeFlag(), "start", config_unit)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		err = cmd.Run()
+		if err != nil {
+			return err
+		}
+
+		err = service_internal.StartOrReload(definition_path, service_internal.StartOrReloadOpts{
+			ExitWhenStarted: true,
+		})
+		if err != nil {
+			return err
+		}
 	}
 
 	fmt.Fprintf(os.Stderr, "+ systemctl %s start %q\n", dirs.SystemdModeFlag(), unit)
@@ -305,10 +348,37 @@ func Restart(definition_path string, opts RestartOpts) error {
 }
 
 type ReloadOpts struct {
-	NoBlock bool
+	Foreground bool
+	Background bool
+	NoBlock    bool
 }
 
 func Reload(definition_path string, opts ReloadOpts) error {
+	if opts.Foreground && opts.Background {
+		return fmt.Errorf("cannot specify both backgroudn and foreground operation")
+	}
+
+	svc, err := LoadServiceByName(definition_path)
+	if err != nil {
+		return err
+	}
+
+	background := opts.Background || svc.AutoRestart == nil || *svc.AutoRestart
+	if opts.Foreground {
+		background = false
+	}
+
+	if !background && opts.NoBlock {
+		return fmt.Errorf("Cannot reload service in foreground without blocking")
+	}
+
+	if !background {
+		return service_internal.StartOrReload(definition_path, service_internal.StartOrReloadOpts{
+			Restart:    true,
+			WantsFresh: false,
+		})
+	}
+
 	var active bool
 
 	var ctx = context.Background()

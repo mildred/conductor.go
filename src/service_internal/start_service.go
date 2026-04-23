@@ -26,6 +26,7 @@ import (
 // enabled. The service depends on this proxy config
 
 type StartOrReloadOpts struct {
+	ExitWhenStarted    bool
 	Restart            bool
 	WantsFresh         bool
 	MaxDeploymentIndex int
@@ -271,6 +272,12 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 	if err != nil {
 		return err
 	}
+
+	if opts.ExitWhenStarted || (service.AutoRestart != nil && !*service.AutoRestart) {
+		log.Printf("start: Start sequence completed\n")
+		return nil
+	}
+
 	log.Printf("start: Start sequence completed, start to monitor deployments\n")
 
 	//

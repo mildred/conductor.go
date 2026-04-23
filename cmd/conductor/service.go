@@ -119,13 +119,23 @@ func cmd_service_disable() *flaggy.Subcommand {
 
 func cmd_service_start() *flaggy.Subcommand {
 	var service string
+	var background_flag, foreground_flag bool
 
 	cmd := flaggy.NewSubcommand("start") // "SERVICE",
 	cmd.Description = "Declare and start a service"
+	cmd.Bool(&background_flag, "", "background", "Perform the reload in background (via systemd, default)")
+	cmd.Bool(&foreground_flag, "", "foreground", "Perform the reload in foreground (does not involves systemd)")
 	cmd.AddPositionalValue(&service, "service", 1, true, "The service to act on")
 
 	cmd.CommandUsed = Hook(func() error {
-		return service_public.Start(service)
+		if background_flag && foreground_flag {
+			return fmt.Errorf("Cannot specify both --background and --foreground flags")
+		}
+
+		return service_public.Start(service, service_public.StartOpts{
+			Foreground: foreground_flag,
+			Background: background_flag,
+		})
 	})
 	return cmd
 }
@@ -153,15 +163,24 @@ func cmd_service_stop() *flaggy.Subcommand {
 func cmd_service_reload() *flaggy.Subcommand {
 	var service string
 	var no_block bool
+	var background_flag, foreground_flag bool
 
 	cmd := flaggy.NewSubcommand("reload") // "SERVICE",
-	cmd.Description = "Reload a service"
-	cmd.Bool(&no_block, "", "no-block", "Do not block while restarting")
+	cmd.Description = "Reload a service (check deployments are up to date)"
+	cmd.Bool(&background_flag, "", "background", "Perform the reload in background (via systemd, default when auto_restart)")
+	cmd.Bool(&foreground_flag, "", "foreground", "Perform the reload in foreground (does not involves systemd)")
+	cmd.Bool(&no_block, "n", "no-block", "Do not block while restarting")
 	cmd.AddPositionalValue(&service, "service", 1, true, "The service to act on")
 
 	cmd.CommandUsed = Hook(func() error {
+		if background_flag && foreground_flag {
+			return fmt.Errorf("Cannot specify both --background and --foreground flags")
+		}
+
 		return service_public.Reload(service, service_public.ReloadOpts{
-			NoBlock: no_block,
+			Foreground: foreground_flag,
+			Background: background_flag,
+			NoBlock:    no_block,
 		})
 	})
 	return cmd
@@ -516,18 +535,24 @@ func cmd_service_config_get() *flaggy.Subcommand {
 
 func cmd_service_config_set() *flaggy.Subcommand {
 	var service_descr, file_flag string
-	var no_reload_flag, no_block_flag bool
+	var no_reload_flag, no_block_flag, foreground_flag, background_flag bool
 	var vars []string
 
 	cmd := flaggy.NewSubcommand("set") // "SERVICE [VAR=VAL...]",
 	cmd.Description = "Set service configuration variable"
 	cmd.String(&file_flag, "f", "file", "Write in this file instead of the service file")
+	cmd.Bool(&background_flag, "", "background", "Perform the reload in background (via systemd, default when auto_restart)")
+	cmd.Bool(&foreground_flag, "", "foreground", "Perform the reload in foreground (does not involves systemd)")
 	cmd.Bool(&no_reload_flag, "n", "no-reload", "Do not reload service")
 	cmd.Bool(&no_block_flag, "", "no-block", "Do not block while reloading")
 	cmd.AddPositionalValue(&service_descr, "service", 1, true, "The service to act on")
 	cmd.AddExtraValues(&vars, "VAR=VAL", "Variables to set")
 
 	cmd.CommandUsed = Hook(func() error {
+		if background_flag && foreground_flag {
+			return fmt.Errorf("Cannot specify both --background and --foreground flags")
+		}
+
 		serv, err := service.LoadServiceByName(service_descr)
 		if err != nil {
 			return err
@@ -596,7 +621,8 @@ func cmd_service_config_set() *flaggy.Subcommand {
 
 		if !no_reload_flag {
 			return service_public.Reload(service_descr, service_public.ReloadOpts{
-				NoBlock: no_block_flag,
+				Foreground: foreground_flag,
+				NoBlock:    no_block_flag,
 			})
 		}
 

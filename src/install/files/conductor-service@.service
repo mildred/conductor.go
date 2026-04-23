@@ -5,7 +5,7 @@ Wants=conductor-service-config@%i.service
 [Service]
 WorkingDirectory=%f
 TimeoutStartSec=0
-Restart=always
+Restart=on-failure
 Type=notify
 NotifyAccess=all
 TimeoutSec=300

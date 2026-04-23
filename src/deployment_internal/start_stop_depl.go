@@ -220,8 +220,13 @@ func CaddyRegister(register bool, deployment_name_or_dir string) error {
 			log.Printf("%s: Ensure the service config %s is registered", prefix, unit_name)
 
 			start := "start"
+			// TODO: start in foreground by default and let systemd acknoledge the
+			// started state
+
 			if retry {
 				start = "reload"
+				// TODO: reload in foreground by default instead of forwarding to
+				// systemd
 			}
 
 			fmt.Fprintf(os.Stderr, "+ systemctl %s %s %q\n", dirs.SystemdModeFlag(), start, unit_name)

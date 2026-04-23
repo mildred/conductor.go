@@ -92,6 +92,37 @@ To declare a service, just put a JSON file in
 }
 ```
 
+Configuration keys:
+
+  - `inherit` (list): list of paths (relative to the current file) that will be
+    loaded and which will have their configuration merged with the current file.
+
+  - `app_name` (string): the application name.
+
+  - `instance_name` (string): the instance name. An application can have
+    multiple instances such as development, staging or production. It is also
+    possible to have multiple instances for sharding or customer isolation.
+
+  - `config` (map of string): the configuration variables for the instance.
+
+  - `pods` (list of pods): the list of configured pods.
+
+  - `auto_restart` (bool, default: true): When true (the default), the service
+    will check regularly that the deployments are active. If deployments are
+    inactive, the service will fail and systemd will restart it, bringing up new
+    deployments.
+
+    When true, the default operation will be set to background (command-line
+    flag `--background`) and when false the default operation is foreground
+    (`--forground`). Background operation is when the systemd units are
+    responsible for creating the deployments. In foreground operation, start,
+    restart and reload actions will create directly the deployments and only
+    then the systemd service will be started.
+
+    Foreground operation when `auto_restart` is false is newer but should allow
+    more static configuration where the deployments are created at controlled
+    times only.
+
 ### Hooks
 
 Hooks are scripts executed with the config as environment variables.

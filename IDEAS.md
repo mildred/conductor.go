@@ -1,3 +1,13 @@
+Static deployments
+------------------
+
+In order to avoid the issues with an instance restarting (because it failed,
+possibly) and creating new deployments endlessly, there should be an option to
+have static deployments. Deployments are created upon requests (config change)
+and not autonomously by the supervizing service.
+
+This is in progress
+
 conductor daemon-reload
 -----------------------
 
