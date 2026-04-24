@@ -23,10 +23,11 @@ func Update(version string, desired_version string, check bool) error {
 		current = semver.MustParse(version)
 	}
 
-	exe, err := os.Executable()
+	executable, err := os.Executable()
 	if err != nil {
 		return err
 	}
+	exe := executable
 	if runtime.GOOS == "windows" && !strings.HasSuffix(exe, ".exe") {
 		// Ensure to add '.exe' to given path on Windows
 		exe = exe + ".exe"
@@ -95,7 +96,7 @@ func Update(version string, desired_version string, check bool) error {
 		return nil
 	}
 
-	if path.Dir(exe) == "/usr/local/bin" {
+	if path.Dir(exe) == "/usr/local/bin" || path.Dir(executable) == "/usr/local/bin" {
 		cmd := exec.Command(exe, "system", "install")
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
