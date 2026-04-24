@@ -324,27 +324,61 @@ func Stop(definition_path string, opts StopOpts) error {
 }
 
 type RestartOpts struct {
-	NoBlock bool
+	Foreground bool
+	Background bool
+	NoBlock    bool
 }
 
 func Restart(definition_path string, opts RestartOpts) error {
+	if opts.Foreground && opts.Background {
+		return fmt.Errorf("cannot specify both backgroudn and foreground operation")
+	}
+
+	svc, err := LoadServiceByName(definition_path)
+	if err != nil {
+		return err
+	}
+
+	background := opts.Background || svc.AutoRestart == nil || *svc.AutoRestart
+	if opts.Foreground {
+		background = false
+	}
+
+	if !background && opts.NoBlock {
+		return fmt.Errorf("Cannot reload service in foreground without blocking")
+	}
 
 	unit, err := ServiceUnitByName(definition_path)
 	if err != nil {
 		return err
 	}
 
-	var args []string = []string{dirs.SystemdModeFlag(), "restart"}
-	if opts.NoBlock {
-		args = append(args, "--no-block")
-	}
-	args = append(args, unit)
+	if background {
 
-	fmt.Fprintf(os.Stderr, "+ systemctl %s\n", strings.Join(args, " "))
-	cmd := exec.Command("systemctl", args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+		var args []string = []string{dirs.SystemdModeFlag(), "restart"}
+		if opts.NoBlock {
+			args = append(args, "--no-block")
+		}
+		args = append(args, unit)
+
+		fmt.Fprintf(os.Stderr, "+ systemctl %s\n", strings.Join(args, " "))
+		cmd := exec.Command("systemctl", args...)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		return cmd.Run()
+
+	} else {
+		err := Stop(definition_path, StopOpts{
+			RemoveAllDeployments: true,
+		})
+		if err != nil {
+			return err
+		}
+
+		return Start(definition_path, StartOpts{
+			Foreground: true,
+		})
+	}
 }
 
 type ReloadOpts struct {
