@@ -622,6 +622,7 @@ func cmd_service_config_set() *flaggy.Subcommand {
 		if !no_reload_flag {
 			return service_public.Reload(service_descr, service_public.ReloadOpts{
 				Foreground: foreground_flag,
+				Background: background_flag,
 				NoBlock:    no_block_flag,
 			})
 		}
