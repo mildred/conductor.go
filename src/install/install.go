@@ -23,11 +23,16 @@ func Update(version string, desired_version string, check bool) error {
 		current = semver.MustParse(version)
 	}
 
-	executable, err := os.Executable()
+	argv0 := os.Args[0]
+	executable, err := exec.LookPath(argv0)
 	if err != nil {
 		return err
 	}
-	exe := executable
+
+	exe, err := os.Executable()
+	if err != nil {
+		return err
+	}
 	if runtime.GOOS == "windows" && !strings.HasSuffix(exe, ".exe") {
 		// Ensure to add '.exe' to given path on Windows
 		exe = exe + ".exe"
@@ -103,9 +108,11 @@ func Update(version string, desired_version string, check bool) error {
 		fmt.Fprintf(os.Stderr, "+ %s system install\n", exe)
 		err := cmd.Run()
 		if err != nil {
-			log.Println("%s system install failed: %v", exe, err)
+			log.Printf("%s system install failed: %v", exe, err)
 			return err
 		}
+	} else {
+		log.Printf("Please run '%s system install' to finish installation of systemd units", executable)
 	}
 
 	return nil
