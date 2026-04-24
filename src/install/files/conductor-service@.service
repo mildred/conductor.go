@@ -9,7 +9,7 @@ Restart=on-failure
 Type=notify
 NotifyAccess=all
 TimeoutSec=300
-# RemainAfterExit=yes
+RemainAfterExit=yes
 
 # Do not use notify-reload as systemd cannot detect the ready signal at the end
 # of the reload because of a mismatching PID. Type=notify is enough, end of
