@@ -26,7 +26,9 @@ func cmd_private_api_server() *flaggy.Subcommand {
 	cmd.Description = "Run an API server"
 
 	cmd.CommandUsed = Hook(func() error {
-		return api.RunServer()
+		return api.RunServer(api.RunServerOpts{
+			SocketActivationAndIdle: true,
+		})
 	})
 	return cmd
 }
@@ -68,6 +70,23 @@ func cmd_reload() *flaggy.Subcommand {
 
 	cmd.CommandUsed = Hook(func() error {
 		return service_public.ReloadServices(inclusive, verbose)
+	})
+	return cmd
+}
+
+func cmd_api_server() *flaggy.Subcommand {
+	var listen string = "localhost:8080"
+
+	cmd := flaggy.NewSubcommand("api-server")
+	cmd.Description = "Start the API server"
+
+	cmd.String(&listen, "l", "listen", "Listen IP and port")
+
+	cmd.CommandUsed = Hook(func() error {
+		return api.RunServer(api.RunServerOpts{
+			SocketActivationAndIdle: false,
+			ListenAddr:              listen,
+		})
 	})
 	return cmd
 }
@@ -218,6 +237,7 @@ func Main(ctx context.Context) error {
 	f.AttachSubcommand(cmd_peer(), 1)
 	f.AttachSubcommand(cmd_run(), 1)
 	f.AttachSubcommand(cmd_reload(), 1)
+	f.AttachSubcommand(cmd_api_server(), 1)
 	f.AttachSubcommand(cmd_system(), 1)
 	f.AttachSubcommand(cmd_private(), 1)
 	f.RequireSubcommand = true

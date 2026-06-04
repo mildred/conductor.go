@@ -38,6 +38,16 @@ func (s *Server) ServeIdle(fdnum int) error {
 	return s.Idle.ServeIdle(&s.Server, fdnum)
 }
 
+func (s *Server) ListenAndServe() error {
+	if s.BaseContext == nil {
+		s.BaseContext = func(l net.Listener) context.Context { return s.Idle.Context }
+	}
+
+	s.Idle.GoShutdown(&s.Server)
+
+	return s.Server.ListenAndServe()
+}
+
 func NewIdleTracker(ctx context.Context, idle time.Duration) *IdleTracker {
 	return &IdleTracker{
 		Context: ctx,

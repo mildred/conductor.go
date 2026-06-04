@@ -13,7 +13,12 @@ import (
 	"github.com/mildred/conductor.go/lib/idlehttp"
 )
 
-func RunServer() error {
+type RunServerOpts struct {
+	SocketActivationAndIdle bool
+	ListenAddr              string
+}
+
+func RunServer(opts RunServerOpts) error {
 	log.SetOutput(os.Stderr)
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -26,7 +31,12 @@ func RunServer() error {
 		},
 	}
 
-	return server.ServeIdle(0)
+	if opts.SocketActivationAndIdle {
+		return server.ServeIdle(0)
+	} else {
+		server.Addr = opts.ListenAddr
+		return server.ListenAndServe()
+	}
 }
 
 func handleRequest(w http.ResponseWriter, r *http.Request) {
