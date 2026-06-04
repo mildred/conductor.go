@@ -16,6 +16,7 @@ import (
 	"github.com/coreos/go-systemd/v22/dbus"
 	"github.com/rodaine/table"
 
+	"github.com/mildred/conductor.go/src/service"
 	"github.com/mildred/conductor.go/src/service_util"
 	"github.com/mildred/conductor.go/src/utils"
 
@@ -83,24 +84,28 @@ func (sel *Selector) match_val(val string) (bool, error) {
 	}
 }
 
-type PrintListSettings struct {
-	Unit              bool
+type ListSettings struct {
 	FilterApplication string
 	FilterConfig      map[string][]Selector
 	FilterJSONPaths   []string
-	JSON              bool
-	JSONs             bool
-	CSV               bool
-	CSVSeparator      string
 	All               bool
-	JSONPath          string
 	ResumeBefore      *Selector
 	ResumeAfter       *Selector
 	StopBefore        *Selector
 	StopAfter         *Selector
 }
 
-func PrintListFilter(service *Service, settings PrintListSettings) (bool, error) {
+type PrintListSettings struct {
+	ListSettings
+	JSONPath     string
+	Unit         bool
+	JSON         bool
+	JSONs        bool
+	CSV          bool
+	CSVSeparator string
+}
+
+func PrintListFilter(service *Service, settings ListSettings) (bool, error) {
 	var err error
 	if settings.FilterApplication != "" && settings.FilterApplication != service.AppName {
 		return false, nil
@@ -127,18 +132,33 @@ func PrintListFilter(service *Service, settings PrintListSettings) (bool, error)
 	return true, nil
 }
 
-func PrintList(settings PrintListSettings) error {
+type ListItems struct {
+	NumExcluded int
+	NumTotal    int
+	Items       []ListItem
+	ExtraCols   []DisplayColumn
+}
+
+type ListItem struct {
+	InspectState
+	JSONValue    interface{}
+	Inspected    interface{}
+	InspectedRaw json.RawMessage
+	Service      *service.Service
+	Condition    bool
+}
+
+func List(ctx context.Context, settings ListSettings) (*ListItems, error) {
 	var errs error
 
-	var ctx = context.Background()
 	sd, err := utils.NewSystemdClient(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	units, err := sd.ListUnitsByPatternsContext(ctx, nil, []string{"conductor-service@*.service"})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	var list_service_dirs []string
@@ -247,23 +267,10 @@ func PrintList(settings PrintListSettings) error {
 
 	resume := settings.ResumeBefore == nil && settings.ResumeAfter == nil
 
-	var rows [][]interface{}
-	row := []interface{}{"Name", "App", "Instance", "Enabled", "Active", "State"}
-	if settings.Unit {
-		row = append(row, "Unit")
+	result := &ListItems{
+		ExtraCols: extra_cols,
+		NumTotal:  len(list_services),
 	}
-	for _, col := range extra_cols {
-		row = append(row, col.Name)
-	}
-
-	tbl := table.New(row...)
-	// rows = append(rows, row)
-
-	var jsons []json.RawMessage
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
-
-	var num_excluded = 0
 
 	for _, i := range list_ordered {
 		service := list_services[i]
@@ -280,21 +287,20 @@ func PrintList(settings PrintListSettings) error {
 			filtered_out = !condition && u.LoadState == "" && u.ActiveState == ""
 		}
 
-		msg, err := Inspect(ctx, service, &InspectState{
+		inspectState := InspectState{
 			UnitStatus: u,
-		})
+		}
+		msg, err := Inspect(ctx, service, &inspectState)
 		if err != nil {
 			errs = errors.Join(errs, fmt.Errorf("Error inspecting %v-%v: %v", service.AppName, service.InstanceName, err))
 			continue
 		}
 
 		var jsonvalue interface{}
-		if settings.JSONPath != "" || len(settings.FilterJSONPaths) > 0 {
-			err := json.Unmarshal(msg, &jsonvalue)
-			if err != nil {
-				errs = errors.Join(errs, fmt.Errorf("Error for %v-%v: %v", service.AppName, service.InstanceName, err))
-				continue
-			}
+		err = json.Unmarshal(msg, &jsonvalue)
+		if err != nil {
+			errs = errors.Join(errs, fmt.Errorf("Error for %v-%v: %v", service.AppName, service.InstanceName, err))
+			continue
 		}
 
 		if !resume && settings.ResumeBefore != nil {
@@ -321,11 +327,11 @@ func PrintList(settings PrintListSettings) error {
 				for _, p := range settings.FilterJSONPaths {
 					jpvalue, err := jsonpath.Get(p, jsonvalue)
 					if err != nil {
-						return fmt.Errorf("while executing JSONPath %q for filtering, %v", p, err)
+						return nil, fmt.Errorf("while executing JSONPath %q for filtering, %v", p, err)
 					}
 					bvalue, ok := jpvalue.(bool)
 					if !ok {
-						return fmt.Errorf("JSONPath %q did not return a boolean but %+v", p, jpvalue)
+						return nil, fmt.Errorf("JSONPath %q did not return a boolean but %+v", p, jpvalue)
 					}
 					if bvalue {
 						filtered_out = false
@@ -336,61 +342,21 @@ func PrintList(settings PrintListSettings) error {
 
 			if filtered_out {
 				// do nothing
-				num_excluded += 1
-			} else if settings.JSONPath != "" {
-				jpvalue, err := jsonpath.Get(settings.JSONPath, jsonvalue)
-				if err != nil {
-					return err
-				}
-				fmt.Printf("%v\n", jpvalue)
-			} else if settings.JSONs {
-				err = enc.Encode(msg)
-				if err != nil {
-					return err
-				}
-			} else if settings.JSON {
-				jsons = append(jsons, msg)
+				result.NumExcluded += 1
 			} else {
-				name := service.Name
-				if name == "" {
-					name = service.BasePath
-				}
-
-				enabled_state := u.LoadState
-				if service.Disable != nil && *service.Disable {
-					if enabled_state == "" {
-						enabled_state = "disabled"
-					} else {
-						enabled_state = "disabled(" + enabled_state + ")"
-					}
-				} else if !condition {
-					if enabled_state == "" {
-						enabled_state = "blocked"
-					} else {
-						enabled_state = "blocked(" + enabled_state + ")"
-					}
-				}
-
-				row = []interface{}{name, service.AppName, service.InstanceName, enabled_state, u.ActiveState, u.SubState}
-				if settings.Unit {
-					row = append(row, u.Name)
-				}
-				for _, col := range extra_cols {
-					val, err := service.GetDisplayColumn(col, &service_util.ServiceCommandRunner{Service: service})
-					if err != nil {
-						return err
-					}
-
-					row = append(row, val)
-				}
-				tbl.AddRow(row...)
-				rows = append(rows, row)
+				result.Items = append(result.Items, ListItem{
+					InspectState: inspectState,
+					Inspected:    jsonvalue,
+					InspectedRaw: msg,
+					Service:      service,
+					Condition:    condition,
+				})
 			}
 
 			if settings.StopAfter != nil {
 				stop, err := settings.StopAfter.Match(string(msg))
 				if err != nil {
-					return err
+					return nil, err
 				} else if stop {
 					break
 				}
@@ -400,13 +366,92 @@ func PrintList(settings PrintListSettings) error {
 		if !resume && settings.ResumeAfter != nil {
 			resume, err = settings.ResumeAfter.Match(string(msg))
 			if err != nil {
-				return err
+				return nil, err
 			}
 		}
 	}
 
+	return result, errs
+}
+
+func PrintList(settings PrintListSettings) error {
+	var ctx = context.Background()
+	list, errs := List(ctx, settings.ListSettings)
+
+	var rows [][]interface{}
+	row := []interface{}{"Name", "App", "Instance", "Enabled", "Active", "State"}
+	if settings.Unit {
+		row = append(row, "Unit")
+	}
+	for _, col := range list.ExtraCols {
+		row = append(row, col.Name)
+	}
+
+	tbl := table.New(row...)
+	// rows = append(rows, row)
+
+	var jsons []json.RawMessage
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+
+	for _, item := range list.Items {
+		service := item.Service
+		u := item.UnitStatus
+		msg := item.InspectedRaw
+
+		if settings.JSONPath != "" {
+			jpvalue, err := jsonpath.Get(settings.JSONPath, item.Inspected)
+			if err != nil {
+				return err
+			}
+			fmt.Printf("%v\n", jpvalue)
+		} else if settings.JSONs {
+			err := enc.Encode(msg)
+			if err != nil {
+				return err
+			}
+		} else if settings.JSON {
+			jsons = append(jsons, msg)
+		} else {
+			name := service.Name
+			if name == "" {
+				name = service.BasePath
+			}
+
+			enabled_state := u.LoadState
+			if service.Disable != nil && *service.Disable {
+				if enabled_state == "" {
+					enabled_state = "disabled"
+				} else {
+					enabled_state = "disabled(" + enabled_state + ")"
+				}
+			} else if !item.Condition {
+				if enabled_state == "" {
+					enabled_state = "blocked"
+				} else {
+					enabled_state = "blocked(" + enabled_state + ")"
+				}
+			}
+
+			row = []interface{}{name, service.AppName, service.InstanceName, enabled_state, u.ActiveState, u.SubState}
+			if settings.Unit {
+				row = append(row, u.Name)
+			}
+			for _, col := range list.ExtraCols {
+				val, err := service.GetDisplayColumn(col, &service_util.ServiceCommandRunner{Service: service})
+				if err != nil {
+					return err
+				}
+
+				row = append(row, val)
+			}
+			tbl.AddRow(row...)
+			rows = append(rows, row)
+		}
+	}
+
 	if settings.JSON {
-		err = enc.Encode(jsons)
+		err := enc.Encode(jsons)
 		if err != nil {
 			return err
 		}
@@ -423,10 +468,10 @@ func PrintList(settings PrintListSettings) error {
 			fmt.Println(strings.Join(row, sep))
 		}
 	} else if !settings.JSONs && settings.JSONPath == "" {
-		if len(list_services) > 0 {
+		if list.NumTotal > 0 {
 			tbl.Print()
 		}
-		fmt.Printf("(%d services)\n", len(list_services)-num_excluded)
+		fmt.Printf("(%d services)\n", list.NumTotal-list.NumExcluded)
 	}
 
 	return errs

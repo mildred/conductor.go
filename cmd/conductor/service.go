@@ -418,20 +418,22 @@ func cmd_service_ls() *flaggy.Subcommand {
 		}
 
 		return service_public.PrintList(service_public.PrintListSettings{
-			Unit:              unit,
-			FilterApplication: app_flag,
-			FilterConfig:      c,
-			FilterJSONPaths:   filter_jsonpaths,
-			JSON:              json_flag,
-			JSONs:             jsons_flag,
-			CSV:               csv,
-			CSVSeparator:      csv_sep,
-			All:               all,
-			ResumeBefore:      resume_before,
-			ResumeAfter:       resume_after,
-			StopBefore:        stop_before,
-			StopAfter:         stop_after,
-			JSONPath:          jsonpath,
+			ListSettings: service_public.ListSettings{
+				FilterApplication: app_flag,
+				FilterConfig:      c,
+				FilterJSONPaths:   filter_jsonpaths,
+				All:               all,
+				ResumeBefore:      resume_before,
+				ResumeAfter:       resume_after,
+				StopBefore:        stop_before,
+				StopAfter:         stop_after,
+			},
+			JSONPath:     jsonpath,
+			Unit:         unit,
+			JSON:         json_flag,
+			JSONs:        jsons_flag,
+			CSV:          csv,
+			CSVSeparator: csv_sep,
 		})
 	})
 	return cmd
