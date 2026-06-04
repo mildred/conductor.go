@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
+	"syscall"
 	"time"
 
 	"github.com/coreos/go-systemd/v22/daemon"
@@ -107,8 +109,31 @@ func Start(deployment_name string, function bool) error {
 
 	if depl.Pod != nil && !function {
 		return StartPod(ctx, depl)
+	} else if depl.Daemon != nil {
+		return StartDaemon(ctx, depl)
 	} else if depl.Function != nil {
 		return StartFunction(ctx, depl, function)
+	} else {
+		return fmt.Errorf("Cannot start incompatible deployment")
+	}
+}
+
+func StartPost(deployment_name string, function bool) error {
+	ctx := context.Background()
+
+	depl, err := deployment.ReadDeploymentByName(deployment_name, true, false)
+	if err != nil {
+		return err
+	}
+
+	log.Printf("start: Loaded deployment %s, service %s-%s\n", depl.DeploymentName, depl.AppName, depl.InstanceName)
+
+	if depl.Pod != nil && !function {
+		return nil
+	} else if depl.Daemon != nil {
+		return StartPostDaemon(ctx, depl)
+	} else if depl.Function != nil {
+		return nil
 	} else {
 		return fmt.Errorf("Cannot start incompatible deployment")
 	}
@@ -136,12 +161,28 @@ func Stop(ctx context.Context, deployment_name string, function bool) error {
 	log.Printf("stop: Loaded deployment %s, service %s-%s\n", depl.DeploymentName, depl.AppName, depl.InstanceName)
 
 	if depl.Pod != nil && !function {
-		return StopPod(ctx, depl)
+		return StopPodOrDaemon(ctx, depl)
+	} else if depl.Daemon != nil {
+		return StopPodOrDaemon(ctx, depl)
 	} else if depl.Function != nil {
 		return StopFunction(ctx, depl, function)
 	} else {
 		return fmt.Errorf("Cannot stop deployment: not a pod")
 	}
+}
+
+func terminateMainProcess(ctx context.Context, depl *Deployment) error {
+	mainpid, err := strconv.ParseInt(os.Getenv("MAINPID"), 10, 0)
+	if err != nil {
+		return fmt.Errorf("Cannot parse MAINPID=%q, %v", os.Getenv("MAINPID"), err)
+	}
+
+	err = syscall.Kill(int(mainpid), syscall.SIGTERM)
+	if err != nil {
+		return fmt.Errorf("Cannot kill -TERM %v, %v", int(mainpid), err)
+	}
+
+	return nil
 }
 
 func Cleanup(deployment_name_or_dir string) error {

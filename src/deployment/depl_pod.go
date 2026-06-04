@@ -16,6 +16,10 @@ type DeploymentPod struct {
 	IPAddress string `json:"ip_address"`
 }
 
+type DeploymentDaemon struct {
+	*service.ServiceDaemon
+}
+
 func (pod *DeploymentPod) TemplatePod(ctx context.Context, depl *Deployment) error {
 	log.Printf("prepare: Templating the pod\n")
 	res, err := tmpl.RunTemplate(ctx, pod.PodTemplate, depl.Vars())
@@ -35,7 +39,7 @@ func (pod *DeploymentPod) TemplatePod(ctx context.Context, depl *Deployment) err
 
 func (pod *DeploymentPod) ProxyConfig(depl *Deployment) (caddy.ConfigItems, error) {
 	var result caddy.ConfigItems
-	proxies, err := pod.ReverseProxy(depl.Service)
+	proxies, err := pod.ReverseProxy(pod, depl.Service)
 	if err != nil {
 		return nil, err
 	}

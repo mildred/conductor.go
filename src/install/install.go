@@ -1,6 +1,7 @@
 package install
 
 import (
+	"embed"
 	"fmt"
 	"io"
 	"log"
@@ -143,7 +144,7 @@ func isInstalled() (bool, string, error) {
 	return os.SameFile(self_st, installed_st), self, nil
 }
 
-func Install(destdir string, unlink bool) error {
+func Install(destdir string, unlink, enable, now bool) error {
 	if destdir == "" {
 		installed, executable, err := isInstalled()
 		if err != nil {
@@ -254,6 +255,18 @@ func Install(destdir string, unlink bool) error {
 		return err
 	}
 
+	fmt.Fprintf(os.Stderr, "+ rm -rf %q\n", destdir+ServicesDirLocation)
+	err = os.RemoveAll(destdir + ServicesDirLocation)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+
+	fmt.Fprintf(os.Stderr, ": extract %q\n", destdir+ServicesDirLocation)
+	err = ExtractEmbedFs(ServicesDir, "services", destdir+ServicesDirLocation, true)
+	if err != nil {
+		return err
+	}
+
 	fmt.Fprintf(os.Stderr, "+ systemctl %s daemon-reload\n", dirs.SystemdModeFlag())
 	cmd := exec.Command("systemctl", dirs.SystemdModeFlag(), "daemon-reload")
 	cmd.Stdout = os.Stdout
@@ -261,6 +274,23 @@ func Install(destdir string, unlink bool) error {
 	err = cmd.Run()
 	if err != nil {
 		return err
+	}
+
+	if enable {
+		for _, service_name := range []string{"conductor_caddy"} {
+			cmd := exec.Command("conductor", "service", "enable")
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			if now {
+				cmd.Args = append(cmd.Args, "--now")
+			}
+			cmd.Args = append(cmd.Args, service_name)
+			fmt.Fprintf(os.Stderr, "+ %s\n", strings.Join(cmd.Args, " "))
+			err = cmd.Run()
+			if err != nil {
+				return err
+			}
+		}
 	}
 
 	return nil
@@ -321,6 +351,12 @@ func Uninstall(destdir string) error {
 		return err
 	}
 
+	fmt.Fprintf(os.Stderr, "+ rm -rf %q\n", destdir+ServicesDirLocation)
+	err = os.RemoveAll(destdir + ServicesDirLocation)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+
 	fmt.Fprintf(os.Stderr, "+ systemctl %s daemon-reload\n", dirs.SystemdModeFlag())
 	cmd := exec.Command("systemctl", dirs.SystemdModeFlag(), "daemon-reload")
 	cmd.Stdout = os.Stdout
@@ -337,6 +373,77 @@ func Uninstall(destdir string) error {
 	err = cmd.Run()
 	if err != nil {
 		return err
+	}
+
+	return nil
+}
+
+func ExtractEmbedFs(embedfs embed.FS, embedfs_dir string, location string, log bool) error {
+	if embedfs_dir == "" {
+		embedfs_dir = "."
+	}
+
+	entries, err := embedfs.ReadDir(embedfs_dir)
+	if err != nil {
+		return err
+	}
+
+	for _, entry := range entries {
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+
+		mode := info.Mode()&os.ModePerm | 0600
+
+		if strings.HasSuffix(entry.Name(), ".sh") {
+			mode = mode | 0111
+		}
+
+		location2 := path.Join(location, entry.Name())
+
+		if entry.IsDir() {
+			if log {
+				fmt.Fprintf(os.Stderr, "+ install --mode=0%o -d %q\n", mode, location2)
+			}
+
+			err := os.MkdirAll(location2, mode)
+			if err != nil {
+				return err
+			}
+
+			err = ExtractEmbedFs(embedfs, path.Join(embedfs_dir, entry.Name()), location2, log)
+			if err != nil {
+				return err
+			}
+		} else {
+
+			if log {
+				fmt.Fprintf(os.Stderr, "+ install --mode=0%o -t %q %q\n", mode, location, entry.Name())
+			}
+
+			err = (func() error {
+				f1, err := embedfs.Open(path.Join(embedfs_dir, entry.Name()))
+				if err != nil {
+					return err
+				}
+
+				defer f1.Close()
+
+				f2, err := os.OpenFile(location2, os.O_WRONLY|os.O_CREATE, mode)
+				if err != nil {
+					return err
+				}
+
+				defer f2.Close()
+
+				_, err = io.Copy(f2, f1)
+				return err
+			})()
+			if err != nil {
+				return err
+			}
+		}
 	}
 
 	return nil

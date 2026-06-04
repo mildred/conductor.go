@@ -159,5 +159,5 @@ func ExecuteDecodedFunction(ctx context.Context, depl *Deployment, f *Deployment
 }
 
 func StopFunction(ctx context.Context, depl *Deployment, function bool) error {
-	return nil
+	return terminateMainProcess(ctx, depl)
 }

@@ -14,13 +14,13 @@ import (
 	"github.com/coreos/go-systemd/v22/activation"
 	"github.com/coreos/go-systemd/v22/daemon"
 
-	"github.com/mildred/conductor.go/src/tmpl"
-
-	. "github.com/mildred/conductor.go/src/deployment"
 	"github.com/mildred/conductor.go/src/dirs"
 	"github.com/mildred/conductor.go/src/status_socket"
+	"github.com/mildred/conductor.go/src/tmpl"
 	"github.com/mildred/conductor.go/src/trace_connections"
 	"github.com/mildred/conductor.go/src/utils"
+
+	. "github.com/mildred/conductor.go/src/deployment"
 )
 
 // Note for deployment hooks, there could be different ways to hook:
@@ -50,7 +50,7 @@ func StartPod(ctx context.Context, depl *Deployment) error {
 	//
 
 	log.Printf("Start the deployment pod\n")
-	err := depl.KubePlayPod(PodStart, ".")
+	err := KubePlayPod(depl, PodStart, ".")
 	if err != nil {
 		err = fmt.Errorf("failed to start deployment pod, %v", err)
 		SdNotifyOrLog(err.Error())
@@ -79,44 +79,13 @@ func StartPod(ctx context.Context, depl *Deployment) error {
 		return err
 	}
 
-	//
-	// Run the post-start hook (via systemd-run specific scope)
-	//
-	//     this can generate prometheus config for monitoring
-	//     (generic systemd-run command or script)
-	//
-	//     a generic script can wait for the pod to be ready
-	//     (better as a command inside a container or HTTP request)
-	//
-	//     this can also perform data migrations
-	//
-
-	_, err = daemon.SdNotify(false, "EXTEND_TIMEOUT_USEC=60000000") // 60s
+	err = RunStartPostHooks(ctx, depl)
 	if err != nil {
 		return err
 	}
 
-	log.Printf("executing post-start hooks...")
-	err = depl.RunHooks(ctx, "post-start", depl.PartName, depl.Vars(), 60*time.Second)
+	err = StartDeploymentConfig(ctx, depl)
 	if err != nil {
-		log.Printf("post-start hooks failed, continuing...")
-	}
-
-	//
-	// Add IP address to load balancer
-	//
-	// notify load balancer of ip address, hook into existing load balancer
-	// configuration for the service and add the IP address
-	//
-
-	log.Printf("Adding deployment to load-balancer...\n")
-	cmd := utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "start", DeploymentConfigUnit(depl.DeploymentName))
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	err = utils.RunWithJournal(ctx, cmd, DeploymentConfigUnit(depl.DeploymentName))
-	if err != nil {
-		err = fmt.Errorf("failed to add deployment to load-balancer, %v", err)
-		SdNotifyOrLog(err.Error())
 		return err
 	}
 
@@ -215,7 +184,7 @@ func StartPod(ctx context.Context, depl *Deployment) error {
 
 		args := depl.Pod.SocketProxy.CmdlineArgs(depl.Vars())
 		fmt.Fprintf(os.Stderr, "+ systemd-socket-proxyd %s\n", strings.Join(args, " "))
-		cmd = exec.CommandContext(ctx, "/bin/sh", append([]string{"-c", "export LISTEN_PID=$$; exec \"$0\" \"$@\"", "/usr/lib/systemd/systemd-socket-proxyd"}, args...)...)
+		cmd := exec.CommandContext(ctx, "/bin/sh", append([]string{"-c", "export LISTEN_PID=$$; exec \"$0\" \"$@\"", "/usr/lib/systemd/systemd-socket-proxyd"}, args...)...)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		cmd.ExtraFiles = activation_files
@@ -241,7 +210,7 @@ func StartPod(ctx context.Context, depl *Deployment) error {
 		log.Printf("systemd-socket-proxyd stopped, triggering a deployment stop\n")
 
 		reset_log_prefix()
-		err = StopPod(ctx, depl)
+		err = StopPodOrDaemon(ctx, depl)
 		if err != nil {
 			SdNotifyOrLog(err.Error())
 			return err
@@ -281,7 +250,7 @@ func StartPod(ctx context.Context, depl *Deployment) error {
 
 }
 
-func StopPod(ctx context.Context, depl *Deployment) error {
+func StopPodOrDaemon(ctx context.Context, depl *Deployment) error {
 	defer utils.AddPrefix(log.Default(), "stop pod: ")()
 
 	//
@@ -314,28 +283,41 @@ func StopPod(ctx context.Context, depl *Deployment) error {
 		log.Printf("ERROR when removing from the load-balancer: %v\n", err)
 	}
 
-	//
-	// Stop the containers
-	//
+	if depl.Pod != nil {
 
-	log.Printf("Stopping the containers...\n")
-	err = depl.KubePlayPod(PodStop, ".")
-	if err != nil {
-		err = fmt.Errorf("failed to stop pod, %v", err)
-		SdNotifyOrLog(err.Error())
-		return err
-	}
+		//
+		// Stop the containers
+		//
 
-	//
-	// Reset the pod IP address
-	//
+		log.Printf("Stopping the containers...\n")
+		err = KubePlayPod(depl, PodStop, ".")
+		if err != nil {
+			err = fmt.Errorf("failed to stop pod, %v", err)
+			SdNotifyOrLog(err.Error())
+			return err
+		}
 
-	depl.Pod.IPAddress = ""
-	err = depl.Save(ConfigName)
-	if err != nil {
-		err = fmt.Errorf("failed to save pod to reset IP address, %v", err)
-		SdNotifyOrLog(err.Error())
-		return err
+		//
+		// Reset the pod IP address
+		//
+
+		depl.Pod.IPAddress = ""
+		err = depl.Save(ConfigName)
+		if err != nil {
+			err = fmt.Errorf("failed to save pod to reset IP address, %v", err)
+			SdNotifyOrLog(err.Error())
+			return err
+		}
+	} else if depl.Daemon != nil {
+
+		err = terminateMainProcess(ctx, depl)
+		if err != nil {
+			SdNotifyOrLog(err.Error())
+			return err
+		}
+
+	} else {
+		return fmt.Errorf("Cannot stop something that is neither a pod or a daemon")
 	}
 
 	log.Printf("Stop sequence completed\n")
@@ -349,4 +331,58 @@ func Template(dir string, template string) error {
 	}
 
 	return tmpl.RunTemplateStdout(context.Background(), template, depl.Vars())
+}
+
+type KubePlayOperation = int
+
+const (
+	PodCreate KubePlayOperation = iota
+	PodStart
+	PodStop
+)
+
+func KubePlayPod(depl *Deployment, op KubePlayOperation, dir string) error {
+
+	err := os.WriteFile(path.Join(dir, "pod.yml"), []byte(depl.TemplatedPod), 0644)
+	if err != nil {
+		return err
+	}
+
+	var args []string
+
+	if op == PodStop {
+		args = utils.Compact("kube", "down")
+	} else {
+		args = utils.Compact("kube", "play")
+	}
+
+	if op == PodStart {
+		args = append(args, "--start", "--replace")
+	} else if op == PodCreate {
+		args = append(args, "--start=false", "--replace")
+	}
+
+	if op != PodStop && depl.TemplatedConfigMap != "" {
+		err := os.WriteFile(path.Join(dir, "configmap.yml"), []byte(depl.TemplatedConfigMap), 0644)
+		if err != nil {
+			return err
+		}
+		args = append(args, "--configmap="+path.Join(dir, "configmap.yml"))
+	}
+
+	if op == PodStart || op == PodCreate {
+		args = append(args, utils.Compact(
+			"--annotation="+fmt.Sprintf("conductor_deployment=%s", depl.DeploymentName),
+			"--annotation="+fmt.Sprintf("conductor_instance=%s", depl.InstanceName),
+			"--annotation="+fmt.Sprintf("conductor_app=%s", depl.AppName),
+			"--log-driver=journald")...)
+	}
+
+	args = append(args, path.Join(dir, "pod.yml"))
+
+	fmt.Fprintf(os.Stderr, "+ podman %q\n", args)
+	cmd := exec.Command("podman", args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }

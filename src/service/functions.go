@@ -14,10 +14,8 @@ import (
 )
 
 type ServiceFunction struct {
-	Name                 string                       `json:"name"`
-	PartIdTemplate       string                       `json:"part_id_template"`
-	ExcludeVars          []string                     `json:"exclude_vars"`
-	ServiceDirectives    []string                     `json:"service_directives,omitempty"`
+	ServicePart
+	ServiceDaemonNotSocketActivated
 	Format               string                       `json:"format,omitempty"` // Format: cgi, http-stdio, sdactivate
 	Exec                 []string                     `json:"exec,omitempty"`
 	StderrAsStdout       bool                         `json:"stderr_as_stdout,omitempty"`
@@ -55,26 +53,22 @@ func (functions *ServiceFunctions) FindMainFunction() *ServiceFunction {
 	}
 }
 
-func (functions *ServiceFunctions) FixPaths(dir string) error {
-	for _, f := range *functions {
-		if len(f.Exec) > 0 {
-			if err := fix_path(dir, &f.PartIdTemplate, false); err != nil {
-				return err
-			}
-			if err := fix_path(dir, &f.Exec[0], false); err != nil {
-				return err
-			}
+func (f *ServiceFunction) FixPaths(dir string) error {
+	if len(f.Exec) > 0 {
+		if err := fix_path(dir, &f.PartIdTemplate, false); err != nil {
+			return err
+		}
+		if err := fix_path(dir, &f.Exec[0], false); err != nil {
+			return err
 		}
 	}
 	return nil
 }
 
-func (functions *ServiceFunctions) FillDefaults(service *Service) error {
-	for _, f := range *functions {
-		err := f.FillDefaults(service)
-		if err != nil {
-			return fmt.Errorf("on function %v, %v", f.Name, err)
-		}
+func (f *ServiceFunction) FillDefault(service *Service) error {
+	err := f.FillDefaults(service)
+	if err != nil {
+		return fmt.Errorf("on function %v, %v", f.Name, err)
 	}
 	return nil
 }
@@ -292,7 +286,14 @@ func (functions *ServiceFunctions) UnmarshalJSON(data []byte) error {
 		}
 		var existing_func *ServiceFunction = functions.FindFunction(func_name.Name)
 		if existing_func == nil {
-			existing_func = &ServiceFunction{}
+			existing_func = &ServiceFunction{
+				ServicePart: ServicePart{
+					MinimalServicePart: MinimalServicePart{
+						Name: func_name.Name,
+						Type: FunctionType,
+					},
+				},
+			}
 			*functions = append(*functions, existing_func)
 		}
 		err = json.Unmarshal(raw_func, existing_func)

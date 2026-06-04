@@ -20,8 +20,9 @@ Environment=CONDUCTOR_SYSTEMD_UNIT=%n
 # LogExtraFields=CONDUCTOR_INSTANCE=${CONDUCTOR_INSTANCE}
 # LogExtraFields=CONDUCTOR_DEPLOYMENT=${CONDUCTOR_DEPLOYMENT}
 
-ExecStartPre=/bin/sh -xc 'PID=$$$$; exec conductor _ deployment prepare'
-ExecStart=/bin/sh    -xc 'PID=$$$$; exec conductor _ deployment start'
+ExecStartPre=/bin/sh  -xc 'PID=$$$$; exec conductor _ deployment prepare'
+ExecStart=/bin/sh     -xc 'PID=$$$$; exec conductor _ deployment start'
+ExecStartPost=/bin/sh -xc 'PID=$$$$; exec conductor _ deployment start-post'
 
 TimeoutSec=300
 

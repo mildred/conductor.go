@@ -1,0 +1,18 @@
+{
+        "app_name": "conductor_tube_ports",
+        "instance_name": "",
+        "auto_restart": false,
+        "hooks": [
+                {
+                        "name": "init",
+                        "when": "pre-start-service",
+                        "exec": ["./init.sh"]
+                },
+                {
+                        "name": "clean",
+                        "when": "post-stop-service",
+                        "exec": ["./clean.sh"]
+                }
+        ]
+}
+

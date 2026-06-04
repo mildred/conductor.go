@@ -118,21 +118,29 @@ type Deployment struct {
 	TemplatedConfigMap   string              `json:"templated_config_map"`
 	TemplatedProxyConfig json.RawMessage     `json:"templated_proxy_config"`
 	Pod                  *DeploymentPod      `json:"pod,omitempty"`
+	Daemon               *DeploymentDaemon   `json:"daemon,omitempty"`
 	Function             *DeploymentFunction `json:"function,omitempty"`
 	ProxyConfigValue     caddy.ConfigItems   `json:"_proxy_config"`
 }
 
-func NewDeploymentFromService(service *service.Service, deployment_name string, seed *DeploymentSeed) *Deployment {
+func NewDeploymentFromService(svc *service.Service, deployment_name string, seed *DeploymentSeed) *Deployment {
 	var pod *DeploymentPod
+	var daemon *DeploymentDaemon
 	var f *DeploymentFunction
 
-	if service_pod := service.Pods.FindPod(seed.PartName); service_pod != nil {
+	if service_pod := svc.FindPod(seed.PartName); service_pod != nil {
 		pod = &DeploymentPod{
 			ServicePod: service_pod,
 		}
 	}
 
-	if service_func := service.Functions.FindFunction(seed.PartName); service_func != nil {
+	if service_daemon := svc.FindDaemon(seed.PartName); service_daemon != nil {
+		daemon = &DeploymentDaemon{
+			ServiceDaemon: service_daemon,
+		}
+	}
+
+	if service_func := svc.FindFunction(seed.PartName); service_func != nil {
 		f = &DeploymentFunction{
 			ServiceFunction: service_func,
 		}
@@ -140,9 +148,9 @@ func NewDeploymentFromService(service *service.Service, deployment_name string, 
 
 	return &Deployment{
 		Seed:                 seed,
-		Service:              service,
-		ServiceDir:           service.BasePath,
-		ServiceId:            service.Id,
+		Service:              svc,
+		ServiceDir:           svc.BasePath,
+		ServiceId:            svc.Id,
 		DeploymentName:       deployment_name,
 		DeploymentDir:        DeploymentDirByNameOnly(deployment_name),
 		PartName:             seed.PartName,
@@ -153,6 +161,7 @@ func NewDeploymentFromService(service *service.Service, deployment_name string, 
 		TemplatedProxyConfig: nil,
 		Pod:                  pod,
 		Function:             f,
+		Daemon:               daemon,
 	}
 }
 
@@ -405,60 +414,6 @@ func LoadDeployment(deployment_dir, fname string) (*Deployment, error) {
 	return res, err
 }
 
-type KubePlayOperation = int
-
-const (
-	PodCreate KubePlayOperation = iota
-	PodStart
-	PodStop
-)
-
-func (depl *Deployment) KubePlayPod(op KubePlayOperation, dir string) error {
-
-	err := os.WriteFile(path.Join(dir, "pod.yml"), []byte(depl.TemplatedPod), 0644)
-	if err != nil {
-		return err
-	}
-
-	var args []string
-
-	if op == PodStop {
-		args = utils.Compact("kube", "down")
-	} else {
-		args = utils.Compact("kube", "play")
-	}
-
-	if op == PodStart {
-		args = append(args, "--start", "--replace")
-	} else if op == PodCreate {
-		args = append(args, "--start=false", "--replace")
-	}
-
-	if op != PodStop && depl.TemplatedConfigMap != "" {
-		err := os.WriteFile(path.Join(dir, "configmap.yml"), []byte(depl.TemplatedConfigMap), 0644)
-		if err != nil {
-			return err
-		}
-		args = append(args, "--configmap="+path.Join(dir, "configmap.yml"))
-	}
-
-	if op == PodStart || op == PodCreate {
-		args = append(args, utils.Compact(
-			"--annotation="+fmt.Sprintf("conductor_deployment=%s", depl.DeploymentName),
-			"--annotation="+fmt.Sprintf("conductor_instance=%s", depl.InstanceName),
-			"--annotation="+fmt.Sprintf("conductor_app=%s", depl.AppName),
-			"--log-driver=journald")...)
-	}
-
-	args = append(args, path.Join(dir, "pod.yml"))
-
-	fmt.Fprintf(os.Stderr, "+ podman %q\n", args)
-	cmd := exec.Command("podman", args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
-}
-
 func (depl *Deployment) FindPodIPAddressContainer(id string) (string, error) {
 	data, err := exec.Command("podman", "container", "inspect", id).Output()
 	if ee, ok := err.(*exec.ExitError); ok {
@@ -583,8 +538,8 @@ func (depl *Deployment) MainUnit() string {
 }
 
 func DeploymentMainUnit(s *service.Service, part_name string, deployment_name string) string {
-	pod := s.Pods.FindPod(part_name)
-	if pod != nil && pod.SocketActivated {
+	part := s.FindPart(part_name)
+	if part != nil && part.IsSocketActivated() {
 		return DeploymentSocketUnit(deployment_name)
 	}
 
@@ -592,8 +547,8 @@ func DeploymentMainUnit(s *service.Service, part_name string, deployment_name st
 }
 
 func DeploymentSocketUnitOrBlank(s *service.Service, part_name string, deployment_name string) string {
-	pod := s.Pods.FindPod(part_name)
-	if pod != nil && pod.SocketActivated {
+	part := s.FindPart(part_name)
+	if part != nil && part.IsSocketActivated() {
 		return DeploymentSocketUnit(deployment_name)
 	}
 

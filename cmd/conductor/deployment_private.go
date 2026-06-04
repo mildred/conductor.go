@@ -36,6 +36,21 @@ func cmd_private_deployment_start() *flaggy.Subcommand {
 	return cmd
 }
 
+func cmd_private_deployment_start_post() *flaggy.Subcommand {
+	var deployment_name string = "."
+	var function bool
+
+	cmd := flaggy.NewSubcommand("start-post")
+	cmd.Bool(&function, "", "function", "Run post-start hooks")
+	cmd.Description = "Post-start a deployment"
+	cmd.AddPositionalValue(&deployment_name, "deployment", 1, false, "The deployment, default to the current directory deployment")
+
+	cmd.CommandUsed = Hook(func() error {
+		return deployment_internal.StartPost(deployment_name, function)
+	})
+	return cmd
+}
+
 func cmd_private_deployment_stop() *flaggy.Subcommand {
 	var deployment_name string = "."
 	var function bool
@@ -127,6 +142,7 @@ func cmd_private_deployment() *flaggy.Subcommand {
 	cmd.Description = "Manage conductor deployments"
 	cmd.AttachSubcommand(cmd_private_deployment_prepare(), 1)
 	cmd.AttachSubcommand(cmd_private_deployment_start(), 1)
+	cmd.AttachSubcommand(cmd_private_deployment_start_post(), 1)
 	cmd.AttachSubcommand(cmd_private_deployment_stop(), 1)
 	cmd.AttachSubcommand(cmd_private_deployment_cleanup(), 1)
 	cmd.AttachSubcommand(cmd_private_deployment_register(), 1)

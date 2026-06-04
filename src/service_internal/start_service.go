@@ -14,6 +14,7 @@ import (
 
 	"github.com/mildred/conductor.go/src/caddy"
 	"github.com/mildred/conductor.go/src/deployment"
+	"github.com/mildred/conductor.go/src/deployment_internal"
 	"github.com/mildred/conductor.go/src/deployment_util"
 	"github.com/mildred/conductor.go/src/dirs"
 	"github.com/mildred/conductor.go/src/pidfile"
@@ -178,10 +179,7 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 
 	var started_services []string
 
-	parts, err := service.Parts()
-	if err != nil {
-		return err
-	}
+	parts := service.PartNames()
 
 	var depl_names []string
 
@@ -222,7 +220,7 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 			//
 
 			log.Printf("Create the deployment pod\n")
-			err := depl.KubePlayPod(deployment.PodCreate, depl.DeploymentDir)
+			err := deployment_internal.KubePlayPod(depl, deployment_internal.PodCreate, depl.DeploymentDir)
 			if err != nil {
 				err = fmt.Errorf("failed to create deployment pod, %v", err)
 				return err

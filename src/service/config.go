@@ -62,11 +62,13 @@ type Service struct {
 	Disable                 *bool                      `json:"disable"`
 	AutoRestart             *bool                      `json:"auto_restart,omitempty"`
 	StaticDeployments       *bool                      `json:"static_deployments"`
+	LoadBalancerService     *string                    `json:"load_balancer_service,omitempty"`
 	Conditions              []ServiceCondition         `json:"conditions"`
 	Config                  map[string]*ConfigValue    `json:"config,omitempty"`                // key-value pairs for config and templating, CHANNEL=staging
 	ProxyConfigTemplate     string                     `json:"proxy_config_template,omitempty"` // Template file for the load-balancer config
-	Pods                    ServicePods                `json:"pods,omitempty"`
-	Functions               ServiceFunctions           `json:"functions,omitempty"`
+	Parts                   ServiceParts               `json:"parts,omitempty"`
+	PodsDeprecated          ServicePods                `json:"pods,omitempty"`
+	FunctionsDeprecated     ServiceFunctions           `json:"functions,omitempty"`
 	Hooks                   []*Hook                    `json:"hooks,omitempty"`
 	CaddyLoadBalancer       CaddyConfig                `json:"caddy_load_balancer"`
 	DisplayServiceConfig    []DisplayColumn            `json:"display_service_config"`
@@ -333,6 +335,11 @@ func loadService(path string, fix_paths bool, base *Service, inh *InheritFile) (
 		return nil, err
 	}
 
+	err = service.normalizeParts()
+	if err != nil {
+		return nil, err
+	}
+
 	service.Hooks = merge_hooks(last_hooks, service.Hooks)
 
 	service.BasePath = dir
@@ -340,11 +347,7 @@ func loadService(path string, fix_paths bool, base *Service, inh *InheritFile) (
 	service.FileName = path
 
 	if fix_paths {
-		if err := service.Pods.FixPaths(dir); err != nil {
-			return nil, err
-		}
-
-		if err := service.Functions.FixPaths(dir); err != nil {
+		if err := service.Parts.FixPaths(dir); err != nil {
 			return nil, err
 		}
 
@@ -409,12 +412,7 @@ func fix_path(dir string, path *string, is_executable bool) error {
 }
 
 func (service *Service) FillDefaults() error {
-	err := service.Pods.FillDefaults(service)
-	if err != nil {
-		return err
-	}
-
-	err = service.Functions.FillDefaults(service)
+	err := service.Parts.FillDefaults(service)
 	if err != nil {
 		return err
 	}
@@ -499,12 +497,9 @@ func computeIdFromData(data []byte, extra string) (string, error) {
 }
 
 func (service *Service) PartIds(ctx context.Context) (map[string]string, error) {
-	parts, err := service.Parts()
-	if err != nil {
-		return nil, err
-	}
+	parts := service.PartNames()
 
-	var errs error
+	var err, errs error
 	part_ids := map[string]string{}
 	for _, part_name := range parts {
 		part_ids[part_name], err = service.PartId(ctx, part_name)
@@ -515,30 +510,27 @@ func (service *Service) PartIds(ctx context.Context) (map[string]string, error) 
 	return part_ids, errs
 }
 
-func (service *Service) PartId(ctx context.Context, part string) (string, error) {
+func (service *Service) PartId(ctx context.Context, part_name string) (string, error) {
 	var part_id_template string
 	var excluded_vars []string
 
-	if pod := service.FindPod(part); pod != nil {
-		part_id_template = pod.PartIdTemplate
-		excluded_vars = pod.ExcludeVars
-	} else if f := service.FindFunction(part); f != nil {
-		part_id_template = f.PartIdTemplate
-		excluded_vars = f.ExcludeVars
+	if part := service.FindPart(part_name); part != nil {
+		part_id_template = part.GenericPart().PartIdTemplate
+		excluded_vars = part.GenericPart().ExcludeVars
 	}
 
 	if part_id_template != "" {
 		data, err := tmpl.RunTemplate(ctx, part_id_template, append(service.VarsExcluding(excluded_vars),
-			"CONDUCTOR_SERVICE_PART="+part,
+			"CONDUCTOR_SERVICE_PART="+part_name,
 		))
 
 		if err != nil {
 			return "", err
 		}
 
-		return computeIdFromData([]byte(data), "part:"+part)
+		return computeIdFromData([]byte(data), "part:"+part_name)
 	} else {
-		return service.ComputeId("part:"+part, excluded_vars)
+		return service.ComputeId("part:"+part_name, excluded_vars)
 	}
 }
 
@@ -577,57 +569,63 @@ func (service *Service) VarsExcluding(excluded []string) []string {
 	return vars
 }
 
+func (service *Service) FindPart(part_name string) AbstractServicePart {
+	return service.Parts.FindPart(part_name)
+}
+
 func (service *Service) FindPod(part_name string) *ServicePod {
-	for _, pod := range service.Pods {
-		if pod.Name == part_name {
-			return pod
-		}
-	}
-	return nil
+	return service.Parts.FindPod(part_name)
+}
+
+func (service *Service) FindDaemon(part_name string) *ServiceDaemon {
+	return service.Parts.FindDaemon(part_name)
 }
 
 func (service *Service) FindFunction(part_name string) *ServiceFunction {
-	for _, f := range service.Functions {
-		if f.Name == part_name {
-			return f
+	return service.Parts.FindFunction(part_name)
+}
+
+func (service *Service) normalizeParts() error {
+	var names []string
+	for _, part := range service.Parts {
+		if slices.Contains(names, part.PartName()) {
+			return fmt.Errorf("duplicated part %s in service", part.PartName())
 		}
+		names = append(names, part.PartName())
+	}
+	for _, pod := range service.PodsDeprecated {
+		if slices.Contains(names, pod.Name) {
+			return fmt.Errorf("duplicated part %s in service", pod.Name)
+		}
+		names = append(names, pod.Name)
+		service.Parts = append(service.Parts, pod)
+	}
+	for _, f := range service.FunctionsDeprecated {
+		if slices.Contains(names, f.Name) {
+			return fmt.Errorf("duplicated part %s in service", f.Name)
+		}
+		names = append(names, f.Name)
+		service.Parts = append(service.Parts, f)
 	}
 	return nil
 }
 
-func (service *Service) Parts() ([]string, error) {
-	var res []string
-	for _, pod := range service.Pods {
-		if slices.Contains(res, pod.Name) {
-			return nil, fmt.Errorf("duplicated part %s in service", pod.Name)
-		}
-		res = append(res, pod.Name)
+func (service *Service) PartNames() []string {
+	var names []string
+	for _, part := range service.Parts {
+		names = append(names, part.PartName())
 	}
-	for _, f := range service.Functions {
-		if slices.Contains(res, f.Name) {
-			return nil, fmt.Errorf("duplicated part %s in service", f.Name)
-		}
-		res = append(res, f.Name)
-	}
-	return res, nil
+	return names
 }
 
 func (service *Service) ProxyConfig(ctx context.Context, exclude_parts bool) (caddy.ConfigItems, error) {
 	var configs caddy.ConfigItems
 
 	if !exclude_parts {
-		for _, pod := range service.Pods {
-			cfgs, err := pod.ReverseProxyConfigs(service)
+		for _, part := range service.Parts {
+			cfgs, err := part.ReverseProxyConfigs(ctx, service)
 			if err != nil {
-				return nil, fmt.Errorf("reading pod proxy config, %v", err)
-			}
-			configs = append(configs, cfgs...)
-		}
-
-		for _, f := range service.Functions {
-			cfgs, err := f.ReverseProxyConfigs(ctx, service)
-			if err != nil {
-				return nil, fmt.Errorf("reading function proxy config, %v", err)
+				return nil, err
 			}
 			configs = append(configs, cfgs...)
 		}

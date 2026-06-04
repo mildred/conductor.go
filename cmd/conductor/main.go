@@ -94,14 +94,18 @@ func cmd_api_server() *flaggy.Subcommand {
 func cmd_system_install() *flaggy.Subcommand {
 	var destdir string
 	var unlink bool
+	var enable, now, enable_now bool
 
 	cmd := flaggy.NewSubcommand("install")
 	cmd.Description = "Install system services"
 	cmd.String(&destdir, "", "destdir", "Directory root where to install")
 	cmd.Bool(&unlink, "", "unlink", "Unlink destination before installing")
+	cmd.Bool(&enable, "", "enable", "enable the services")
+	cmd.Bool(&now, "", "now", "start the services")
+	cmd.Bool(&enable_now, "", "enable-now", "enable and start the services")
 
 	cmd.CommandUsed = Hook(func() error {
-		return install.Install(destdir, unlink)
+		return install.Install(destdir, unlink, enable || enable_now, now || enable_now)
 	})
 
 	return cmd

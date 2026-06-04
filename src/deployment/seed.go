@@ -16,8 +16,10 @@ type DeploymentSeed struct {
 	PartId     string                   `json:"part_id"`
 	IsPod      bool                     `json:"is_pod"`
 	IsFunction bool                     `json:"is_function"`
+	IsDaemon   bool                     `json:"is_daemon"`
 	Pod        *service.ServicePod      `json:"-"`
 	Function   *service.ServiceFunction `json:"-"`
+	Daemon     *service.ServiceDaemon   `json:"-"`
 }
 
 const SeedName = "conductor-deployment-seed.json"
@@ -49,34 +51,41 @@ func ReadSeed(fname string) (*DeploymentSeed, error) {
 	return res, nil
 }
 
-func SeedFromService(ctx context.Context, service *service.Service, part string) (*DeploymentSeed, error) {
-	part_id, err := service.PartId(ctx, part)
+func SeedFromService(ctx context.Context, svc *service.Service, part_name string) (*DeploymentSeed, error) {
+	part_id, err := svc.PartId(ctx, part_name)
 	if err != nil {
 		return nil, err
 	}
 
 	seed := &DeploymentSeed{
-		ServiceDir: service.BasePath,
-		ServiceId:  service.Id,
-		PartName:   part,
+		ServiceDir: svc.BasePath,
+		ServiceId:  svc.Id,
+		PartName:   part_name,
 		PartId:     part_id,
 	}
 
-	if pod := service.Pods.FindPod(part); pod != nil {
+	part := svc.FindPart(part_name)
+
+	if part.PartType() == service.PodType {
+		pod := part.(*service.ServicePod)
 		seed.IsPod = true
 		seed.Pod = pod
 		return seed, nil
-	}
-
-	if f := service.Functions.FindFunction(part); f != nil {
+	} else if part.PartType() == service.FunctionType {
+		f := part.(*service.ServiceFunction)
 		seed.IsFunction = true
 		seed.Function = f
 		return seed, nil
+	} else if part.PartType() == service.DaemonType {
+		d := part.(*service.ServiceDaemon)
+		seed.IsDaemon = true
+		seed.Daemon = d
+		return seed, nil
 	}
 
-	if part == "" {
+	if part_name == "" {
 		return nil, fmt.Errorf("Cannot find default service pod or function")
 	} else {
-		return nil, fmt.Errorf("Cannot find service pod or function %q", part)
+		return nil, fmt.Errorf("Cannot find service pod or function %q", part_name)
 	}
 }

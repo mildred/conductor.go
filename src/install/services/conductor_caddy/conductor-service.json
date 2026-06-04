@@ -1,0 +1,30 @@
+{
+        "app_name": "conductor_caddy",
+        "instance_name": "",
+        "load_balancer_service": "",
+        "auto_restart": false,
+        "parts": [
+          {
+            "type": "daemon"
+            "exec": ["./run-caddy.sh"]
+          }
+        ],
+        "hooks": [
+                {
+                        "name": "install",
+                        "when": "pre-start-service",
+                        "exec": ["./install.sh"]
+                },
+                {
+                        "name": "init",
+                        "when": "pre-start-service",
+                        "exec": ["./init.sh"]
+                },
+                {
+                        "name": "clean",
+                        "when": "post-stop-service",
+                        "exec": ["./clean.sh"]
+                }
+        ]
+}
+

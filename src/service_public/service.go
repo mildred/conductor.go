@@ -168,23 +168,12 @@ func Enable(ctx context.Context, name string, now bool) error {
 		return err
 	}
 
-	unit, err := ServiceUnitByName(definition_path)
+	svc, err := LoadServiceByName(definition_path)
 	if err != nil {
 		return err
 	}
 
-	var cmd *exec.Cmd
-	if now {
-		cmd = utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "enable", "--now", unit)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		return utils.RunWithJournal(ctx, cmd, unit)
-	} else {
-		cmd = utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "enable", unit)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		return cmd.Run()
-	}
+	return service_internal.EnableService(context.Background(), svc, now)
 }
 
 func Disable(ctx context.Context, name string, now bool) error {

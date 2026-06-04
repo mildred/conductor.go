@@ -1,10 +1,17 @@
 package install
 
 import (
-	_ "embed"
+	"embed"
 
 	"github.com/mildred/conductor.go/src/dirs"
 )
+
+///////////////////////////////////////////////////////////////////////////////
+
+var ServicesDirLocation = dirs.Join(dirs.SelfDataHome, "services")
+
+//go:embed services
+var ServicesDir embed.FS
 
 ///////////////////////////////////////////////////////////////////////////////
 

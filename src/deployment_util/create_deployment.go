@@ -243,7 +243,7 @@ func CreateDeploymentFromService(name string, svc *service.Service, seed *Deploy
 	var service_directives []string
 	var socket_directives []string
 	if seed.IsPod {
-		pod := svc.Pods.FindPod(seed.PartName)
+		pod := svc.FindPod(seed.PartName)
 		unit_name = DeploymentServiceUnit(name)
 		socket_unit_name = DeploymentSocketUnitOrBlank(svc, seed.PartName, name)
 		service_directives = pod.ServiceDirectives
@@ -253,8 +253,12 @@ func CreateDeploymentFromService(name string, svc *service.Service, seed *Deploy
 				return "", fmt.Errorf("Cannot create socket file %s: missing socket directives in pod configuration", DeploymentSocketUnit(name))
 			}
 		}
+	} else if seed.IsDaemon {
+		unit_name = DeploymentServiceUnit(name)
+		daemon := svc.FindDaemon(seed.PartName)
+		service_directives = daemon.ServiceDirectives
 	} else if seed.IsFunction {
-		fct := svc.Functions.FindFunction(seed.PartName)
+		fct := svc.FindFunction(seed.PartName)
 		if fct.IsSingle() {
 			unit_name = CGIFunctionServiceUnitSingle(name)
 		} else {

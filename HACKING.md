@@ -19,6 +19,11 @@ and can be rebuilt using:
 
     go build ./cmd/conductor
 
+Test on a remote system
+-----------------------
+
+    GOARCH=arm64 go build -o conductor.aarch64 ./cmd/conductor && rsync --rsh=ssh conductor.aarch64 root@mailpi.lan:/usr/local/bin/conductor
+
 Update flaggy
 -------------
 
