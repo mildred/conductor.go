@@ -56,8 +56,9 @@ To declare a service, just put a JSON file in
     "DOCKER_TAG": "latest",
     "SERVICE_TOGGLE": "true"
   },
-  "pods": [
+  "parts": [
     {
+      "type": "pod",
       "name": "",
       "pod_template": "./pod.template",
       "config_map_template": "./config-map.template",

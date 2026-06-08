@@ -113,13 +113,15 @@ func cmd_system_install() *flaggy.Subcommand {
 
 func cmd_system_uninstall() *flaggy.Subcommand {
 	var destdir string
+	var purge bool
 
 	cmd := flaggy.NewSubcommand("uninstall")
 	cmd.Description = "Uninstall system services"
 	cmd.String(&destdir, "", "destdir", "Directory root where to uninstall")
+	cmd.Bool(&purge, "", "purge", "Purge configuration file")
 
 	cmd.CommandUsed = Hook(func() error {
-		return install.Uninstall(destdir)
+		return install.Uninstall(destdir, purge)
 	})
 
 	return cmd
@@ -238,6 +240,7 @@ func Main(ctx context.Context) error {
 	f.AttachSubcommand(cmd_deployment(), 1)
 	f.AttachSubcommand(cmd_function(), 1)
 	f.AttachSubcommand(cmd_policy(), 1)
+	f.AttachSubcommand(cmd_addr(), 1)
 	f.AttachSubcommand(cmd_peer(), 1)
 	f.AttachSubcommand(cmd_run(), 1)
 	f.AttachSubcommand(cmd_reload(), 1)

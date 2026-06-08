@@ -15,6 +15,7 @@ import (
 	"github.com/blang/semver"
 	"github.com/rhysd/go-github-selfupdate/selfupdate"
 
+	"github.com/mildred/conductor.go/src/config"
 	"github.com/mildred/conductor.go/src/dirs"
 )
 
@@ -181,8 +182,14 @@ func Install(destdir string, unlink, enable, now bool) error {
 		}
 	}
 
+	fmt.Fprintf(os.Stderr, "+ touch %q\n", destdir+config.ConfigFile)
+	err := config.InstallConfig()
+	if err != nil {
+		return err
+	}
+
 	fmt.Fprintf(os.Stderr, "+ mkdir -p %q\n", path.Dir(destdir+ConductorCGIFunctionServiceLocation))
-	err := os.MkdirAll(path.Dir(destdir+ConductorCGIFunctionServiceLocation), 0755)
+	err = os.MkdirAll(path.Dir(destdir+ConductorCGIFunctionServiceLocation), 0755)
 	if err != nil {
 		return err
 	}
@@ -276,6 +283,15 @@ func Install(destdir string, unlink, enable, now bool) error {
 		return err
 	}
 
+	fmt.Fprintf(os.Stderr, "+ systemctl %s enable --now conductor-policy-server.socket\n", dirs.SystemdModeFlag())
+	cmd = exec.Command("systemctl", dirs.SystemdModeFlag(), "enable", "--now", "conductor-policy-server.socket")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	err = cmd.Run()
+	if err != nil {
+		return err
+	}
+
 	if enable {
 		for _, service_name := range []string{"conductor_caddy"} {
 			cmd := exec.Command("conductor", "service", "enable")
@@ -296,9 +312,18 @@ func Install(destdir string, unlink, enable, now bool) error {
 	return nil
 }
 
-func Uninstall(destdir string) error {
+func Uninstall(destdir string, purge bool) error {
+	fmt.Fprintf(os.Stderr, "+ systemctl %s disable --now conductor-policy-server.socket\n", dirs.SystemdModeFlag())
+	cmd := exec.Command("systemctl", dirs.SystemdModeFlag(), "disable", "--now", "conductor-policy-server.socket")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	err := cmd.Run()
+	if err != nil {
+		return err
+	}
+
 	fmt.Fprintf(os.Stderr, "+ rm -f %q\n", destdir+ConductorServiceServiceLocation)
-	err := os.Remove(destdir + ConductorServiceServiceLocation)
+	err = os.Remove(destdir + ConductorServiceServiceLocation)
 	if err != nil && !os.IsNotExist(err) {
 		return err
 	}
@@ -358,7 +383,7 @@ func Uninstall(destdir string) error {
 	}
 
 	fmt.Fprintf(os.Stderr, "+ systemctl %s daemon-reload\n", dirs.SystemdModeFlag())
-	cmd := exec.Command("systemctl", dirs.SystemdModeFlag(), "daemon-reload")
+	cmd = exec.Command("systemctl", dirs.SystemdModeFlag(), "daemon-reload")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	err = cmd.Run()
@@ -366,13 +391,14 @@ func Uninstall(destdir string) error {
 		return err
 	}
 
-	fmt.Fprintf(os.Stderr, "+ systemctl %s enable --now conductor-policy-server.socket\n", dirs.SystemdModeFlag())
-	cmd = exec.Command("systemctl", dirs.SystemdModeFlag(), "enable", "--now", "conductor-policy-server.socket")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	err = cmd.Run()
-	if err != nil {
-		return err
+	if purge {
+		fmt.Fprintf(os.Stderr, "+ rm -rf %q\n", destdir+config.ConfigFile)
+		err = os.RemoveAll(destdir + config.ConfigFile)
+		if err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	} else {
+		fmt.Fprintf(os.Stderr, ": keep %q\n", destdir+config.ConfigFile)
 	}
 
 	return nil
