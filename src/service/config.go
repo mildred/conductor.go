@@ -59,7 +59,8 @@ type Service struct {
 	AppName                 string                     `json:"app_name,omitempty"`      // my-app
 	InstanceName            string                     `json:"instance_name,omitempty"` // staging
 	Disable                 *bool                      `json:"disable"`
-	AutoRestart             *bool                      `json:"auto_restart"`
+	AutoRestart             *bool                      `json:"auto_restart,omitempty"`
+	StaticDeployments       *bool                      `json:"static_deployments"`
 	Conditions              []ServiceCondition         `json:"conditions"`
 	Config                  map[string]*ConfigValue    `json:"config,omitempty"`                // key-value pairs for config and templating, CHANNEL=staging
 	ProxyConfigTemplate     string                     `json:"proxy_config_template,omitempty"` // Template file for the load-balancer config
@@ -191,6 +192,13 @@ func ServiceNameFromFile(service_file string) (string, error) {
 	}
 
 	return "", nil
+}
+
+func (s *Service) IsStaticDeployment() bool {
+	return !s.IsDynamicDeployment() // s.StaticDeployments != nil && *s.StaticDeployments
+}
+func (s *Service) IsDynamicDeployment() bool {
+	return s.StaticDeployments == nil || !*s.StaticDeployments
 }
 
 func ServiceUnit(path string) string {
@@ -358,6 +366,14 @@ func loadService(path string, fix_paths bool, base *Service, inh *InheritFile) (
 		}
 	}
 
+	if service.AutoRestart != nil && service.StaticDeployments != nil && service.AutoRestart == service.StaticDeployments {
+		return nil, fmt.Errorf("Cannot have both auto_restart and static_deployments defined in %s", path)
+	} else if service.AutoRestart != nil {
+		var static_deployments = !*service.AutoRestart
+		service.StaticDeployments = &static_deployments
+		service.AutoRestart = nil
+	}
+
 	return service, nil
 }
 
@@ -398,9 +414,9 @@ func (service *Service) FillDefaults() error {
 		return err
 	}
 
-	if service.AutoRestart == nil {
-		var auto_restart = true
-		service.AutoRestart = &auto_restart
+	if service.StaticDeployments == nil {
+		var static_deployments = false
+		service.StaticDeployments = &static_deployments
 	}
 
 	if service.ProxyConfigTemplate == "" {

@@ -273,7 +273,7 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 		return err
 	}
 
-	if opts.ExitWhenStarted || (service.AutoRestart != nil && !*service.AutoRestart) {
+	if opts.ExitWhenStarted || service.IsStaticDeployment() {
 		log.Printf("start: Start sequence completed\n")
 		return nil
 	}

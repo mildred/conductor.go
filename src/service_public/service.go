@@ -231,7 +231,7 @@ func Start(definition_path string, opts StartOpts) error {
 		return err
 	}
 
-	background := opts.Background || svc.AutoRestart == nil || *svc.AutoRestart
+	background := opts.Background || svc.IsDynamicDeployment()
 	if opts.Foreground {
 		background = false
 	}
@@ -339,7 +339,7 @@ func Restart(definition_path string, opts RestartOpts) error {
 		return err
 	}
 
-	background := opts.Background || svc.AutoRestart == nil || *svc.AutoRestart
+	background := opts.Background || svc.IsDynamicDeployment()
 	if opts.Foreground {
 		background = false
 	}
@@ -397,7 +397,7 @@ func Reload(definition_path string, opts ReloadOpts) error {
 		return err
 	}
 
-	background := opts.Background || svc.AutoRestart == nil || *svc.AutoRestart
+	background := opts.Background || svc.IsDynamicDeployment()
 	if opts.Foreground {
 		background = false
 	}
