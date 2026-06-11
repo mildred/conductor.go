@@ -276,12 +276,17 @@ func PrintInspect(deployments ...string) error {
 			return err
 		}
 
+		vars, err := depl.Vars()
+		if err != nil {
+			return err
+		}
+
 		exported := struct {
 			*Deployment
 			Vars []string `json:"_vars"`
 		}{
 			Deployment: depl,
-			Vars:       depl.Vars(),
+			Vars:       vars,
 		}
 
 		err = json.NewEncoder(os.Stdout).Encode(exported)
@@ -311,22 +316,27 @@ func Print(depl_name string, settings PrintSettings) error {
 	tbl.AddRow("Service Path", depl.ServiceDir)
 	tbl.AddRow("Service Id", depl.ServiceId)
 
-	header := "Variables:"
-	for i, v := range depl.Vars() {
-		if i == 0 {
-			tbl.AddRow("", "")
+	vars, err := depl.Vars()
+	if err != nil {
+		tbl.AddRow("Variables:", err.Error())
+	} else {
+		header := "Variables:"
+		for i, v := range vars {
+			if i == 0 {
+				tbl.AddRow("", "")
+			}
+			tbl.AddRow(header, v)
+			header = ""
 		}
-		tbl.AddRow(header, v)
-		header = ""
 	}
 
 	if depl.SocketActivated() && depl.Pod != nil {
 		if depl.Pod.HasSocketProxy() {
 			tbl.AddRow("", "")
-			tbl.AddRow("Socket proxy: ", strings.Join(depl.Pod.SocketProxy.CmdlineArgs(depl.Vars()), " "))
+			tbl.AddRow("Socket proxy: ", strings.Join(depl.Pod.SocketProxy.CmdlineArgs(vars), " "))
 		}
-		header = "Socket directives:"
-		for i, directive := range depl.Pod.ExpandedSocketDirectives(depl.Vars()) {
+		header := "Socket directives:"
+		for i, directive := range depl.Pod.ExpandedSocketDirectives(vars) {
 			if i == 0 && !depl.Pod.HasSocketProxy() {
 				tbl.AddRow("", "")
 			}

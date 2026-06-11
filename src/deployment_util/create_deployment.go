@@ -248,7 +248,12 @@ func CreateDeploymentFromService(name string, svc *service.Service, seed *Deploy
 		socket_unit_name = DeploymentSocketUnitOrBlank(svc, seed.PartName, name)
 		service_directives = pod.ServiceDirectives
 		if pod.SocketActivated {
-			socket_directives = pod.ExpandedSocketDirectives(depl.Vars())
+			vars, err := depl.Vars()
+			if err != nil {
+				return "", err
+			}
+
+			socket_directives = pod.ExpandedSocketDirectives(vars)
 			if len(socket_directives) == 0 {
 				return "", fmt.Errorf("Cannot create socket file %s: missing socket directives in pod configuration", DeploymentSocketUnit(name))
 			}

@@ -5,7 +5,7 @@
         "auto_restart": false,
         "parts": [
           {
-            "type": "daemon"
+            "type": "daemon",
             "exec": ["./run-caddy.sh"]
           }
         ],

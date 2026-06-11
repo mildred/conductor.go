@@ -94,6 +94,11 @@ func StartPod(ctx context.Context, depl *Deployment) error {
 		os.Setenv("LISTEN_FDS", saved_listen_fds)
 		os.Setenv("LISTEN_FDNAMES", saved_listen_fdnames)
 
+		vars, err := depl.Vars()
+		if err != nil {
+			return err
+		}
+
 		activation_files := activation.Files(false)
 		if len(activation_files) < 1 {
 			return fmt.Errorf("Cannot start proxy, no activation file descriptors passed")
@@ -113,7 +118,7 @@ func StartPod(ctx context.Context, depl *Deployment) error {
 		//
 
 		if depl.Pod.SocketProxy.WaitConnect {
-			target := depl.Pod.SocketProxy.ExpandedTarget(depl.Vars())
+			target := depl.Pod.SocketProxy.ExpandedTarget(vars)
 			log.Printf("Wait service to be ready on %s\n", target)
 
 			var timeout time.Duration = 0
@@ -125,7 +130,7 @@ func StartPod(ctx context.Context, depl *Deployment) error {
 			}
 
 			err = utils.ExponentialSleep(ctx, 500*time.Millisecond, 1*time.Second, timeout, func(elapsed, delay time.Duration) error {
-				conn, err := net.DialTimeout(depl.Pod.SocketProxy.TargetProtocol(depl.Vars()), target, 500*time.Millisecond)
+				conn, err := net.DialTimeout(depl.Pod.SocketProxy.TargetProtocol(vars), target, 500*time.Millisecond)
 				if err == nil {
 					conn.Close()
 					return utils.STOP
@@ -182,7 +187,7 @@ func StartPod(ctx context.Context, depl *Deployment) error {
 			}
 		}
 
-		args := depl.Pod.SocketProxy.CmdlineArgs(depl.Vars())
+		args := depl.Pod.SocketProxy.CmdlineArgs(vars)
 		fmt.Fprintf(os.Stderr, "+ systemd-socket-proxyd %s\n", strings.Join(args, " "))
 		cmd := exec.CommandContext(ctx, "/bin/sh", append([]string{"-c", "export LISTEN_PID=$$; exec \"$0\" \"$@\"", "/usr/lib/systemd/systemd-socket-proxyd"}, args...)...)
 		cmd.Stdout = os.Stdout
@@ -263,9 +268,13 @@ func StopPodOrDaemon(ctx context.Context, depl *Deployment) error {
 	//    wait for the service to be quiet
 	//    (command inside the container or HTTP request)
 	//
+	vars, err := depl.Vars()
+	if err != nil {
+		return err
+	}
 
 	log.Printf("executing pre-stop hooks...")
-	err := depl.RunHooks(ctx, "pre-stop", depl.PartName, depl.Vars(), 60*time.Second)
+	err = depl.RunHooks(ctx, "pre-stop", depl.PartName, vars, 60*time.Second)
 	if err != nil {
 		log.Printf("pre-stop hooks failed, continuing...")
 	}
@@ -330,7 +339,12 @@ func Template(dir string, template string) error {
 		return err
 	}
 
-	return tmpl.RunTemplateStdout(context.Background(), template, depl.Vars())
+	vars, err := depl.Vars()
+	if err != nil {
+		return err
+	}
+
+	return tmpl.RunTemplateStdout(context.Background(), template, vars)
 }
 
 type KubePlayOperation = int

@@ -193,7 +193,12 @@ func cmd_deployment_env() *flaggy.Subcommand {
 			return err
 		}
 
-		for _, v := range depl.Vars() {
+		vars, err := depl.Vars()
+		if err != nil {
+			return err
+		}
+
+		for _, v := range vars {
 			fmt.Printf("%s\n", v)
 		}
 

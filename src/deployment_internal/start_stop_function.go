@@ -35,7 +35,12 @@ func StartFunction(ctx context.Context, depl *Deployment, function bool) error {
 		}
 	case "sdactivate":
 		if function {
-			err = StartSDActivateFunction(ctx, depl, depl.Function, depl.Function.ExpandedExec(depl.Vars()))
+			vars, err := depl.Vars()
+			if err != nil {
+				return err
+			}
+
+			err = StartSDActivateFunction(ctx, depl, depl.Function, depl.Function.ExpandedExec(vars))
 			if err != nil {
 				return fmt.Errorf("while starting Systemd socket activated function, %v", err)
 			}
@@ -104,7 +109,11 @@ func ExecuteDecodedFunction(ctx context.Context, depl *Deployment, f *Deployment
 		return fmt.Errorf("Missing executable")
 	}
 
-	vars := depl.Vars()
+	vars, err := depl.Vars()
+	if err != nil {
+		return err
+	}
+
 	cmdline := f.ExpandedExec(vars)
 
 	cmd := exec.CommandContext(ctx, cmdline[0], cmdline[1:]...)

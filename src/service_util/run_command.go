@@ -32,7 +32,12 @@ type DeploymentCommandRunner struct {
 }
 
 func (depl *DeploymentCommandRunner) RunCommandGetValue(c *ServiceCommand, cmd_name string, args ...string) (string, error) {
-	cmd, err := PrepareCommand(c, deployment.DeploymentDirByNameOnly(depl.DeploymentName), depl.Vars(), cmd_name, args...)
+	vars, err := depl.Vars()
+	if err != nil {
+		return "", err
+	}
+
+	cmd, err := PrepareCommand(c, deployment.DeploymentDirByNameOnly(depl.DeploymentName), vars, cmd_name, args...)
 	if err != nil {
 		return "", err
 	}

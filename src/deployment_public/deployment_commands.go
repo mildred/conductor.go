@@ -44,5 +44,10 @@ func RunDeploymentCommand(depl *Deployment, direct bool, env []string, cmd_name 
 		return err
 	}
 
-	return service_util.RunCommand(command, direct, depl_path, append(depl.Vars(), env...), cmd_name, args...)
+	vars, err := depl.Vars()
+	if err != nil {
+		return err
+	}
+
+	return service_util.RunCommand(command, direct, depl_path, append(vars, env...), cmd_name, args...)
 }

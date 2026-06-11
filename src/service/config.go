@@ -569,6 +569,24 @@ func (service *Service) VarsExcluding(excluded []string) []string {
 	return vars
 }
 
+func (service *Service) AddrNames() []string {
+	has_daemon := false
+	for _, p := range service.Parts {
+		if p.PartType() == DaemonType {
+			has_daemon = true
+			break
+		}
+	}
+
+	if !has_daemon {
+		return []string{}
+	} else if service.Name == "" {
+		return []string{}
+	} else {
+		return []string{utils.ToDNSName(service.Name)}
+	}
+}
+
 func (service *Service) FindPart(part_name string) AbstractServicePart {
 	return service.Parts.FindPart(part_name)
 }

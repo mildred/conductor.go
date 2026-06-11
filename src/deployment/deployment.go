@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mildred/conductor.go/src/addr"
 	"github.com/mildred/conductor.go/src/caddy"
 	"github.com/mildred/conductor.go/src/dirs"
 	"github.com/mildred/conductor.go/src/service"
@@ -216,9 +217,14 @@ func (depl *Deployment) TemplateProxyConfig(ctx context.Context, config_name str
 		return nil
 	}
 
+	vars, err := depl.Vars()
+	if err != nil {
+		return err
+	}
+
 	log.Printf("prepare: Templating the proxy config\n")
 	res, err := tmpl.RunTemplate(ctx, depl.ProxyConfigTemplate, append(
-		depl.Vars(),
+		vars,
 		"CONDUCTOR_PROXY_CONFIG="+config_name))
 	if err != nil {
 		return err
@@ -294,8 +300,13 @@ func (depl *Deployment) ProxyConfig(ctx context.Context, config_name string) (ca
 
 	if depl.ProxyConfigTemplate != "" {
 		var cfgs caddy.ConfigItems
-		err := tmpl.RunTemplateJSON(ctx, depl.ProxyConfigTemplate, append(
-			depl.Vars(),
+		vars, err := depl.Vars()
+		if err != nil {
+			return nil, err
+		}
+
+		err = tmpl.RunTemplateJSON(ctx, depl.ProxyConfigTemplate, append(
+			vars,
 			"CONDUCTOR_PROXY_CONFIG="+config_name,
 		), &cfgs)
 		if err != nil {
@@ -316,7 +327,8 @@ func (depl *Deployment) ProxyConfig(ctx context.Context, config_name string) (ca
 	return configs, nil
 }
 
-func (depl *Deployment) Vars() []string {
+func (depl *Deployment) Vars() ([]string, error) {
+	var vars []string
 	var excluded []string = nil
 	if depl.Pod != nil {
 		excluded = depl.Pod.ExcludeVars
@@ -324,7 +336,24 @@ func (depl *Deployment) Vars() []string {
 		excluded = depl.Function.ExcludeVars
 	}
 
-	var vars []string = append(depl.Service.VarsExcluding(excluded),
+	addrNames := depl.AddrNames()
+	if len(addrNames) > 0 {
+		a, err := addr.DefaultAddrReadOnly()
+		if err != nil {
+			return nil, err
+		}
+		for _, addrName := range addrNames {
+			v, err := a.EnvVars(addrName)
+			if err != nil {
+				return nil, err
+			}
+
+			vars = append(vars, v...)
+		}
+	}
+
+	vars = append(vars, depl.Service.VarsExcluding(excluded)...)
+	vars = append(vars,
 		"CONDUCTOR_SERVICE_PART="+depl.PartName,
 		"CONDUCTOR_DEPLOYMENT="+depl.DeploymentName,
 		"CONDUCTOR_DEPLOYMENT_RUN_DIR="+DeploymentRunPath(depl.DeploymentName),
@@ -378,7 +407,7 @@ func (depl *Deployment) Vars() []string {
 		)
 	}
 
-	return vars
+	return vars, nil
 }
 
 func (depl *Deployment) Save(fname string) error {

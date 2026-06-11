@@ -12,6 +12,7 @@ import (
 
 	"github.com/coreos/go-systemd/v22/daemon"
 
+	"github.com/mildred/conductor.go/src/addr"
 	"github.com/mildred/conductor.go/src/deployment"
 	"github.com/mildred/conductor.go/src/deployment_public"
 	"github.com/mildred/conductor.go/src/deployment_util"
@@ -153,6 +154,26 @@ func Stop(ctx context.Context, service_name string, opts StopOpts) error {
 			}
 
 		}()
+	}
+
+	//
+	// Bring address down
+	//
+
+	addrNames := service.AddrNames()
+	if len(addrNames) > 0 {
+		a, err := addr.OpenDefaultAddr()
+		if err != nil {
+			return err
+		}
+		defer a.Close()
+
+		for _, addrName := range addrNames {
+			err = a.Down(ctx, addrName)
+			if err != nil {
+				return err
+			}
+		}
 	}
 
 	//

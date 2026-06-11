@@ -33,8 +33,13 @@ func RunStartPostHooks(ctx context.Context, depl *Deployment) error {
 		return err
 	}
 
+	vars, err := depl.Vars()
+	if err != nil {
+		return err
+	}
+
 	log.Printf("executing post-start hooks...")
-	err = depl.RunHooks(ctx, "post-start", depl.PartName, depl.Vars(), 60*time.Second)
+	err = depl.RunHooks(ctx, "post-start", depl.PartName, vars, 60*time.Second)
 	if err != nil {
 		log.Printf("post-start hooks failed, continuing...")
 	}

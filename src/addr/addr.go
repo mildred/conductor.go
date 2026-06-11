@@ -69,6 +69,37 @@ func NewAddr(cfg *config.Config) *Addr {
 	}
 }
 
+var defaultAddr *Addr
+
+func newDefaultAddr() (*Addr, error) {
+	if defaultAddr == nil {
+		cfg, err := config.ReadConfig()
+		if err != nil {
+			return nil, err
+		}
+
+		defaultAddr = NewAddr(cfg)
+	}
+	return defaultAddr, nil
+}
+
+func OpenDefaultAddr() (*Addr, error) {
+	_, err := newDefaultAddr()
+	if err != nil {
+		return nil, err
+	}
+
+	err = defaultAddr.Init()
+	if err != nil {
+		return nil, err
+	}
+	return defaultAddr, nil
+}
+
+func DefaultAddrReadOnly() (*Addr, error) {
+	return newDefaultAddr()
+}
+
 //  #!/bin/bash
 //
 //  ULA_PREFIX='${local.ula_prefix}'
@@ -206,6 +237,19 @@ func (a *Addr) Update() error {
 	}
 
 	return nil
+}
+
+func (a *Addr) EnvVars(new_host string) (res []string, err error) {
+	env_filename := fmt.Sprintf("/run/%s/%s.env", a.UnitName(), new_host)
+
+	env, err := readEnvFile(env_filename, true)
+	if err != nil {
+		return nil, err
+	}
+	for k, v := range env {
+		res = append(res, k+"="+v)
+	}
+	return
 }
 
 func (a *Addr) Up(ctx context.Context, new_host string) error {

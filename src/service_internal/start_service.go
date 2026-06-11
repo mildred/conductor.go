@@ -12,6 +12,7 @@ import (
 	"github.com/coreos/go-systemd/v22/daemon"
 	"github.com/taigrr/systemctl/properties"
 
+	"github.com/mildred/conductor.go/src/addr"
 	"github.com/mildred/conductor.go/src/caddy"
 	"github.com/mildred/conductor.go/src/deployment"
 	"github.com/mildred/conductor.go/src/deployment_internal"
@@ -174,6 +175,26 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 	}
 
 	//
+	// Bring address up
+	//
+
+	addrNames := service.AddrNames()
+	if len(addrNames) > 0 {
+		a, err := addr.OpenDefaultAddr()
+		if err != nil {
+			return err
+		}
+		defer a.Close()
+
+		for _, addrName := range addrNames {
+			err = a.Up(ctx, addrName)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	//
 	// Find or create a suitable deployment
 	//
 
@@ -209,7 +230,12 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 			return fmt.Errorf("failed to template deployment, %v", err)
 		}
 
-		err = depl.RunHooks(ctx, "pre-create", depl.PartName, depl.Vars(), 60*time.Second)
+		vars, err := depl.Vars()
+		if err != nil {
+			return err
+		}
+
+		err = depl.RunHooks(ctx, "pre-create", depl.PartName, vars, 60*time.Second)
 		if err != nil {
 			return err
 		}
@@ -227,7 +253,7 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 			}
 		}
 
-		err = depl.RunHooks(ctx, "pre-activate", depl.PartName, depl.Vars(), 60*time.Second)
+		err = depl.RunHooks(ctx, "pre-activate", depl.PartName, vars, 60*time.Second)
 		if err != nil {
 			return err
 		}
@@ -292,7 +318,7 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 
 		}
 
-		err = depl.RunHooks(ctx, "post-activate", depl.PartName, depl.Vars(), 60*time.Second)
+		err = depl.RunHooks(ctx, "post-activate", depl.PartName, vars, 60*time.Second)
 		if err != nil {
 			return err
 		}
@@ -324,7 +350,12 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 
 		log.Printf("Removing deployment %s...\n", d.DeploymentName)
 
-		err = d.RunHooks(ctx, "pre-remove", d.PartName, d.Vars(), 60*time.Second)
+		vars, err := d.Vars()
+		if err != nil {
+			return err
+		}
+
+		err = d.RunHooks(ctx, "pre-remove", d.PartName, vars, 60*time.Second)
 		if err != nil {
 			log.Printf("ERROR executing pre-remote hooks for %s (but continuing): %v", d.DeploymentName, err)
 			continue
@@ -342,7 +373,7 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 			continue
 		}
 
-		err = d.RunHooks(ctx, "post-remove", d.PartName, d.Vars(), 60*time.Second)
+		err = d.RunHooks(ctx, "post-remove", d.PartName, vars, 60*time.Second)
 		if err != nil {
 			log.Printf("ERROR executing post-remote hooks for %s (but continuing): %v", d.DeploymentName, err)
 			continue

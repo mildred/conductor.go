@@ -36,7 +36,12 @@ func StartSDActivateFunction(ctx context.Context, depl *Deployment, f *Deploymen
 		}
 	}
 
-	env := append(os.Environ(), depl.Vars()...)
+	vars, err := depl.Vars()
+	if err != nil {
+		return err
+	}
+
+	env := append(os.Environ(), vars...)
 
 	return syscall.Exec(cmdline[0], cmdline[1:], env)
 }
