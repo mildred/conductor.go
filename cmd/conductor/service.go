@@ -535,7 +535,7 @@ func cmd_service_config_get() *flaggy.Subcommand {
 
 func cmd_service_config_set() *flaggy.Subcommand {
 	var service_descr, file_flag string
-	var no_reload_flag, no_block_flag, foreground_flag, background_flag bool
+	var no_reload_flag, no_block_flag, foreground_flag, background_flag, no_inherit_flag bool
 	var vars []string
 
 	cmd := flaggy.NewSubcommand("set") // "SERVICE [VAR=VAL...]",
@@ -545,6 +545,7 @@ func cmd_service_config_set() *flaggy.Subcommand {
 	cmd.Bool(&foreground_flag, "", "foreground", "Perform the reload in foreground (does not involves systemd)")
 	cmd.Bool(&no_reload_flag, "n", "no-reload", "Do not reload service")
 	cmd.Bool(&no_block_flag, "", "no-block", "Do not block while reloading")
+	cmd.Bool(&no_inherit_flag, "s", "no-inherit", "Write to service file, do not write to inherited files")
 	cmd.AddPositionalValue(&service_descr, "service", 1, true, "The service to act on")
 	cmd.AddExtraValues(&vars, "VAR=VAL", "Variables to set")
 
@@ -560,7 +561,11 @@ func cmd_service_config_set() *flaggy.Subcommand {
 
 		filename := file_flag
 		if filename == "" {
-			filename = serv.ConfigSetFile
+			if no_inherit_flag {
+				filename = serv.FileName
+			} else {
+				filename = serv.ConfigSetFile
+			}
 		}
 
 		changed_args := map[string]string{}
