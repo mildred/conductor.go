@@ -58,27 +58,33 @@ func (parts *ServiceParts) FindMainPart() AbstractServicePart {
 }
 
 func (parts *ServiceParts) FindPod(name string) *ServicePod {
-	return parts.FindPart(name).(*ServicePod)
+	res, _ := parts.FindPart(name).(*ServicePod)
+	return res
 }
 
 func (parts *ServiceParts) FindMainPod() *ServicePod {
-	return parts.FindMainPart().(*ServicePod)
+	res, _ := parts.FindMainPart().(*ServicePod)
+	return res
 }
 
 func (parts *ServiceParts) FindDaemon(name string) *ServiceDaemon {
-	return parts.FindPart(name).(*ServiceDaemon)
+	res, _ := parts.FindPart(name).(*ServiceDaemon)
+	return res
 }
 
 func (parts *ServiceParts) FindMainDaemon() *ServiceDaemon {
-	return parts.FindMainPart().(*ServiceDaemon)
+	res, _ := parts.FindMainPart().(*ServiceDaemon)
+	return res
 }
 
 func (parts *ServiceParts) FindFunction(name string) *ServiceFunction {
-	return parts.FindPart(name).(*ServiceFunction)
+	res, _ := parts.FindPart(name).(*ServiceFunction)
+	return res
 }
 
 func (parts *ServiceParts) FindMainFunction() *ServiceFunction {
-	return parts.FindMainPart().(*ServiceFunction)
+	res, _ := parts.FindMainPart().(*ServiceFunction)
+	return res
 }
 
 func (parts *ServiceParts) FillDefaults(service *Service) error {
