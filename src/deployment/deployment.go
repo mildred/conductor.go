@@ -336,8 +336,10 @@ func (depl *Deployment) Vars() ([]string, error) {
 		excluded = depl.Function.ExcludeVars
 	}
 
+	var firstAddrName string
 	addrNames := depl.AddrNames()
 	if len(addrNames) > 0 {
+		firstAddrName = addrNames[0]
 		a, err := addr.DefaultAddrReadOnly()
 		if err != nil {
 			return nil, err
@@ -364,6 +366,8 @@ func (depl *Deployment) Vars() ([]string, error) {
 		"CONDUCTOR_DEPLOYMENT_SOCKET_CONFIG_UNIT="+depl.SocketConfigUnit(),
 		"CONDUCTOR_DEPLOYMENT_CONFIG_UNIT="+DeploymentConfigUnit(depl.DeploymentName),
 		"CONDUCTOR_PART_ID="+depl.PartId,
+		"CONDUCTOR_ADDR_NAMES="+strings.Join(addrNames, " "),
+		"CONDUCTOR_ADDR_NAME="+firstAddrName,
 	)
 
 	if depl.Pod != nil {

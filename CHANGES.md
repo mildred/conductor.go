@@ -23,7 +23,8 @@ v0.0.84 (unreleased)
 
 - Add a new part type in addition to pods and functions: daemons. Daemons are
   long running processed that are not containerized. It shares most behaviours
-  with pods except it does not use podman.
+  with pods except it does not use podman. Daemons bring up an addr with the
+  service name when started.
 
 - Parts should not be declared using the `parts` key in the configuration, each
   part must define its type (pod, function or daemon)
