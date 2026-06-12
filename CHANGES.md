@@ -1,6 +1,13 @@
 Changelog
 =========
 
+v0.0.83
+-------
+
+### Changes
+
+- `conductor service config set` gains a new option: `-s` / `--no-inherit`
+
 v0.0.82
 -------
 
