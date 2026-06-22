@@ -8,7 +8,7 @@ require (
 	github.com/coreos/go-systemd/v22 v22.5.0
 	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467
 	github.com/golang-jwt/jwt/v5 v5.2.1
-	github.com/integrii/flaggy v1.5.2
+	github.com/integrii/flaggy v1.8.0
 	github.com/rhysd/go-github-selfupdate v1.2.3
 	github.com/rodaine/table v1.3.0
 	github.com/taigrr/systemctl v1.0.10
@@ -31,4 +31,6 @@ require (
 	golang.org/x/sys v0.30.0 // indirect
 )
 
-replace github.com/integrii/flaggy => github.com/mildred/flaggy v0.0.0-20241205182850-8780e26a6fe0
+replace github.com/integrii/flaggy => github.com/mildred/flaggy v0.0.0-20260619152111-a8a568e4993d
+
+// replace github.com/integrii/flaggy => ../flaggy

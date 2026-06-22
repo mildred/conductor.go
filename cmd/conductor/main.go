@@ -164,6 +164,7 @@ func cmd_run() *flaggy.Subcommand {
 	cmd.Var(&env, "e", "env", "Environment to add to the command")
 	cmd.Bool(&direct, "", "direct", "If command fails, do not add error message and keep exit status")
 	cmd.Bool(&strictVersion, "", "strict-version", "Fail to run a command in a outdated deployment")
+	cmd.NoFlagsAfterArgs = true
 	cmd.AddPositionalValue(&cmdname, "command", 1, false, "Command to run")
 	cmd.AddExtraValues(&args, "args", "Command arguments")
 
@@ -202,6 +203,9 @@ func cmd_run() *flaggy.Subcommand {
 
 func Main(ctx context.Context) error {
 	log.SetFlags(log.Lmsgprefix)
+
+	flaggy_debug := os.Getenv("CONDUCTOR_FLAGGY_DEBUG")
+	flaggy.DebugMode = flaggy_debug != ""
 
 	f := flaggy.NewParser(os.Args[0])
 	f.Version = version
