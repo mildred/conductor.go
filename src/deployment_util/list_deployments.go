@@ -72,9 +72,9 @@ func ListUnitStatus(ctx context.Context, deployments []*Deployment, config_unit 
 	var deployment_units []string
 	for _, depl := range deployments {
 		if config_unit {
-			deployment_units = append(deployment_units, DeploymentConfigUnit(depl.DeploymentName))
+			deployment_units = append(deployment_units, depl.ConfigUnit())
 		} else {
-			deployment_units = append(deployment_units, DeploymentUnit(depl.DeploymentName))
+			deployment_units = append(deployment_units, depl.MainUnit())
 		}
 	}
 
@@ -88,10 +88,10 @@ func ListUnitStatus(ctx context.Context, deployments []*Deployment, config_unit 
 		var status dbus.UnitStatus
 
 		for _, st := range statuses {
-			if config_unit && st.Name == DeploymentConfigUnit(depl.DeploymentName) {
+			if config_unit && st.Name == depl.ConfigUnit() {
 				status = st
 				break
-			} else if !config_unit && st.Name == DeploymentUnit(depl.DeploymentName) {
+			} else if !config_unit && st.Name == depl.MainUnit() {
 				status = st
 				break
 			}

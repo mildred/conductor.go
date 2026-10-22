@@ -1,0 +1,8 @@
+#!/bin/bash
+
+DOCKER_IMAGE="$image"
+DOCKER_TAG="${version:-$tag}"
+
+set -x
+cd $CONDUCTOR_SERVICE_DIR/conductor-test-rails-app
+podman build -t conductor-test-rails-app .

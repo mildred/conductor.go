@@ -273,6 +273,8 @@ func cmd_service_deploy() *flaggy.Subcommand {
 			return err
 		}
 
+		var main_unit string
+
 		if depl_name == "" {
 			ctx := context.Background()
 			depl, status, err := deployment_util.StartNewOrExistingFromService(ctx, service, seed, deployment_util.StartNewOrExistingOpts{
@@ -285,6 +287,7 @@ func cmd_service_deploy() *flaggy.Subcommand {
 
 			fmt.Printf("Deployment (%s): %s\n", status, depl.DeploymentName)
 			depl_name = depl.DeploymentName
+			main_unit = depl.MainUnit()
 		} else {
 			dir, err := deployment_util.CreateDeploymentFromService(depl_name, service, seed)
 			if err != nil {
@@ -292,11 +295,13 @@ func cmd_service_deploy() *flaggy.Subcommand {
 			}
 
 			fmt.Printf("Deployment created in: %s\n", dir)
+
+			main_unit = deployment.DeploymentMainUnit(service, seed.PartName, depl_name)
 		}
 
 		if start {
-			fmt.Fprintf(os.Stderr, "+ systemctl %s start %s\n", dirs.SystemdModeFlag(), deployment.DeploymentUnit(depl_name))
-			cmd := exec.Command("systemctl", dirs.SystemdModeFlag(), "start", deployment.DeploymentUnit(depl_name))
+			fmt.Fprintf(os.Stderr, "+ systemctl %s start %s\n", dirs.SystemdModeFlag(), main_unit)
+			cmd := exec.Command("systemctl", dirs.SystemdModeFlag(), "start", main_unit)
 			cmd.Stdin = os.Stdin
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
@@ -305,7 +310,7 @@ func cmd_service_deploy() *flaggy.Subcommand {
 				return err
 			}
 		} else {
-			fmt.Printf("You can start it with: systemctl start %s\n", deployment.DeploymentUnit(depl_name))
+			fmt.Printf("You can start it with: systemctl start %s\n", main_unit)
 		}
 		return nil
 	})

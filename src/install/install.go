@@ -143,7 +143,7 @@ func isInstalled() (bool, string, error) {
 	return os.SameFile(self_st, installed_st), self, nil
 }
 
-func Install(destdir string) error {
+func Install(destdir string, unlink bool) error {
 	if destdir == "" {
 		installed, executable, err := isInstalled()
 		if err != nil {
@@ -153,6 +153,14 @@ func Install(destdir string) error {
 			destination := path.Join("/usr/local/bin", path.Base(executable))
 			fmt.Fprintf(os.Stderr, "+ cp %q %q\n", executable, destination)
 
+			if unlink {
+				err = os.Remove(destination)
+				if err != nil && os.IsNotExist(err) {
+					err = nil
+				} else if err != nil {
+					return err
+				}
+			}
 			dest, err := os.OpenFile(destination, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o777)
 			if err != nil {
 				return err
@@ -198,6 +206,12 @@ func Install(destdir string) error {
 
 	fmt.Fprintf(os.Stderr, "+ touch %q\n", destdir+ConductorDeploymentConfigServiceLocation)
 	err = os.WriteFile(destdir+ConductorDeploymentConfigServiceLocation, []byte(ConductorDeploymentConfigService), 0644)
+	if err != nil {
+		return err
+	}
+
+	fmt.Fprintf(os.Stderr, "+ touch %q\n", destdir+ConductorDeploymentSocketConfigServiceLocation)
+	err = os.WriteFile(destdir+ConductorDeploymentSocketConfigServiceLocation, []byte(ConductorDeploymentSocketConfigService), 0644)
 	if err != nil {
 		return err
 	}
@@ -267,6 +281,12 @@ func Uninstall(destdir string) error {
 
 	fmt.Fprintf(os.Stderr, "+ rm -f %q\n", destdir+ConductorDeploymentServiceLocation)
 	err = os.Remove(destdir + ConductorDeploymentServiceLocation)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+
+	fmt.Fprintf(os.Stderr, "+ rm -f %q\n", destdir+ConductorDeploymentSocketConfigServiceLocation)
+	err = os.Remove(destdir + ConductorDeploymentSocketConfigServiceLocation)
 	if err != nil && !os.IsNotExist(err) {
 		return err
 	}

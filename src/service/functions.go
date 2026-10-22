@@ -10,6 +10,7 @@ import (
 
 	"github.com/mildred/conductor.go/src/caddy"
 	"github.com/mildred/conductor.go/src/dirs"
+	"github.com/mildred/conductor.go/src/utils"
 )
 
 type ServiceFunction struct {
@@ -302,4 +303,8 @@ func (functions *ServiceFunctions) UnmarshalJSON(data []byte) error {
 	}
 
 	return nil
+}
+
+func (f *ServiceFunction) ExpandedExec(vars []string) []string {
+	return utils.ExpandAllVars(f.Exec, vars)
 }

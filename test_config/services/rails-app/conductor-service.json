@@ -1,0 +1,45 @@
+{
+  "app_name": "rails-app",
+  "instance_name": "main",
+  "disable": false,
+  "static_deployments": true,
+  "conditions": null,
+  "config": {
+    "image": "conductor-test-rails-app",
+    "tag": "latest"
+  },
+  "pods": [
+    {
+      "pod_template": "./conductor-pod.template",
+      "socket_activated": true,
+      "socket_directives": [
+        "# ListenStream=0.0.0.0:3000",
+        "ListenStream=$CONDUCTOR_DEPLOYMENT_RUN_DIR/conductor-rails-app.sock",
+        "ReusePort=true",
+        "Backlog=1024"
+      ],
+      "socket_proxy": {
+        "target": "$POD_IP_ADDRESS:3000",
+        "wait_connect": true
+      }
+    }
+  ],
+  "hooks": [
+    {
+      "id": "pod-pre-start",
+      "when": "pre-start",
+      "exec": [ "./pre-start.hook" ]
+    }
+  ],
+  "commands": {
+    "curl": {
+      "service_any_deployment": true,
+      "description": "Run curl on the app",
+      "exec": ["curl", "--unix-socket", "$CONDUCTOR_DEPLOYMENT_RUN_DIR/conductor-rails-app.sock"]
+    }
+  },
+  "display_service_config": [ "tag" ],
+  "display_service_deployment_config": [ "tag" ],
+  "display_deployment_config": [ "tag" ]
+}
+

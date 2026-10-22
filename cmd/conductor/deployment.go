@@ -118,7 +118,20 @@ func cmd_deployment_systemd(cmd_name, descr string) func() *flaggy.Subcommand {
 				cli = append(cli, "--signal="+signal)
 			}
 			for _, id := range ids {
-				cli = append(cli, deployment.DeploymentUnit(id))
+				depl, err := deployment.ReadDeploymentByName(id, true)
+				if err != nil {
+					return err
+				}
+
+				if all || cmd_name != "kill" && depl.SocketActivated() {
+					cli = append(cli, deployment.DeploymentSocketUnit(id))
+				}
+				if all || cmd_name != "start" && depl.SocketActivated() {
+					cli = append(cli, deployment.DeploymentServiceUnit(id))
+				}
+				if all && depl.SocketActivated() {
+					cli = append(cli, deployment.DeploymentSocketConfigUnit(id))
+				}
 				if all {
 					cli = append(cli,
 						deployment.DeploymentConfigUnit(id),
@@ -159,7 +172,7 @@ func cmd_deployment_unit() *flaggy.Subcommand {
 		}
 
 		for _, id := range ids {
-			fmt.Println(deployment.DeploymentUnit(id))
+			fmt.Println(deployment.DeploymentServiceUnit(id))
 		}
 		return nil
 	})

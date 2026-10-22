@@ -14,6 +14,7 @@ import (
 	"github.com/taigrr/systemctl"
 	"github.com/taigrr/systemctl/properties"
 
+	"github.com/mildred/conductor.go/src/deployment"
 	"github.com/mildred/conductor.go/src/dirs"
 	"github.com/mildred/conductor.go/src/service"
 	_ "github.com/mildred/conductor.go/src/utils"
@@ -37,7 +38,7 @@ func StartNewOrExistingFromService(ctx context.Context, svc *service.Service, se
 	var started_deployments []*Deployment
 	var starting_deployments []*Deployment
 	var stopped_deployments []*Deployment
-	var deployment_units []string
+	// var deployment_units []string
 	deployments, err := List(ListOpts{
 		FilterServiceDir: svc.BasePath,
 		FilterPartName:   &seed.PartName,
@@ -47,9 +48,9 @@ func StartNewOrExistingFromService(ctx context.Context, svc *service.Service, se
 		return nil, "", err
 	}
 
-	for _, depl := range deployments {
-		deployment_units = append(deployment_units, DeploymentUnit(depl.DeploymentName))
-	}
+	// for _, depl := range deployments {
+	// 	deployment_units = append(deployment_units, DeploymentUnit(depl.DeploymentName))
+	// }
 
 	//
 	// For some reason this is blocking
@@ -95,7 +96,7 @@ func StartNewOrExistingFromService(ctx context.Context, svc *service.Service, se
 		//   }
 		// }
 
-		stat.ActiveState, err = systemctl.Show(ctx, DeploymentUnit(depl.DeploymentName), properties.ActiveState, systemctl.Options{UserMode: !dirs.AsRoot})
+		stat.ActiveState, err = systemctl.Show(ctx, depl.MainUnit(), properties.ActiveState, systemctl.Options{UserMode: !dirs.AsRoot})
 		if err != nil {
 			return nil, "", err
 		}
@@ -198,7 +199,7 @@ func StartNewOrExistingFromService(ctx context.Context, svc *service.Service, se
 }
 
 func CreateDeploymentFromService(name string, svc *service.Service, seed *DeploymentSeed) (string, error) {
-	dir := path.Join(DeploymentRunDir, name)
+	dir := DeploymentRunPath(name)
 
 	err := os.MkdirAll(dir, 0755)
 	if err != nil {
@@ -230,12 +231,21 @@ func CreateDeploymentFromService(name string, svc *service.Service, seed *Deploy
 	// 	return "", err
 	// }
 
+	depl := deployment.NewDeploymentFromService(svc, name, seed)
+
 	var unit_name string
 	var service_directives []string
+	var socket_directives []string
 	if seed.IsPod {
-		unit_name = DeploymentUnit(name)
 		pod := svc.Pods.FindPod(seed.PartName)
+		unit_name = DeploymentMainUnit(svc, seed.PartName, name)
 		service_directives = pod.ServiceDirectives
+		if pod.SocketActivated {
+			socket_directives = pod.ExpandedSocketDirectives(depl.Vars())
+			if len(socket_directives) == 0 {
+				return "", fmt.Errorf("Cannot create socket file %s: missing socket directives in pod configuration", DeploymentSocketUnit(name))
+			}
+		}
 	} else if seed.IsFunction {
 		fct := svc.Functions.FindFunction(seed.PartName)
 		if fct.IsSingle() {
@@ -272,6 +282,21 @@ func CreateDeploymentFromService(name string, svc *service.Service, seed *Deploy
 				conf += strings.ReplaceAll(directive, "\n", "\\\n") + "\n"
 			}
 			err = os.WriteFile(dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode(), unit_name+".d/90-extra-directives.conf"), []byte(conf), 0644)
+			if err != nil {
+				return "", err
+			}
+		}
+
+		if len(socket_directives) > 0 {
+			var conf string
+			conf += "[Unit]\n"
+			conf += "Requires=" + DeploymentSocketConfigUnit(name) + "\n\n"
+			conf += "[Socket]\n"
+			for _, directive := range socket_directives {
+				directive = strings.ReplaceAll(directive, "\n", "\\\n")
+				conf += directive + "\n"
+			}
+			err = os.WriteFile(dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode(), DeploymentSocketUnit(name)), []byte(conf), 0644)
 			if err != nil {
 				return "", err
 			}
@@ -319,7 +344,7 @@ ExecStart=/bin/sh -xc 'PID=$$$$; exec conductor _ deployment start --function'
 
 	var socket = `[Unit]
 Description=Conductor CGI Function socket for ` + name + `
-Requires=` + DeploymentUnit(name) + `
+Requires=` + DeploymentServiceUnit(name) + `
 Requires=` + DeploymentConfigUnit(name) + `
 
 [Socket]
@@ -359,14 +384,14 @@ Restart=on-failure
 		return err
 	}
 
-	log.Printf("Create %s", dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode(), DeploymentUnit(name)+".d"))
-	err = os.MkdirAll(dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode(), DeploymentUnit(name)+".d"), 0755)
+	log.Printf("Create %s", dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode(), DeploymentServiceUnit(name)+".d"))
+	err = os.MkdirAll(dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode(), DeploymentServiceUnit(name)+".d"), 0755)
 	if err != nil {
 		return err
 	}
 
-	log.Printf("Write %s", dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode(), DeploymentUnit(name)+".d", "function.conf"))
-	err = os.WriteFile(dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode(), DeploymentUnit(name)+".d", "function.conf"), []byte(function_conf), 0o644)
+	log.Printf("Write %s", dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode(), DeploymentServiceUnit(name)+".d", "function.conf"))
+	err = os.WriteFile(dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode(), DeploymentServiceUnit(name)+".d", "function.conf"), []byte(function_conf), 0o644)
 	if err != nil {
 		return err
 	}

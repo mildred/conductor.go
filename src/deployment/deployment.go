@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -36,12 +37,24 @@ func CGIFunctionServiceUnit(name string, instance string) string {
 	return fmt.Sprintf("conductor-cgi-function-%s@%s.service", name, instance)
 }
 
-func DeploymentUnit(name string) string {
+func DeploymentServiceUnit(name string) string {
 	return fmt.Sprintf("conductor-deployment@%s.service", name)
+}
+
+func DeploymentSocketUnit(name string) string {
+	return fmt.Sprintf("conductor-deployment@%s.socket", name)
 }
 
 func DeploymentConfigUnit(name string) string {
 	return fmt.Sprintf("conductor-deployment-config@%s.service", name)
+}
+
+func DeploymentSocketConfigUnit(name string) string {
+	return fmt.Sprintf("conductor-deployment-socket-config@%s.service", name)
+}
+
+func DeploymentRunPath(name string) string {
+	return path.Join(DeploymentRunDir, name)
 }
 
 func DeploymentSocketPath(name string) string {
@@ -112,8 +125,8 @@ func NewDeploymentFromService(service *service.Service, deployment_name string, 
 	}
 }
 
-func ReadDeploymentByName(name string, allow_dir bool) (*Deployment, error) {
-	path, depl_name, err := DeploymentDirByName(name, allow_dir)
+func ReadDeploymentByName(name string, allow_dir_in_name bool) (*Deployment, error) {
+	path, depl_name, err := DeploymentDirByName(name, allow_dir_in_name)
 	if err != nil {
 		return nil, err
 	}
@@ -157,19 +170,26 @@ func ReadDeployment(dir, deployment_id string) (*Deployment, error) {
 	}
 }
 
-func (depl *Deployment) TemplateProxyConfig(ctx context.Context) error {
+func (depl *Deployment) TemplateProxyConfig(ctx context.Context, config_name string) error {
 	if depl.ProxyConfigTemplate == "" {
 		depl.TemplatedProxyConfig = nil
 		return nil
 	}
 
 	log.Printf("prepare: Templating the proxy config\n")
-	res, err := tmpl.RunTemplate(ctx, depl.ProxyConfigTemplate, depl.Vars())
+	res, err := tmpl.RunTemplate(ctx, depl.ProxyConfigTemplate, append(
+		depl.Vars(),
+		"CONDUCTOR_PROXY_CONFIG="+config_name))
 	if err != nil {
 		return err
 	}
 
-	return json.Unmarshal([]byte(res), &depl.TemplatedProxyConfig)
+	err = json.Unmarshal([]byte(res), &depl.TemplatedProxyConfig)
+	if err != nil {
+		return fmt.Errorf("could not read proxy JSON config, %v. JSON: %v", err, res)
+	}
+
+	return nil
 }
 
 func (depl *Deployment) TemplateAll(ctx context.Context) error {
@@ -180,12 +200,26 @@ func (depl *Deployment) TemplateAll(ctx context.Context) error {
 		}
 	}
 
-	err := depl.TemplateProxyConfig(ctx)
+	if depl.SocketActivated() {
+		// TODO: better validate errors, do not run template twice
+		err := depl.TemplateProxyConfig(ctx, "deployment-socket")
+		if err != nil {
+			return err
+		}
+
+		depl.ProxyConfigValue, err = depl.ProxyConfig(ctx, "deployment-socket")
+		if err != nil {
+			return err
+		}
+	}
+
+	// TODO: better validate errors, do not run template twice
+	err := depl.TemplateProxyConfig(ctx, "deployment")
 	if err != nil {
 		return err
 	}
 
-	depl.ProxyConfigValue, err = depl.ProxyConfig(ctx)
+	depl.ProxyConfigValue, err = depl.ProxyConfig(ctx, "deployment")
 	if err != nil {
 		return err
 	}
@@ -193,8 +227,12 @@ func (depl *Deployment) TemplateAll(ctx context.Context) error {
 	return nil
 }
 
-func (depl *Deployment) ProxyConfig(ctx context.Context) (caddy.ConfigItems, error) {
+func (depl *Deployment) ProxyConfig(ctx context.Context, config_name string) (caddy.ConfigItems, error) {
 	var configs caddy.ConfigItems
+
+	if config_name == "" {
+		config_name = "deployment"
+	}
 
 	if depl.Pod != nil {
 		cfg, err := depl.Pod.ProxyConfig(depl)
@@ -216,7 +254,10 @@ func (depl *Deployment) ProxyConfig(ctx context.Context) (caddy.ConfigItems, err
 
 	if depl.ProxyConfigTemplate != "" {
 		var c caddy.ConfigItems
-		err := tmpl.RunTemplateJSON(ctx, depl.ProxyConfigTemplate, depl.Vars(), &c)
+		err := tmpl.RunTemplateJSON(ctx, depl.ProxyConfigTemplate, append(
+			depl.Vars(),
+			"CONDUCTOR_PROXY_CONFIG="+config_name,
+		), &c)
 		if err != nil {
 			return nil, fmt.Errorf("while running the proxy-config template, %v", err)
 		}
@@ -243,8 +284,12 @@ func (depl *Deployment) Vars() []string {
 	var vars []string = append(depl.Service.VarsExcluding(excluded),
 		"CONDUCTOR_SERVICE_PART="+depl.PartName,
 		"CONDUCTOR_DEPLOYMENT="+depl.DeploymentName,
+		"CONDUCTOR_DEPLOYMENT_RUN_DIR="+DeploymentRunPath(depl.DeploymentName),
 		"CONDUCTOR_DEPLOYMENT_SERVICE_ID="+depl.ServiceId,
-		"CONDUCTOR_DEPLOYMENT_UNIT="+DeploymentUnit(depl.DeploymentName),
+		"CONDUCTOR_DEPLOYMENT_UNIT="+DeploymentServiceUnit(depl.DeploymentName),
+		"CONDUCTOR_DEPLOYMENT_MAIN_UNIT="+depl.MainUnit(),
+		"CONDUCTOR_DEPLOYMENT_SOCKET_UNIT="+depl.SocketUnit(),
+		"CONDUCTOR_DEPLOYMENT_SOCKET_CONFIG_UNIT="+depl.SocketConfigUnit(),
 		"CONDUCTOR_DEPLOYMENT_CONFIG_UNIT="+DeploymentConfigUnit(depl.DeploymentName),
 		"CONDUCTOR_PART_ID="+depl.PartId,
 	)
@@ -256,6 +301,7 @@ func (depl *Deployment) Vars() []string {
 			"POD_NAME="+depl.PodName,
 			"CONDUCTOR_POD_IP_ADDRESS="+depl.Pod.IPAddress,
 			"CONDUCTOR_POD_NAME="+depl.PodName,
+			"CONDUCTOR_POD_SOCKET_ACTIVATED="+strconv.FormatBool(depl.Pod.SocketActivated),
 			"CONDUCTOR_FUNCTION_FORMAT=",
 			"CONDUCTOR_FUNCTION_ID=",
 			"CONDUCTOR_FUNCTION_SOCKET=",
@@ -268,6 +314,7 @@ func (depl *Deployment) Vars() []string {
 			"POD_NAME=",
 			"CONDUCTOR_POD_IP_ADDRESS=",
 			"CONDUCTOR_POD_NAME=",
+			"CONDUCTOR_POD_SOCKET_ACTIVATED="+strconv.FormatBool(false),
 			"CONDUCTOR_FUNCTION_FORMAT="+depl.Function.Format,
 			"CONDUCTOR_FUNCTION_ID="+depl.PartId,
 			"CONDUCTOR_FUNCTION_SOCKET="+DeploymentSocketPath(depl.DeploymentName),
@@ -280,6 +327,7 @@ func (depl *Deployment) Vars() []string {
 			"POD_NAME=",
 			"CONDUCTOR_POD_IP_ADDRESS=",
 			"CONDUCTOR_POD_NAME=",
+			"CONDUCTOR_POD_SOCKET_ACTIVATED="+strconv.FormatBool(false),
 			"CONDUCTOR_FUNCTION_FORMAT=",
 			"CONDUCTOR_FUNCTION_ID=",
 			"CONDUCTOR_FUNCTION_SOCKET=",
@@ -425,22 +473,67 @@ func (depl *Deployment) FindPodIPAddressOnce() (string, error) {
 	return "", err
 }
 
-func (depl *Deployment) FindPodIPAddress() (string, error) {
+func (depl *Deployment) FindPodIPAddress(ctx context.Context) (string, error) {
 	var err error
 	var address string
 
-	max := 4
-	for i := 0; i <= max; i++ {
+	err = utils.ExponentialSleep(ctx, 50*time.Millisecond, 2*time.Second, 20*time.Second, func(elapsed, delay time.Duration) error {
 		address, err = depl.FindPodIPAddressOnce()
 		if err == nil {
-			return address, nil
+			return utils.STOP
+		} else {
+			log.Printf("No IP address found (%v), will retry in %v...", err, delay)
+			return nil
 		}
-
-		if i < max {
-			log.Printf("No IP address found (%v), will retry...", err)
-			time.Sleep(time.Second * 5)
-		}
+	})
+	if err != nil {
+		return "", err
 	}
 
 	return address, err
+}
+
+func (depl *Deployment) ConfigUnit() string {
+	return DeploymentConfigUnit(depl.DeploymentName)
+}
+
+func (depl *Deployment) SocketActivated() bool {
+	return depl.Pod != nil && depl.Pod.SocketActivated
+}
+
+func (depl *Deployment) ServiceUnit() string {
+	return DeploymentServiceUnit(depl.DeploymentName)
+}
+
+func (depl *Deployment) SocketUnit() string {
+	if depl.SocketActivated() {
+		return DeploymentSocketUnit(depl.DeploymentName)
+	} else {
+		return ""
+	}
+}
+
+func (depl *Deployment) SocketConfigUnit() string {
+	if depl.SocketActivated() {
+		return DeploymentSocketConfigUnit(depl.DeploymentName)
+	} else {
+		return ""
+	}
+}
+
+func (depl *Deployment) MainUnit() string {
+	if depl.SocketActivated() {
+		return DeploymentSocketUnit(depl.DeploymentName)
+	} else {
+		return DeploymentServiceUnit(depl.DeploymentName)
+	}
+}
+
+func DeploymentMainUnit(s *service.Service, part_name string, deployment_name string) string {
+	pod := s.Pods.FindPod(part_name)
+	if pod != nil && pod.SocketActivated {
+		return DeploymentSocketUnit(deployment_name)
+	}
+
+	return DeploymentServiceUnit(deployment_name)
 }

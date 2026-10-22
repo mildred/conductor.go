@@ -11,6 +11,7 @@ import (
 	"path"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/mildred/conductor.go/src/deployment_util"
 	"github.com/mildred/conductor.go/src/dirs"
@@ -310,7 +311,7 @@ func Stop(definition_path string, opts StopOpts) error {
 
 		for _, d := range deployments {
 			fmt.Fprintf(os.Stderr, "+ conductor deployment rm %s\n", d.DeploymentName)
-			err := deployment_util.RemoveTimeout(ctx, d.DeploymentName, 0, 0)
+			err := deployment_util.RemoveTimeout(ctx, d.DeploymentName, 5*time.Second, 5*time.Second)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "ERROR removing deployment %s: %v\n", d.DeploymentName, err)
 			} else {

@@ -554,20 +554,21 @@ func (service *Service) VarsExcluding(excluded []string) []string {
 	if name == "" {
 		name = service.BasePath
 	}
-	var vars []string = []string{
-		"CONDUCTOR_APP=" + service.AppName,
-		"CONDUCTOR_INSTANCE=" + service.InstanceName,
-		"CONDUCTOR_SERVICE_NAME=" + name,
-		"CONDUCTOR_SERVICE_ID=" + service.Id,
-		"CONDUCTOR_SERVICE_DIR=" + service.BasePath,
-		"CONDUCTOR_SERVICE_UNIT=" + ServiceUnit(service.BasePath),
-		"CONDUCTOR_SERVICE_CONFIG_UNIT=" + ServiceConfigUnit(service.BasePath),
-	}
+	var vars []string
 	for k, v := range service.Config {
 		if !slices.Contains(excluded, k) {
 			vars = append(vars, fmt.Sprintf("%s=%s", k, v))
 		}
 	}
+	vars = append(vars,
+		"CONDUCTOR_APP="+service.AppName,
+		"CONDUCTOR_INSTANCE="+service.InstanceName,
+		"CONDUCTOR_SERVICE_NAME="+name,
+		"CONDUCTOR_SERVICE_ID="+service.Id,
+		"CONDUCTOR_SERVICE_DIR="+service.BasePath,
+		"CONDUCTOR_SERVICE_UNIT="+ServiceUnit(service.BasePath),
+		"CONDUCTOR_SERVICE_CONFIG_UNIT="+ServiceConfigUnit(service.BasePath),
+	)
 	return vars
 }
 
@@ -627,7 +628,10 @@ func (service *Service) ProxyConfig(ctx context.Context) (caddy.ConfigItems, err
 
 	if service.ProxyConfigTemplate != "" {
 		var c caddy.ConfigItems
-		err := tmpl.RunTemplateJSON(ctx, service.ProxyConfigTemplate, service.Vars(), &c)
+		err := tmpl.RunTemplateJSON(ctx, service.ProxyConfigTemplate, append(
+			service.Vars(),
+			"CONDUCTOR_PROXY_CONFIG=service",
+		), &c)
 		if err != nil {
 			return nil, err
 		}
@@ -745,7 +749,9 @@ func (s *Service) RunHooks(ctx context.Context, when string, part string, vars [
 				defer cancel()
 			}
 
-			log.Printf("%s hook: Run %v\n", when, hook.Exec)
+			cmdline := hook.ExpandedExec(vars)
+
+			log.Printf("%s hook: Run %s\n", when, strings.Join(cmdline, " "))
 			//  cmd := exec.Command("systemd-run",
 			//  	append([]string{
 			//  		"--scope",
@@ -753,7 +759,7 @@ func (s *Service) RunHooks(ctx context.Context, when string, part string, vars [
 			//  		"--collect",
 			//  		"--unit=" + fmt.Sprintf("hook-%s-%s", depl.DeploymentName, when),
 			//  	}, hook.Exec...)...)
-			cmd := exec.Command(hook.Exec[0], hook.Exec[1:]...)
+			cmd := exec.Command(cmdline[0], cmdline[1:]...)
 			cmd.Env = append(cmd.Environ(), vars...)
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
@@ -766,4 +772,12 @@ func (s *Service) RunHooks(ctx context.Context, when string, part string, vars [
 	}
 	log.Printf("%s hook: Completed hooks\n", when)
 	return nil
+}
+
+func (h *Hook) ExpandedExec(vars []string) []string {
+	return utils.ExpandAllVars(h.Exec, vars)
+}
+
+func (cmd *ServiceCommand) ExpandedExec(vars []string) []string {
+	return utils.ExpandAllVars(cmd.Exec, vars)
 }

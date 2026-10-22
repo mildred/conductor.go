@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/coreos/go-systemd/v22/dbus"
@@ -47,7 +48,7 @@ func PrintList(settings PrintListSettings) error {
 		errs = errors.Join(errs, err)
 	}
 
-	patterns := []string{"conductor-deployment@*.service", "conductor-service@*.service", "conductor-deployment-config@*.service"}
+	patterns := []string{"conductor-deployment@*.socket", "conductor-deployment@*.service", "conductor-service@*.service", "conductor-deployment-config@*.service", "conductor-deployment-socket-config@*.service"}
 
 	for _, depl := range deployments {
 		patterns = append(patterns,
@@ -63,18 +64,24 @@ func PrintList(settings PrintListSettings) error {
 	var list_services []*service.Service
 	var list_depl []*Deployment
 	var list_service_status []dbus.UnitStatus
+	var list_socket_status []dbus.UnitStatus
 	var list_depl_status []dbus.UnitStatus
+	var list_depl_socket_config_status []dbus.UnitStatus
 	var list_depl_config_status []dbus.UnitStatus
 	var extra_service_cols []service.DisplayColumn
 	var extra_depl_cols []service.DisplayColumn
 
 	for _, depl := range deployments {
-		var unit, service_unit, config_unit dbus.UnitStatus
+		var unit, socket_unit, service_unit, config_unit, socket_config_unit dbus.UnitStatus
 		for _, u := range units {
-			if u.Name == DeploymentUnit(depl.DeploymentName) {
+			if u.Name == DeploymentServiceUnit(depl.DeploymentName) {
 				unit = u
+			} else if u.Name == DeploymentSocketUnit(depl.DeploymentName) {
+				socket_unit = u
 			} else if u.Name == DeploymentConfigUnit(depl.DeploymentName) {
 				config_unit = u
+			} else if u.Name == DeploymentSocketConfigUnit(depl.DeploymentName) {
+				socket_config_unit = u
 			} else if u.Name == service.ServiceUnit(depl.ServiceDir) {
 				service_unit = u
 			}
@@ -90,8 +97,10 @@ func PrintList(settings PrintListSettings) error {
 
 		list_depl = append(list_depl, depl)
 		list_service_status = append(list_service_status, service_unit)
+		list_socket_status = append(list_socket_status, socket_unit)
 		list_depl_status = append(list_depl_status, unit)
 		list_depl_config_status = append(list_depl_config_status, config_unit)
+		list_depl_socket_config_status = append(list_depl_socket_config_status, socket_config_unit)
 
 		displayServiceConfig := depl.DisplayServiceConfig
 		if depl.DisplayServiceDepConfig != nil {
@@ -124,7 +133,7 @@ func PrintList(settings PrintListSettings) error {
 			row = append(row, col.Name)
 		}
 	}
-	row = append(row, "Deployment", "Active", "State", "IP")
+	row = append(row, "Deployment", "State", "IP")
 	if settings.Unit {
 		row = append(row, "Unit")
 	}
@@ -141,8 +150,10 @@ func PrintList(settings PrintListSettings) error {
 	for i, depl := range list_depl {
 		s := list_services[i]
 		ss := list_service_status[i]
+		dss := list_socket_status[i]
 		ds := list_depl_status[i]
 		dcs := list_depl_config_status[i]
+		dscs := list_depl_socket_config_status[i]
 
 		row := []interface{}{}
 		d := map[string]interface{}{}
@@ -152,9 +163,15 @@ func PrintList(settings PrintListSettings) error {
 			d["Instance"] = s.InstanceName
 			d["ServiceEnabled"] = ss.LoadState
 			d["ServiceActive"] = ss.ActiveState
+			d["ServiceState"] = ss.SubState
 			if settings.ServiceUnit {
-				row = append(row, DeploymentUnit(depl.DeploymentName))
-				d["ServiceUnit"] = DeploymentUnit(depl.DeploymentName)
+				row = append(row, DeploymentServiceUnit(depl.DeploymentName))
+				d["MainUnit"] = depl.MainUnit()
+				d["ServiceUnit"] = DeploymentServiceUnit(depl.DeploymentName)
+				d["SocketActivated"] = depl.SocketActivated()
+				if depl.SocketActivated() {
+					d["SocketUnit"] = DeploymentSocketUnit(depl.DeploymentName)
+				}
 			}
 			dd := map[string]interface{}{}
 			for _, col := range extra_service_cols {
@@ -175,17 +192,42 @@ func PrintList(settings PrintListSettings) error {
 			ip_addr = depl.Pod.IPAddress
 		}
 		d["DeploymentName"] = depl.DeploymentName
-		d["Active"] = ds.ActiveState
-		d["State"] = ds.SubState
 		d["IP"] = ip_addr
-		row = append(row, depl.DeploymentName, ds.ActiveState, ds.SubState, ip_addr)
+		row = append(row, depl.DeploymentName)
+		if depl.SocketActivated() {
+			row = append(row, fmt.Sprintf("%s (%s)", dss.ActiveState, dss.SubState))
+			d["Active"] = dss.LoadState
+			d["State"] = dss.ActiveState
+			d["DaemonActive"] = ds.ActiveState
+			d["DaemonState"] = ds.SubState
+		} else {
+			row = append(row, fmt.Sprintf("%s (%s)", ds.ActiveState, ds.SubState))
+			d["Active"] = ds.ActiveState
+			d["State"] = ds.SubState
+		}
+		row = append(row, ip_addr)
 		if settings.Unit {
+			// if depl.SocketActivated() {
+			// 	row = append(row, DeploymentSocketConfigUnit(depl.DeploymentName))
+			// }
 			row = append(row, DeploymentConfigUnit(depl.DeploymentName))
-			d["Unit"] = ip_addr
+			d["Unit"] = DeploymentConfigUnit(depl.DeploymentName)
 		}
 		if settings.ConfigStatus {
-			row = append(row, fmt.Sprintf("%s (%s)", dcs.ActiveState, dcs.SubState))
-			d["ReverseProxy"] = ip_addr
+			// if depl.SocketActivated() {
+			// 	row = append(row, fmt.Sprintf("%s (%s)", dscs.ActiveState, dscs.SubState))
+			// }
+			if depl.SocketActivated() {
+				row = append(row, fmt.Sprintf("%s (%s)", dscs.ActiveState, dscs.SubState))
+				d["ReverseProxyActive"] = dscs.ActiveState
+				d["ReverseProxyState"] = dscs.SubState
+				d["DaemonReverseProxyActive"] = dcs.ActiveState
+				d["DaemonReverseProxyState"] = dcs.SubState
+			} else {
+				row = append(row, fmt.Sprintf("%s (%s)", dcs.ActiveState, dcs.SubState))
+				d["ReverseProxyActive"] = dcs.ActiveState
+				d["ReverseProxyState"] = dcs.SubState
+			}
 		}
 		dd := map[string]interface{}{}
 		for _, col := range extra_depl_cols {
@@ -270,16 +312,61 @@ func Print(depl_name string, settings PrintSettings) error {
 	tbl.AddRow("Service Path", depl.ServiceDir)
 	tbl.AddRow("Service Id", depl.ServiceId)
 
+	header := "Variables:"
+	for i, v := range depl.Vars() {
+		if i == 0 {
+			tbl.AddRow("", "")
+		}
+		tbl.AddRow(header, v)
+		header = ""
+	}
+
+	if depl.SocketActivated() && depl.Pod != nil {
+		if depl.Pod.HasSocketProxy() {
+			tbl.AddRow("", "")
+			tbl.AddRow("Socket proxy: ", strings.Join(depl.Pod.SocketProxy.CmdlineArgs(depl.Vars()), ""))
+		}
+		header = "Socket directives:"
+		for i, directive := range depl.Pod.ExpandedSocketDirectives(depl.Vars()) {
+			if i == 0 && !depl.Pod.HasSocketProxy() {
+				tbl.AddRow("", "")
+			}
+			tbl.AddRow(header, directive)
+			header = ""
+		}
+	}
+
 	tbl.Print()
 	fmt.Println()
 
-	configs, err := depl.ProxyConfig(ctx)
+	var configs caddy.ConfigItems
+	configs_errors := false
+
+	if depl.SocketActivated() {
+		cfgs, err := depl.ProxyConfig(ctx, "deployment-socket")
+		if err != nil {
+			fmt.Printf("Error getting socket proxy config: %v\n", err)
+			fmt.Println()
+			configs_errors = true
+		} else {
+			configs = append(configs, cfgs...)
+		}
+	}
+
+	cfgs, err := depl.ProxyConfig(ctx, "deployment")
 	if err != nil {
 		fmt.Printf("Error getting proxy config: %v\n", err)
 		fmt.Println()
-	} else if len(configs) == 0 {
-		fmt.Println("No reverse-proxy configuration")
-		fmt.Println()
+		configs_errors = true
+	} else {
+		configs = append(configs, cfgs...)
+	}
+
+	if len(configs) == 0 {
+		if !configs_errors {
+			fmt.Println("No reverse-proxy configuration")
+			fmt.Println()
+		}
 	} else {
 		caddy, err := caddy.NewClient(depl.CaddyLoadBalancer.ApiEndpoint, time.Duration(depl.CaddyLoadBalancer.Timeout))
 		if err != nil {
@@ -325,7 +412,9 @@ func Print(depl_name string, settings PrintSettings) error {
 		return err
 	}
 
-	units := utils.UnitStatusSpecs{
+	var units utils.UnitStatusSpecs
+
+	units = append(units,
 		&utils.UnitStatusSpec{
 			Name:    "Service",
 			Pattern: service.ServiceUnit(depl.ServiceDir),
@@ -334,15 +423,29 @@ func Print(depl_name string, settings PrintSettings) error {
 			Name:    "Reverse-Proxy Service Config",
 			Pattern: service.ServiceConfigUnit(depl.ServiceDir),
 		},
+	)
+	if depl.SocketActivated() {
+		units = append(units,
+			&utils.UnitStatusSpec{
+				Name:    "Deployment Socket",
+				Pattern: DeploymentSocketUnit(depl.DeploymentName),
+			},
+			&utils.UnitStatusSpec{
+				Name:    "Reverse-Proxy Deployment Socket Config",
+				Pattern: DeploymentSocketConfigUnit(depl.DeploymentName),
+			},
+		)
+	}
+	units = append(units,
 		&utils.UnitStatusSpec{
 			Name:    "Deployment",
-			Pattern: DeploymentUnit(depl.DeploymentName),
+			Pattern: DeploymentServiceUnit(depl.DeploymentName),
 		},
 		&utils.UnitStatusSpec{
 			Name:    "Reverse-Proxy Deployment Config",
 			Pattern: DeploymentConfigUnit(depl.DeploymentName),
 		},
-	}
+	)
 	if depl.Function != nil {
 		units = append(units, &utils.UnitStatusSpec{
 			Name:    "Function Socket",

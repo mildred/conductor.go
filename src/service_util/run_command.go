@@ -58,7 +58,7 @@ func PrepareCommand(command *ServiceCommand, cwd string, vars []string, cmd_name
 		return nil, err
 	}
 
-	args = append(command.Exec, args...)
+	args = append(command.ExpandedExec(vars), args...)
 
 	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Dir = cwd

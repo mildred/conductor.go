@@ -18,9 +18,7 @@ import (
 	. "github.com/mildred/conductor.go/src/service"
 )
 
-func Stop(service_name string) error {
-	ctx := context.Background()
-
+func Stop(ctx context.Context, service_name string) error {
 	//
 	// Notify stop in progress
 	//
@@ -89,7 +87,7 @@ func Stop(service_name string) error {
 
 		func() {
 			defer cancel()
-			deployment_public.Stop(d.DeploymentName)
+			deployment_public.Stop(ctx, d.DeploymentName)
 		}()
 	}
 
@@ -106,8 +104,8 @@ func Stop(service_name string) error {
 	return nil
 }
 
-func Cleanup(service_name string) error {
-	errs := Stop(service_name)
+func Cleanup(ctx context.Context, service_name string) error {
+	errs := Stop(ctx, service_name)
 
 	//
 	// Remove temp files if there is any

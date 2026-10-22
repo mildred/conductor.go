@@ -11,7 +11,6 @@ import (
 
 	"github.com/mildred/conductor.go/src/caddy"
 	"github.com/mildred/conductor.go/src/deployment_public"
-	"github.com/mildred/conductor.go/src/service_util"
 	"github.com/mildred/conductor.go/src/utils"
 
 	. "github.com/mildred/conductor.go/src/service"
@@ -55,24 +54,22 @@ func PrintService(name string, settings PrintSettings) error {
 		tbl.AddRow("Condition", "blocking")
 	}
 
+	header := "Variables:"
+	for i, v := range service.Vars() {
+		if i == 0 {
+			tbl.AddRow("", "")
+		}
+		tbl.AddRow(header, v)
+		header = ""
+	}
+
 	tbl.Print()
+	fmt.Println()
 
 	sd, err := utils.NewSystemdClient(ctx)
 	if err != nil {
 		return err
 	}
-
-	tbl = table.New("", "")
-	for _, col := range service.DisplayServiceConfig {
-		val, err := service.GetDisplayColumn(col, &service_util.ServiceCommandRunner{Service: service})
-		if err != nil {
-			return err
-		}
-
-		tbl.AddRow(col.Name, val)
-	}
-	tbl.Print()
-	fmt.Println()
 
 	units := utils.UnitStatusSpecs{
 		&utils.UnitStatusSpec{

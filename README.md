@@ -140,10 +140,18 @@ Additional variables for deployments only:
 
 - `CONDUCTOR_SERVICE_PART` name of the pod in the service
 - `CONDUCTOR_DEPLOYMENT` contains the deployment name
+- `CONDUCTOR_DEPLOYMENT_RUN_DIR` contains the runtime directory for the
+  deployment
 - `CONDUCTOR_DEPLOYMENT_UNIT`
 - `CONDUCTOR_DEPLOYMENT_CONFIG_UNIT`
 - `POD_NAME` contains the pod name
 - `POD_IP_ADDRESS` contains the pod IP address
+- `CONDUCTOR_POD_SOCKET_ACTIVATED` is `true` if the deployment is socket
+  activated, `false` otherwise
+
+The proxy config template also has access to `CONDUCTOR_PROXY_CONFIG` which can
+be `service`, `deployment-socket` (for socket activated deployments) or
+`deployment`
 
 ### Templates
 

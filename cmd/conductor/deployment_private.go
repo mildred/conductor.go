@@ -63,27 +63,39 @@ func cmd_private_deployment_cleanup() *flaggy.Subcommand {
 }
 
 func cmd_private_deployment_register() *flaggy.Subcommand {
+	var socket bool
 	var deployment_name string = "."
 
 	cmd := flaggy.NewSubcommand("register")
 	cmd.Description = "Register deployment to load balancer"
+	cmd.Bool(&socket, "", "socket", "Register the socket proxy config")
 	cmd.AddPositionalValue(&deployment_name, "deployment", 1, false, "The deployment, default to the current directory deployment")
 
 	cmd.CommandUsed = Hook(func() error {
-		return deployment_internal.CaddyRegister(true, deployment_name)
+		config_name := "deployment"
+		if socket {
+			config_name = "deployment-socket"
+		}
+		return deployment_internal.CaddyRegister(true, deployment_name, config_name)
 	})
 	return cmd
 }
 
 func cmd_private_deployment_deregister() *flaggy.Subcommand {
+	var socket bool
 	var deployment_name string = "."
 
 	cmd := flaggy.NewSubcommand("deregister")
 	cmd.Description = "Deregister deployment from load balancer"
+	cmd.Bool(&socket, "", "socket", "Register the socket proxy config")
 	cmd.AddPositionalValue(&deployment_name, "deployment", 1, false, "The deployment, default to the current directory deployment")
 
 	cmd.CommandUsed = Hook(func() error {
-		return deployment_internal.CaddyRegister(false, deployment_name)
+		config_name := "deployment"
+		if socket {
+			config_name = "deployment-socket"
+		}
+		return deployment_internal.CaddyRegister(false, deployment_name, config_name)
 	})
 	return cmd
 }

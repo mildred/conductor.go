@@ -182,7 +182,7 @@ func Cleanup(deployment_name_or_dir string) error {
 	return nil
 }
 
-func CaddyRegister(register bool, deployment_name_or_dir string) error {
+func CaddyRegister(register bool, deployment_name_or_dir, config_name string) error {
 	ctx := context.Background()
 	var prefix = "register"
 	if !register {
@@ -196,7 +196,7 @@ func CaddyRegister(register bool, deployment_name_or_dir string) error {
 
 	log.Printf("%s: Loaded deployment %s, service %s-%s\n", prefix, depl.DeploymentName, depl.AppName, depl.InstanceName)
 
-	configs, err := depl.ProxyConfig(ctx)
+	configs, err := depl.ProxyConfig(ctx, config_name)
 	if err != nil {
 		return fmt.Errorf("getting the proxy config, %v", err)
 	} else if len(configs) == 0 {

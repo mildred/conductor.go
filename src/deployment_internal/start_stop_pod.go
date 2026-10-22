@@ -4,17 +4,21 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"os/exec"
 	"path"
+	"strings"
 	"time"
 
+	"github.com/coreos/go-systemd/v22/activation"
 	"github.com/coreos/go-systemd/v22/daemon"
 
 	"github.com/mildred/conductor.go/src/tmpl"
 
 	. "github.com/mildred/conductor.go/src/deployment"
 	"github.com/mildred/conductor.go/src/dirs"
+	"github.com/mildred/conductor.go/src/utils"
 )
 
 // Note for deployment hooks, there could be different ways to hook:
@@ -27,6 +31,15 @@ import (
 // - or as a HTTP query to the pod IP address with a retry mechanism
 
 func StartPod(ctx context.Context, depl *Deployment) error {
+	var saved_listen_pid = os.Getenv("LISTEN_PID")
+	var saved_listen_fds = os.Getenv("LISTEN_FDS")
+	var saved_listen_fdnames = os.Getenv("LISTEN_FDNAMES")
+	if depl.Pod.HasSocketProxy() {
+		os.Unsetenv("LISTEN_PID")
+		os.Unsetenv("LISTEN_FDS")
+		os.Unsetenv("LISTEN_FDNAMES")
+	}
+
 	//
 	// Start the pod or fail
 	//
@@ -44,7 +57,7 @@ func StartPod(ctx context.Context, depl *Deployment) error {
 	//
 
 	log.Printf("start: Looking up pod IP address...\n")
-	addr, err := depl.FindPodIPAddress()
+	addr, err := depl.FindPodIPAddress(ctx)
 	if err != nil {
 		err = fmt.Errorf("failed to find pod IP address, %v", err)
 		SdNotifyOrLog(err.Error())
@@ -103,13 +116,117 @@ func StartPod(ctx context.Context, depl *Deployment) error {
 		return err
 	}
 
-	//
-	// Notify that the deployment is ready
-	//
+	if depl.Pod.HasSocketProxy() {
+		os.Setenv("LISTEN_PID", saved_listen_pid)
+		os.Setenv("LISTEN_FDS", saved_listen_fds)
+		os.Setenv("LISTEN_FDNAMES", saved_listen_fdnames)
 
-	log.Printf("start: Startup sequence completed\n")
-	_, err = daemon.SdNotify(false, daemon.SdNotifyReady)
-	return err
+		//
+		// Start systemd-socket-proxyd if socket activation must be performed through
+		// the proxy (the proxy is notifying READY=1)
+		//
+		// - Do not run proxy in background because then the proxy stopping will not
+		//   trigger a deployment service stop
+		// - Do not notify MAINPID to proxy because deployment service unit is
+		//   ExitType=cgroup
+		// - Wait on the proxy to stop then trigger a systemctl stop of the deployment
+		//   service unit (let the socket running)
+		// - Do not notify READY=1 as the proxy will do the notification for us
+		//
+
+		if depl.Pod.SocketProxy.WaitConnect {
+			target := depl.Pod.SocketProxy.ExpandedTarget(depl.Vars())
+			log.Printf("start: Wait service to be ready on %s\n", target)
+
+			var timeout time.Duration = 0
+			if depl.Pod.SocketProxy.WaitConnectTimeout != "" {
+				timeout, err = time.ParseDuration(depl.Pod.SocketProxy.WaitConnectTimeout)
+				if err != nil {
+					return err
+				}
+			}
+
+			err = utils.ExponentialSleep(ctx, 500*time.Millisecond, 1*time.Second, timeout, func(elapsed, delay time.Duration) error {
+				conn, err := net.DialTimeout(depl.Pod.SocketProxy.TargetProtocol(depl.Vars()), target, 500*time.Millisecond)
+				if err == nil {
+					conn.Close()
+					return utils.STOP
+				} else {
+					log.Printf("start: service not yet answering on %s (%v), will retry in %v...", target, err, delay)
+					return nil
+				}
+			})
+			if err != nil {
+				return err
+			}
+		}
+
+		log.Printf("start: Startup sequence completed\n")
+
+		log.Printf("start: Start the socket activation proxy\n")
+
+		// log.Println(strings.Join(os.Environ(), "\n"))
+		// for _, f := range activation.Files(false) {
+		// 	log.Printf("activation file: fd=%v", f.Fd())
+		// }
+		// fmt.Fprintf(os.Stderr, "+ ls -l /proc/self/fd /proc/%d/fd\n", os.Getpid())
+		// cmd = exec.CommandContext(ctx, "ls", "-l", "/proc/self/fd", fmt.Sprintf("/proc/%d/fd", os.Getpid()))
+		// cmd.Stdout = os.Stdout
+		// cmd.Stderr = os.Stderr
+		// cmd.ExtraFiles = activation.Files(false)
+		// err = cmd.Run()
+		// if err != nil {
+		// 	log.Printf("systemd-socket-proxyd failed: %v\n", err)
+		// 	SdNotifyOrLog(err.Error())
+		// 	return err
+		// }
+
+		args := depl.Pod.SocketProxy.CmdlineArgs(depl.Vars())
+		fmt.Fprintf(os.Stderr, "+ systemd-socket-proxyd %s\n", strings.Join(args, " "))
+		cmd = exec.CommandContext(ctx, "/bin/sh", append([]string{"-c", "export LISTEN_PID=$$; exec \"$0\" \"$@\"", "/usr/lib/systemd/systemd-socket-proxyd"}, args...)...)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		cmd.ExtraFiles = activation.Files(false)
+		err = cmd.Run()
+		if err != nil {
+			log.Printf("systemd-socket-proxyd failed: %v\n", err)
+			SdNotifyOrLog(err.Error())
+			return err
+		}
+
+		// Proxy stopped gracefully, it means that it wants the service to stop
+		// waiting for further activation
+
+		log.Printf("systemd-socket-proxyd stopped, triggering a deployment stop\n")
+		fmt.Fprintf(os.Stderr, "+ systemctl %s stop %q\n", dirs.SystemdModeFlag(), DeploymentServiceUnit(depl.DeploymentName))
+		cmd = exec.Command("systemctl", dirs.SystemdModeFlag(), "stop", DeploymentServiceUnit(depl.DeploymentName))
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		err = cmd.Run()
+		if err != nil {
+			err = fmt.Errorf("failed to add deployment to load-balancer, %v", err)
+			SdNotifyOrLog(err.Error())
+			return err
+		}
+
+	} else {
+
+		log.Printf("start: Startup sequence completed\n")
+
+		//
+		// Notify that the deployment is ready
+		//
+
+		log.Printf("start: Notify READY=1 and stop main process\n")
+		_, err = daemon.SdNotify(false, daemon.SdNotifyReady)
+		if err != nil {
+			return err
+		}
+
+	}
+
+	return nil
+
 }
 
 func StopPod(ctx context.Context, depl *Deployment) error {

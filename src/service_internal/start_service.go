@@ -140,6 +140,8 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 			return err
 		}
 
+		unit_name := depl.MainUnit()
+
 		depl_names = append(depl_names, depl.DeploymentName)
 
 		if seed.IsPod {
@@ -154,23 +156,23 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 					log.Printf("%s: Found started pod deployment %s", prefix, depl.DeploymentName)
 				} else if depl_status == "activating" || depl_status == "inactive" {
 					log.Printf("%s: Found %s pod deployment %s, waiting to be started...", prefix, depl_status, depl.DeploymentName)
-					fmt.Fprintf(os.Stderr, "+ systemctl %s start %q\n", dirs.SystemdModeFlag(), deployment.DeploymentUnit(depl.DeploymentName))
-					cmd := exec.Command("systemctl", dirs.SystemdModeFlag(), "start", deployment.DeploymentUnit(depl.DeploymentName))
+					fmt.Fprintf(os.Stderr, "+ systemctl %s start %q\n", dirs.SystemdModeFlag(), unit_name)
+					cmd := exec.Command("systemctl", dirs.SystemdModeFlag(), "start", unit_name)
 					cmd.Stdout = os.Stdout
 					cmd.Stderr = os.Stderr
 					err = cmd.Run()
-					started_services = append(started_services, deployment.DeploymentUnit(depl.DeploymentName))
+					started_services = append(started_services, unit_name)
 					if err != nil {
 						return err
 					}
 				} else {
 					log.Printf("%s: Starting new pod deployment %s...", prefix, depl.DeploymentName)
-					fmt.Fprintf(os.Stderr, "+ systemctl %s start %q\n", dirs.SystemdModeFlag(), deployment.DeploymentUnit(depl.DeploymentName))
-					cmd := exec.Command("systemctl", dirs.SystemdModeFlag(), "start", deployment.DeploymentUnit(depl.DeploymentName))
+					fmt.Fprintf(os.Stderr, "+ systemctl %s start %q\n", dirs.SystemdModeFlag(), unit_name)
+					cmd := exec.Command("systemctl", dirs.SystemdModeFlag(), "start", unit_name)
 					cmd.Stdout = os.Stdout
 					cmd.Stderr = os.Stderr
 					err = cmd.Run()
-					started_services = append(started_services, deployment.DeploymentUnit(depl.DeploymentName))
+					started_services = append(started_services, unit_name)
 					if err != nil {
 						return err
 					}

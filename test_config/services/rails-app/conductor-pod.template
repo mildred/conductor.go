@@ -1,0 +1,44 @@
+#!/bin/bash
+
+DOCKER_IMAGE="$image"
+DOCKER_TAG="${version:-$tag}"
+
+cat <<YAML
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    app: conductor-test-rails-app
+    on-boot: no-restart
+  name: $POD_NAME
+
+spec:
+
+  hostAliases:
+    - ip: "127.0.0.1"
+      hostnames:
+        - web
+
+  containers:
+
+    - name: web
+      image: ${DOCKER_IMAGE}:${DOCKER_TAG}
+      command: [ "bundle", "exec", "rails", "server" ]
+      env:
+        - name: PORT
+          value: 3000
+        - name: SECRET_KEY_BASE
+          value: 797c7b5e2b03f826c810f625770e571b48d0955a957f3a5917e8a7878b054a1f0b8166e2ca3b309e5837e194fe54d8c6db8342aa0b6ff3f8e31a011ffd1d4d23
+        - name: PUMA_DEBUG
+          value: 1
+        - name: LISTEN_FDS
+          value: 0
+        - name: PUMA_SKIP_SYSTEMD
+          value: 1
+      resources:
+        limits:
+          memory: "${limit_mem_web:-4Gi}"
+
+YAML
+

@@ -104,8 +104,11 @@ func ExecuteDecodedFunction(ctx context.Context, depl *Deployment, f *Deployment
 		return fmt.Errorf("Missing executable")
 	}
 
-	cmd := exec.CommandContext(ctx, f.Exec[0], f.Exec[1:]...)
-	cmd.Env = append(cmd.Environ(), depl.Vars()...)
+	vars := depl.Vars()
+	cmdline := f.ExpandedExec(vars)
+
+	cmd := exec.CommandContext(ctx, cmdline[0], cmdline[1:]...)
+	cmd.Env = append(cmd.Environ(), vars...)
 	cmd.Stdin = os.Stdin
 	cmd.Stderr = os.Stderr
 

@@ -74,13 +74,15 @@ func cmd_reload() *flaggy.Subcommand {
 
 func cmd_system_install() *flaggy.Subcommand {
 	var destdir string
+	var unlink bool
 
 	cmd := flaggy.NewSubcommand("install")
 	cmd.Description = "Install system services"
 	cmd.String(&destdir, "", "destdir", "Directory root where to install")
+	cmd.Bool(&unlink, "", "unlink", "Unlink destination before installing")
 
 	cmd.CommandUsed = Hook(func() error {
-		return install.Install(destdir)
+		return install.Install(destdir, unlink)
 	})
 
 	return cmd

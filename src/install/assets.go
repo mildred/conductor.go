@@ -43,6 +43,13 @@ var ConductorDeploymentConfigService string
 
 ///////////////////////////////////////////////////////////////////////////////
 
+var ConductorDeploymentSocketConfigServiceLocation = dirs.Join(dirs.ConfigHome, "systemd", dirs.SystemdMode(), "conductor-deployment-socket-config@.service")
+
+//go:embed files/conductor-deployment-socket-config@.service
+var ConductorDeploymentSocketConfigService string
+
+///////////////////////////////////////////////////////////////////////////////
+
 var ConductorFunctionSocketLocation = dirs.Join(dirs.ConfigHome, "systemd", dirs.SystemdMode(), "conductor-cgi-function@.socket")
 
 //go:embed files/conductor-cgi-function@.socket
