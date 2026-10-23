@@ -28,7 +28,7 @@ import (
 type StartOrReloadOpts struct {
 	ExitWhenStarted    bool
 	Restart            bool
-	WantsFresh         bool
+	ReuseDepl          bool
 	MaxDeploymentIndex int
 	StopTimeout        time.Duration
 	TermTimeout        time.Duration
@@ -134,7 +134,7 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 
 		depl, depl_status, err := deployment_util.StartNewOrExistingFromService(ctx, service, seed, deployment_util.StartNewOrExistingOpts{
 			MaxIndex:  opts.MaxDeploymentIndex,
-			WantFresh: opts.WantsFresh,
+			ReuseDepl: opts.ReuseDepl,
 		})
 		if err != nil {
 			return err

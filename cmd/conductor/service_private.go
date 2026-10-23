@@ -91,18 +91,19 @@ func cmd_private_service_start() *flaggy.Subcommand {
 
 func cmd_private_service_reload() *flaggy.Subcommand {
 	var service string
-	var fresh bool
+	var reuse bool
 	var max_deployment_index int = 10
 
 	cmd := flaggy.NewSubcommand("reload")
 	cmd.Description = "Reload a service"
 	cmd.AddPositionalValue(&service, "service", 1, true, "The service to act on")
-	cmd.Bool(&fresh, "", "fresh", "Do not reuse a started deployment is possible")
+	cmd.NegativeBool(&reuse, "", "fresh", "Do not reuse a started deployment is possible [default: true]")
+	cmd.Bool(&reuse, "", "reuse", "Reuse an existing deployment if possible [opposite of --fresh]")
 	cmd.Int(&max_deployment_index, "", "max-deployment-index", "Service will fail to deploy if it cannot find a deployment number below this")
 	cmd.CommandUsed = Hook(func() error {
 		return service_internal.StartOrReload(service, service_internal.StartOrReloadOpts{
 			Restart:            true,
-			WantsFresh:         fresh,
+			ReuseDepl:          reuse,
 			MaxDeploymentIndex: max_deployment_index,
 		})
 

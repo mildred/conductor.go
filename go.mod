@@ -31,6 +31,6 @@ require (
 	golang.org/x/sys v0.30.0 // indirect
 )
 
-replace github.com/integrii/flaggy => github.com/mildred/flaggy v0.0.0-20260619152111-a8a568e4993d
+replace github.com/integrii/flaggy => github.com/mildred/flaggy v0.0.0-20261023083048-92ca2ea7c944
 
 // replace github.com/integrii/flaggy => ../flaggy

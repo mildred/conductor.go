@@ -209,20 +209,21 @@ func cmd_service_rolling_restart() *flaggy.Subcommand {
 	var service string
 	var max_index int = 10
 	var stop_timeout, term_timeout time.Duration = 0, 5 * time.Second
-	var fresh bool = true
+	var reuse bool = false
 
 	cmd := flaggy.NewSubcommand("rolling-restart") // "SERVICE",
 	cmd.Description = "Restart a service by starting the new deployment before terminating the old one"
 	cmd.Int(&max_index, "", "max-deployment-index", "max deployment index to use before erroring out")
 	cmd.Duration(&stop_timeout, "", "stop-timeout", "max duration to wait for the stop to complete (0 to disable timeout)")
 	cmd.Duration(&term_timeout, "", "term-timeout", "max duration to wait for the SIGTERM to kill (0 to disable timeout)")
-	cmd.Bool(&fresh, "", "fresh", "Do not reuse a started deployment is possible [default: true]")
+	cmd.NegativeBool(&reuse, "", "fresh", "Do not reuse a started deployment is possible [default: true]")
+	cmd.Bool(&reuse, "", "reuse", "Reuse an existing deployment if possible [opposite of --fresh]")
 	cmd.AddPositionalValue(&service, "service", 1, true, "The service to act on")
 
 	cmd.CommandUsed = Hook(func() error {
 		return service_internal.StartOrReload(service, service_internal.StartOrReloadOpts{
 			Restart:            true,
-			WantsFresh:         fresh,
+			ReuseDepl:          reuse,
 			MaxDeploymentIndex: max_index,
 			StopTimeout:        stop_timeout,
 			TermTimeout:        term_timeout,
@@ -250,14 +251,15 @@ func cmd_service_restart() *flaggy.Subcommand {
 
 func cmd_service_deploy() *flaggy.Subcommand {
 	var service_def, depl_name, part string
-	var start, fresh bool
+	var start, reuse bool
 	var max_index int = 10
 
 	cmd := flaggy.NewSubcommand("deploy") // "SERVICE [DEPLOYMENT_NAME]",
 	cmd.Description = "Manually create a deployment, do not start it"
 	cmd.String(&part, "", "part", "Service part to deploy")
 	cmd.Bool(&start, "", "start", "Start deployment")
-	cmd.Bool(&fresh, "", "fresh", "Do not reuse a started deployment is possible")
+	cmd.NegativeBool(&reuse, "", "fresh", "Do not reuse a started deployment is possible [default: true]")
+	cmd.Bool(&reuse, "", "reuse", "Reuse an existing deployment if possible [opposite of --fresh]")
 	cmd.Int(&max_index, "", "max-deployment-index", "max deployment index to use before erroring out")
 	cmd.AddPositionalValue(&service_def, "service", 1, true, "The service to act on")
 	cmd.AddPositionalValue(&depl_name, "deployment-name", 2, false, "A deployment name")
@@ -279,7 +281,7 @@ func cmd_service_deploy() *flaggy.Subcommand {
 			ctx := context.Background()
 			depl, status, err := deployment_util.StartNewOrExistingFromService(ctx, service, seed, deployment_util.StartNewOrExistingOpts{
 				MaxIndex:  max_index,
-				WantFresh: fresh,
+				ReuseDepl: reuse,
 			})
 			if err != nil {
 				return err

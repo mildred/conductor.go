@@ -409,8 +409,8 @@ func Reload(definition_path string, opts ReloadOpts) error {
 
 	if !background {
 		return service_internal.StartOrReload(definition_path, service_internal.StartOrReloadOpts{
-			Restart:    true,
-			WantsFresh: false,
+			Restart:   true,
+			ReuseDepl: true,
 		})
 	}
 

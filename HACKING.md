@@ -45,3 +45,4 @@ Then run:
 In `go.mod` replace the version number with `latest` then run:
 
     go mod download github.com/integrii/flaggy
+

@@ -24,7 +24,7 @@ import (
 
 type StartNewOrExistingOpts struct {
 	MaxIndex  int
-	WantFresh bool
+	ReuseDepl bool
 }
 
 func StartNewOrExistingFromService(ctx context.Context, svc *service.Service, seed *DeploymentSeed, opts StartNewOrExistingOpts) (*Deployment, string, error) {
@@ -116,7 +116,7 @@ func StartNewOrExistingFromService(ctx context.Context, svc *service.Service, se
 			continue
 		}
 
-		log.Printf("[%q] Deployment %s (%s / %s) is considered to reuse", part, depl.DeploymentName, stat.ActiveState, stat.SubState)
+		log.Printf("[%q] Deployment %s (%s / %s) is considered for reuse", part, depl.DeploymentName, stat.ActiveState, stat.SubState)
 	}
 
 	//
@@ -126,7 +126,7 @@ func StartNewOrExistingFromService(ctx context.Context, svc *service.Service, se
 
 	var name string
 
-	if len(started_deployments) > 0 && !opts.WantFresh {
+	if len(started_deployments) > 0 && opts.ReuseDepl {
 		log.Printf("[%q] Found started deployment %q", part, started_deployments[0].DeploymentName)
 		return started_deployments[0], "active", nil
 	} else if len(starting_deployments) > 0 {
@@ -144,7 +144,7 @@ func StartNewOrExistingFromService(ctx context.Context, svc *service.Service, se
 
 		log.Printf("[%q] Create a new deployment %q", part, name)
 	} else {
-		if len(started_deployments) > 0 && opts.WantFresh {
+		if len(started_deployments) > 0 && !opts.ReuseDepl {
 			log.Printf("[%q] Requesting a fresh deployment, create new...", part)
 		} else {
 			log.Printf("[%q] No matching deployment, create new...", part)
