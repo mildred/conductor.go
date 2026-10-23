@@ -15,7 +15,7 @@ import (
 	. "github.com/mildred/conductor.go/src/deployment"
 )
 
-func StartSDActivateFunction(ctx context.Context, depl *Deployment, f *DeploymentFunction) error {
+func StartSDActivateFunction(ctx context.Context, depl *Deployment, f *DeploymentFunction, cmdline []string) error {
 	if f.NoResponseHeaders {
 		return fmt.Errorf("http-stdio function incompatible with no_response_headers")
 	}
@@ -38,5 +38,5 @@ func StartSDActivateFunction(ctx context.Context, depl *Deployment, f *Deploymen
 
 	env := append(os.Environ(), depl.Vars()...)
 
-	return syscall.Exec(f.Exec[0], f.Exec[1:], env)
+	return syscall.Exec(cmdline[0], cmdline[1:], env)
 }

@@ -35,7 +35,7 @@ func StartFunction(ctx context.Context, depl *Deployment, function bool) error {
 		}
 	case "sdactivate":
 		if function {
-			err = StartSDActivateFunction(ctx, depl, depl.Function)
+			err = StartSDActivateFunction(ctx, depl, depl.Function, depl.Function.ExpandedExec(depl.Vars()))
 			if err != nil {
 				return fmt.Errorf("while starting Systemd socket activated function, %v", err)
 			}
