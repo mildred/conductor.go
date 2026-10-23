@@ -11,9 +11,7 @@ import (
 	"path"
 	"slices"
 	"strings"
-	"time"
 
-	"github.com/mildred/conductor.go/src/deployment_util"
 	"github.com/mildred/conductor.go/src/dirs"
 	"github.com/mildred/conductor.go/src/service_internal"
 	"github.com/mildred/conductor.go/src/utils"
@@ -284,9 +282,16 @@ func Stop(definition_path string, opts StopOpts) error {
 		return err
 	}
 
-	service_dir, err := ServiceDirByName(definition_path)
+	svc, err := LoadServiceByName(definition_path)
 	if err != nil {
 		return err
+	}
+
+	if svc.IsStaticDeployment() {
+		err = service_internal.Stop(ctx, definition_path)
+		if err != nil {
+			return err
+		}
 	}
 
 	var args []string = []string{dirs.SystemdModeFlag(), "stop"}
@@ -302,21 +307,8 @@ func Stop(definition_path string, opts StopOpts) error {
 	errs := cmd.Run()
 
 	if opts.RemoveAllDeployments {
-		deployments, err := deployment_util.List(deployment_util.ListOpts{
-			FilterServiceDir: service_dir,
-		})
+		err := service_internal.RemoveAllDeployments(ctx, definition_path)
 		if err != nil {
-			return err
-		}
-
-		for _, d := range deployments {
-			fmt.Fprintf(os.Stderr, "+ conductor deployment rm %s\n", d.DeploymentName)
-			err := deployment_util.RemoveTimeout(ctx, d.DeploymentName, 5*time.Second, 5*time.Second)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "ERROR removing deployment %s: %v\n", d.DeploymentName, err)
-			} else {
-				fmt.Fprintf(os.Stderr, "SUCCESS removing deployment %s\n", d.DeploymentName)
-			}
 			errs = errors.Join(errs, err)
 		}
 	}

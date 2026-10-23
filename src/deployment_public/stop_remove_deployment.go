@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 
 	"github.com/taigrr/systemctl"
 	"github.com/taigrr/systemctl/properties"
@@ -41,7 +42,7 @@ func Stop(ctx0 context.Context, deployment_name string) error {
 		stop_units = append(stop_units, CGIFunctionSocketUnit(deployment_name))
 	}
 
-	fmt.Fprintf(os.Stderr, "+ systemctl %s stop %v\n", dirs.SystemdModeFlag(), stop_units)
+	fmt.Fprintf(os.Stderr, "+ systemctl %s stop %v\n", dirs.SystemdModeFlag(), strings.Join(stop_units, " "))
 	cmd := exec.CommandContext(ctx0, "systemctl", append([]string{dirs.SystemdModeFlag(), "stop"}, stop_units...)...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

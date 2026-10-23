@@ -2,6 +2,7 @@ package service_internal
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -113,6 +114,37 @@ func Cleanup(ctx context.Context, service_name string) error {
 
 	log.Printf("cleanup: Cleaning up...\n")
 
+	err := RemoveAllDeployments(ctx, service_name)
+	if err != nil {
+		errs = errors.Join(errs, err)
+	}
+
 	log.Printf("cleanup: Cleanup sequence completed\n")
 	return errs
+}
+
+func RemoveAllDeployments(ctx context.Context, service_name string) error {
+	service_dir, err := ServiceDirByName(service_name)
+	if err != nil {
+		return err
+	}
+
+	deployments, err := deployment_util.List(deployment_util.ListOpts{
+		FilterServiceDir: service_dir,
+	})
+	if err != nil {
+		return err
+	}
+
+	var errs error
+
+	for _, d := range deployments {
+		fmt.Fprintf(os.Stderr, "+ conductor deployment rm %s\n", d.DeploymentName)
+		err := deployment_util.RemoveTimeout(ctx, d.DeploymentName, 5*time.Second, 5*time.Second)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "ERROR removing deployment %s: %v\n", d.DeploymentName, err)
+		}
+		errs = errors.Join(errs, err)
+	}
+	return nil
 }
