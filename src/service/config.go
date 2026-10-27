@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alessio/shellescape"
 	"github.com/coreos/go-systemd/v22/unit"
 	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
 	"github.com/tailscale/hujson"
@@ -719,7 +720,14 @@ func (s *Service) EvaluateCondition(verbose bool) (condition bool, disable bool,
 }
 
 func (s *Service) RunHooks(ctx context.Context, when string, part string, vars []string, extend_timeout time.Duration) error {
-	for _, hook := range s.Hooks {
+	var executed = 0
+	var start_time = time.Now()
+
+	revert_log := utils.AddPrefix(log.Default(), "[hook %s] ", when)
+	defer revert_log()
+
+	for idx, hook := range s.Hooks {
+
 		if hook.When != when {
 			continue
 		}
@@ -751,7 +759,7 @@ func (s *Service) RunHooks(ctx context.Context, when string, part string, vars [
 
 			cmdline := hook.ExpandedExec(vars)
 
-			log.Printf("%s hook: Run %s\n", when, strings.Join(cmdline, " "))
+			log.Printf("[%d] Run %s\n", idx, shellescape.QuoteCommand(cmdline))
 			//  cmd := exec.Command("systemd-run",
 			//  	append([]string{
 			//  		"--scope",
@@ -766,11 +774,18 @@ func (s *Service) RunHooks(ctx context.Context, when string, part string, vars [
 			return cmd.Run()
 		}()
 		if err != nil {
-			log.Printf("%s hook: ERROR %v", when, err)
+			log.Printf("%s ERROR %v", when, err)
 			return err
 		}
+		executed = executed + 1
 	}
-	log.Printf("%s hook: Completed hooks\n", when)
+	if executed == 0 {
+		revert_log()
+		log.Printf("No hook executed for %s", when)
+	} else {
+		duration := time.Now().Sub(start_time)
+		log.Printf("[hook %s] Completed %d hooks in %v\n", when, executed, duration)
+	}
 	return nil
 }
 

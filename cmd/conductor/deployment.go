@@ -1,19 +1,19 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log"
 	"os"
-	"os/exec"
 	"path"
-	"strings"
 
 	"github.com/integrii/flaggy"
 
 	"github.com/mildred/conductor.go/src/deployment"
 	"github.com/mildred/conductor.go/src/deployment_public"
 	"github.com/mildred/conductor.go/src/dirs"
+	"github.com/mildred/conductor.go/src/utils"
 )
 
 func cmd_deployment_ls() *flaggy.Subcommand {
@@ -141,8 +141,7 @@ func cmd_deployment_systemd(cmd_name, descr string) func() *flaggy.Subcommand {
 				}
 			}
 
-			fmt.Fprintf(os.Stderr, "+ systemctl %s\n", strings.Join(cli, " "))
-			cmd := exec.Command("systemctl", cli...)
+			cmd := utils.LogCommand(context.Background(), "systemctl", cli...)
 			cmd.Stdin = os.Stdin
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr

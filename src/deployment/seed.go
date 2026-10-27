@@ -74,5 +74,9 @@ func SeedFromService(ctx context.Context, service *service.Service, part string)
 		return seed, nil
 	}
 
-	return nil, fmt.Errorf("Cannot find service pod or function %q", part)
+	if part == "" {
+		return nil, fmt.Errorf("Cannot find default service pod or function")
+	} else {
+		return nil, fmt.Errorf("Cannot find service pod or function %q", part)
+	}
 }

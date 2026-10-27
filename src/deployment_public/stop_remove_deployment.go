@@ -2,10 +2,7 @@ package deployment_public
 
 import (
 	"context"
-	"fmt"
 	"os"
-	"os/exec"
-	"strings"
 
 	"github.com/taigrr/systemctl"
 	"github.com/taigrr/systemctl/properties"
@@ -13,6 +10,7 @@ import (
 	. "github.com/mildred/conductor.go/src/deployment"
 	. "github.com/mildred/conductor.go/src/deployment_util"
 	"github.com/mildred/conductor.go/src/dirs"
+	"github.com/mildred/conductor.go/src/utils"
 )
 
 func Stop(ctx0 context.Context, deployment_name string) error {
@@ -42,11 +40,10 @@ func Stop(ctx0 context.Context, deployment_name string) error {
 		stop_units = append(stop_units, CGIFunctionSocketUnit(deployment_name))
 	}
 
-	fmt.Fprintf(os.Stderr, "+ systemctl %s stop %v\n", dirs.SystemdModeFlag(), strings.Join(stop_units, " "))
-	cmd := exec.CommandContext(ctx0, "systemctl", append([]string{dirs.SystemdModeFlag(), "stop"}, stop_units...)...)
+	cmd := utils.LogCommand(ctx0, "systemctl", append([]string{dirs.SystemdModeFlag(), "stop"}, stop_units...)...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	return utils.RunWithJournal(ctx0, cmd, stop_units...)
 }
 
 func Remove(deployment_name string) error {

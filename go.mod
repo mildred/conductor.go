@@ -4,6 +4,7 @@ go 1.23.0
 
 require (
 	github.com/PaesslerAG/jsonpath v0.1.1
+	github.com/alessio/shellescape v1.4.2
 	github.com/blang/semver v3.5.1+incompatible
 	github.com/coreos/go-systemd/v22 v22.5.0
 	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467

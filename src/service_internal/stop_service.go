@@ -20,6 +20,8 @@ import (
 )
 
 func Stop(ctx context.Context, service_name string) error {
+	defer utils.AddPrefix(log.Default(), "[%s] stop: ", service_name)()
+
 	//
 	// Notify stop in progress
 	//
@@ -52,7 +54,7 @@ func Stop(ctx context.Context, service_name string) error {
 	//
 
 	if mainpid := os.Getenv("MAINPID"); mainpid != "" {
-		log.Printf("stop: Sending SIGTERM to pid=%s\n", mainpid)
+		log.Printf("Sending SIGTERM to pid=%s\n", mainpid)
 		main_pid, err := strconv.ParseInt(mainpid, 10, 0)
 		if err != nil {
 			return fmt.Errorf("MAINPID=%s is not a PID number, %v", mainpid, err)
@@ -71,7 +73,7 @@ func Stop(ctx context.Context, service_name string) error {
 	// Stop all deployments
 	//
 
-	log.Printf("stop: Stopping all deployments...\n")
+	log.Printf("Stopping all deployments...\n")
 
 	deployments, err := deployment_util.List(deployment_util.ListOpts{
 		FilterServiceDir: service.BasePath,
@@ -81,7 +83,7 @@ func Stop(ctx context.Context, service_name string) error {
 	}
 
 	for _, d := range deployments {
-		log.Printf("stop: Stopping deployment %s...\n", d.DeploymentName)
+		log.Printf("Stopping deployment %s...\n", d.DeploymentName)
 
 		ctx1, cancel := context.WithCancel(ctx)
 		go utils.ExtendTimeout(ctx1, 60*time.Second)
@@ -101,7 +103,7 @@ func Stop(ctx context.Context, service_name string) error {
 		return err
 	}
 
-	log.Printf("stop: Stop sequence completed\n")
+	log.Printf("Stop sequence completed\n")
 	return nil
 }
 

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
 	"slices"
 	"strings"
 	"time"
@@ -29,31 +28,37 @@ type StartOrReloadOpts struct {
 	ExitWhenStarted    bool
 	Restart            bool
 	ReuseDepl          bool
+	NoLogPrefix        bool
 	MaxDeploymentIndex int
 	StopTimeout        time.Duration
 	TermTimeout        time.Duration
 }
 
-func stopServicesOrLog(prefix string, depl *deployment.Deployment, units []string) {
-	log.Printf("%s: Stop %s newest units after failure...", prefix, depl.DeploymentName)
+func stopServicesOrLog(ctx context.Context, depl *deployment.Deployment, units []string) {
+	log.Printf("Stop %s newest units after failure...", depl.DeploymentName)
 	for _, unit := range units {
-		fmt.Fprintf(os.Stderr, "+ systemctl %s stop %q\n", dirs.SystemdModeFlag(), unit)
-		cmd := exec.Command("systemctl", dirs.SystemdModeFlag(), "stop", unit)
+		cmd := utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "stop", unit)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
-		err := cmd.Run()
+		err := utils.RunWithJournal(ctx, cmd, unit)
 		if err != nil {
-			log.Printf("%s: ERROR %v", prefix, err)
+			log.Printf("ERROR %v", err)
 		}
 	}
 }
 
 func StartOrReload(service_name string, opts StartOrReloadOpts) error {
+	if !opts.NoLogPrefix && opts.Restart {
+		defer utils.AddPrefix(log.Default(), "[%s] restart: ", service_name)()
+	} else if !opts.NoLogPrefix {
+		defer utils.AddPrefix(log.Default(), "[%s] start: ", service_name)()
+	}
+
 	if opts.MaxDeploymentIndex == 0 {
 		opts.MaxDeploymentIndex = 10
 	}
 
-	var prefix string = "start"
+	var action_name string = "start"
 	var err error
 	var ctx = context.Background()
 	var deferred func() = func() {}
@@ -63,7 +68,7 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 	//
 
 	if opts.Restart {
-		prefix = "restart"
+		action_name = "restart"
 
 		var notified bool
 		notified, err = daemon.SdNotify(false, daemon.SdNotifyStopping)
@@ -125,7 +130,11 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 
 	for _, part_name := range parts {
 
-		log.Printf("%s: Loaded service, configure socket for part %q...\n", prefix, part_name)
+		if part_name == "" {
+			log.Printf("Loaded service, configure socket for default part...\n")
+		} else {
+			log.Printf("Loaded service, configure socket for part %q...\n", part_name)
+		}
 
 		seed, err := deployment.SeedFromService(ctx, service, part_name)
 		if err != nil {
@@ -153,25 +162,23 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 				defer cancel()
 
 				if depl_status == "active" {
-					log.Printf("%s: Found started pod deployment %s", prefix, depl.DeploymentName)
+					log.Printf("Found started pod deployment %s", depl.DeploymentName)
 				} else if depl_status == "activating" || depl_status == "inactive" {
-					log.Printf("%s: Found %s pod deployment %s, waiting to be started...", prefix, depl_status, depl.DeploymentName)
-					fmt.Fprintf(os.Stderr, "+ systemctl %s start %q\n", dirs.SystemdModeFlag(), unit_name)
-					cmd := exec.Command("systemctl", dirs.SystemdModeFlag(), "start", unit_name)
+					log.Printf("Found %s pod deployment %s, waiting to be started...", depl_status, depl.DeploymentName)
+					cmd := utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "start", unit_name)
 					cmd.Stdout = os.Stdout
 					cmd.Stderr = os.Stderr
-					err = cmd.Run()
+					err = utils.RunWithJournal(ctx, cmd, unit_name)
 					started_services = append(started_services, unit_name)
 					if err != nil {
 						return err
 					}
 				} else {
-					log.Printf("%s: Starting new pod deployment %s...", prefix, depl.DeploymentName)
-					fmt.Fprintf(os.Stderr, "+ systemctl %s start %q\n", dirs.SystemdModeFlag(), unit_name)
-					cmd := exec.Command("systemctl", dirs.SystemdModeFlag(), "start", unit_name)
+					log.Printf("Starting new pod deployment %s...", depl.DeploymentName)
+					cmd := utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "start", unit_name)
 					cmd.Stdout = os.Stdout
 					cmd.Stderr = os.Stderr
-					err = cmd.Run()
+					err = utils.RunWithJournal(ctx, cmd, unit_name)
 					started_services = append(started_services, unit_name)
 					if err != nil {
 						return err
@@ -181,22 +188,21 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 				return nil
 			}()
 			if err != nil {
-				stopServicesOrLog(prefix, depl, started_services)
+				stopServicesOrLog(ctx, depl, started_services)
 				started_services = nil
 				return err
 			}
 
 		} else if seed.IsFunction {
 
-			log.Printf("%s: Starting new CGI function deployment %s...", prefix, depl.DeploymentName)
-			fmt.Fprintf(os.Stderr, "+ systemctl %s start %q\n", dirs.SystemdModeFlag(), deployment.CGIFunctionSocketUnit(depl.DeploymentName))
-			cmd := exec.Command("systemctl", dirs.SystemdModeFlag(), "start", deployment.CGIFunctionSocketUnit(depl.DeploymentName))
+			log.Printf("Starting new CGI function deployment %s...", depl.DeploymentName)
+			cmd := utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "start", deployment.CGIFunctionSocketUnit(depl.DeploymentName))
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
-			err = cmd.Run()
+			err = utils.RunWithJournal(ctx, cmd, deployment.CGIFunctionSocketUnit(depl.DeploymentName))
 			started_services = append(started_services, deployment.CGIFunctionSocketUnit(depl.DeploymentName))
 			if err != nil {
-				stopServicesOrLog(prefix, depl, started_services)
+				stopServicesOrLog(ctx, depl, started_services)
 				started_services = nil
 				return err
 			}
@@ -214,7 +220,7 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 	// Stop all deployments that are of older config version
 	//
 
-	log.Printf("%s: Removing obsolete deployments (except %v)...\n", prefix, depl_names)
+	log.Printf("Removing obsolete deployments (except %v)...\n", depl_names)
 
 	deployments, err := deployment_util.List(deployment_util.ListOpts{
 		FilterServiceDir: service.BasePath,
@@ -228,7 +234,7 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 			continue
 		}
 
-		log.Printf("%s: Removing deployment %s...\n", prefix, d.DeploymentName)
+		log.Printf("Removing deployment %s...\n", d.DeploymentName)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		go utils.ExtendTimeout(ctx, 60*time.Second)
@@ -238,7 +244,7 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 			return deployment_util.RemoveTimeout(ctx, d.DeploymentName, opts.StopTimeout, opts.TermTimeout)
 		}()
 		if err != nil {
-			log.Printf("%s: ERROR removing deployment %s (but continuing): %v", prefix, d.DeploymentName, err)
+			log.Printf("ERROR removing deployment %s (but continuing): %v", d.DeploymentName, err)
 		}
 	}
 
@@ -333,10 +339,14 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 
 		if !all_parts_ok {
 			for part_name, part_id := range part_ids {
-				diagnostics = append([]string{fmt.Sprintf("service part %q has id %q", part_name, part_id)}, diagnostics...)
+				if part_name == "" {
+					diagnostics = append([]string{fmt.Sprintf("service default part has id %q", part_id)}, diagnostics...)
+				} else {
+					diagnostics = append([]string{fmt.Sprintf("service part %q has id %q", part_name, part_id)}, diagnostics...)
+				}
 			}
 			return fmt.Errorf("deployment has gone missing for service %q or service configuration changed during %s:\n  - service id: %q\n  - %s",
-				service_name, prefix, service.Id, strings.Join(diagnostics, "\n  - "))
+				service_name, action_name, service.Id, strings.Join(diagnostics, "\n  - "))
 		}
 
 		time.Sleep(30 * time.Second)
@@ -346,9 +356,10 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 var LookupPaths []string = dirs.MultiJoin("services", append(append([]string{dirs.SelfRuntimeDir}, dirs.SelfConfigDirs...), dirs.SelfDataDirs...)...)
 
 func CaddyRegister(ctx context.Context, register bool, service_name string) error {
-	var prefix = "register"
-	if !register {
-		prefix = "deregister"
+	if register {
+		defer utils.ReplacePrefix(log.Default(), "[%s] register: ", service_name)()
+	} else {
+		defer utils.ReplacePrefix(log.Default(), "[%s] deregister: ", service_name)()
 	}
 
 	service, err := LoadServiceByName(service_name)
@@ -369,9 +380,9 @@ func CaddyRegister(ctx context.Context, register bool, service_name string) erro
 	}
 
 	if register {
-		log.Printf("register: Registering service...")
+		log.Printf("Registering service...")
 	} else {
-		log.Printf("deregister: Deregistering service...")
+		log.Printf("Deregistering service...")
 	}
 
 	err = caddy.Register(ctx, register, configs)
@@ -379,7 +390,7 @@ func CaddyRegister(ctx context.Context, register bool, service_name string) erro
 		return err
 	}
 
-	log.Printf("%s: Completed", prefix)
+	log.Printf("Completed")
 	return nil
 }
 

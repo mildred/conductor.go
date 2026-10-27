@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
 	"time"
 
 	"github.com/taigrr/systemctl"
 	"github.com/taigrr/systemctl/properties"
 
 	"github.com/mildred/conductor.go/src/dirs"
+	"github.com/mildred/conductor.go/src/utils"
 	_ "github.com/mildred/conductor.go/src/utils"
 
 	. "github.com/mildred/conductor.go/src/deployment"
@@ -81,14 +81,13 @@ func RemoveTimeout(ctx0 context.Context, deployment_name string, timeout, term_t
 		defer cancel()
 	}
 
-	fmt.Fprintf(os.Stderr, "+ systemctl %s stop %s %s\n", dirs.SystemdModeFlag(), DeploymentSocketUnit(deployment_name), DeploymentServiceUnit(deployment_name))
-	cmd := exec.CommandContext(ctx, "systemctl", dirs.SystemdModeFlag(), "stop", DeploymentSocketUnit(deployment_name), DeploymentServiceUnit(deployment_name))
+	cmd := utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "stop", DeploymentSocketUnit(deployment_name), DeploymentServiceUnit(deployment_name))
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if !has_socket {
 		cmd.Stderr = nil
 	}
-	err = cmd.Run()
+	err = utils.RunWithJournal(ctx, cmd, DeploymentSocketUnit(deployment_name), DeploymentServiceUnit(deployment_name))
 	if err != nil && ctx.Err() == nil && has_socket {
 		return err
 	}
@@ -99,11 +98,10 @@ func RemoveTimeout(ctx0 context.Context, deployment_name string, timeout, term_t
 		defer cancel() // should not be needed but else golang prints a warning
 	}
 
-	fmt.Fprintf(os.Stderr, "+ systemctl %s stop %s\n", dirs.SystemdModeFlag(), DeploymentServiceUnit(deployment_name))
-	cmd = exec.CommandContext(ctx, "systemctl", dirs.SystemdModeFlag(), "stop", DeploymentServiceUnit(deployment_name))
+	cmd = utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "stop", DeploymentServiceUnit(deployment_name))
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	err = cmd.Run()
+	err = utils.RunWithJournal(ctx, cmd, DeploymentServiceUnit(deployment_name))
 	if err != nil && ctx.Err() == nil && (has_deployment || has_socket) {
 		return err
 	}
@@ -116,28 +114,25 @@ func RemoveTimeout(ctx0 context.Context, deployment_name string, timeout, term_t
 		ctx, cancel = context.WithTimeout(ctx0, term_timeout)
 		defer cancel() // should not be needed but else golang prints a warning
 
-		fmt.Fprintf(os.Stderr, "+ systemctl %s kill %s\n", dirs.SystemdModeFlag(), DeploymentServiceUnit(deployment_name))
-		cmd := exec.CommandContext(ctx, "systemctl", dirs.SystemdModeFlag(), "kill", DeploymentServiceUnit(deployment_name))
+		cmd := utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "kill", DeploymentServiceUnit(deployment_name))
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
-		err := cmd.Run()
+		err := utils.RunWithJournal(ctx, cmd, DeploymentServiceUnit(deployment_name))
 		if err != nil && ctx.Err() == nil && has_deployment {
 			return err
 		}
 	}
 
 	if failed_to_stop {
-		fmt.Fprintf(os.Stderr, "+ systemctl %s kill --signal=SIGKILL %q\n", dirs.SystemdModeFlag(), DeploymentServiceUnit(deployment_name))
-		cmd := exec.Command("systemctl", dirs.SystemdModeFlag(), "kill", "--signal=SIGKILL", DeploymentServiceUnit(deployment_name))
+		cmd := utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "kill", "--signal=SIGKILL", DeploymentServiceUnit(deployment_name))
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
-		err := cmd.Run()
+		err := utils.RunWithJournal(ctx, cmd, DeploymentServiceUnit(deployment_name))
 		if err != nil && has_deployment {
 			log.Printf("Error killing: %v", err)
 		}
 
-		fmt.Fprintf(os.Stderr, "+ systemctl %s reset-failed %q\n", dirs.SystemdModeFlag(), DeploymentServiceUnit(deployment_name))
-		cmd = exec.Command("systemctl", dirs.SystemdModeFlag(), "reset-failed", DeploymentServiceUnit(deployment_name))
+		cmd = utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "reset-failed", DeploymentServiceUnit(deployment_name))
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		err = cmd.Run()
@@ -146,38 +141,35 @@ func RemoveTimeout(ctx0 context.Context, deployment_name string, timeout, term_t
 		}
 	}
 
-	fmt.Fprintf(os.Stderr, "+ systemctl %s stop %s\n", dirs.SystemdModeFlag(), DeploymentConfigUnit(deployment_name))
-	cmd = exec.Command("systemctl", dirs.SystemdModeFlag(), "stop", DeploymentConfigUnit(deployment_name))
+	cmd = utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "stop", DeploymentConfigUnit(deployment_name))
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if !has_config {
 		cmd.Stderr = nil
 	}
-	err = cmd.Run()
+	err = utils.RunWithJournal(ctx, cmd, DeploymentConfigUnit(deployment_name))
 	if err != nil && has_config {
 		return err
 	}
 
-	fmt.Fprintf(os.Stderr, "+ systemctl %s stop %s\n", dirs.SystemdModeFlag(), DeploymentSocketConfigUnit(deployment_name))
-	cmd = exec.Command("systemctl", dirs.SystemdModeFlag(), "stop", DeploymentSocketConfigUnit(deployment_name))
+	cmd = utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "stop", DeploymentSocketConfigUnit(deployment_name))
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if !has_socket_config {
 		cmd.Stderr = nil
 	}
-	err = cmd.Run()
+	err = utils.RunWithJournal(ctx, cmd, DeploymentSocketConfigUnit(deployment_name))
 	if err != nil && has_socket_config {
 		return err
 	}
 
-	fmt.Fprintf(os.Stderr, "+ systemctl %s stop %s\n", dirs.SystemdModeFlag(), CGIFunctionSocketUnit(deployment_name))
-	cmd = exec.Command("systemctl", dirs.SystemdModeFlag(), "stop", CGIFunctionSocketUnit(deployment_name))
+	cmd = utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "stop", CGIFunctionSocketUnit(deployment_name))
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if !has_cgi_function {
 		cmd.Stderr = nil
 	}
-	err = cmd.Run()
+	err = utils.RunWithJournal(ctx, cmd, CGIFunctionSocketUnit(deployment_name))
 	if err != nil && has_cgi_function {
 		return err
 	}

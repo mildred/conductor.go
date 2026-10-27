@@ -27,6 +27,7 @@ type ConfigItem struct {
 	DeprecatedId string          `json:"id"`
 	MountPoint   string          `json:"mount_point"`
 	Config       json.RawMessage `json:"config"`
+	ConfigDown   json.RawMessage `json:"config_down,omitempty"`
 	RegisterOnly bool            `json:"register_only"`
 	Id           string          `json:"-"`
 }
@@ -66,13 +67,17 @@ func (client *CaddyClient) Register(ctx context.Context, register bool, configs 
 
 		if cfgId == "" {
 			if register {
-				err = client.registerScalar(ctx, &num, config)
+				err = client.registerScalar(ctx, &num, config, config.Config)
+			} else if len(config.ConfigDown) > 0 {
+				err = client.registerScalar(ctx, &num, config, config.ConfigDown)
 			} else {
 				err = client.deregisterScalar(ctx, &num, config)
 			}
 		} else {
 			if register {
-				err = client.registerAggregate(ctx, &num, config, cfgId)
+				err = client.registerAggregate(ctx, &num, config, config.Config, cfgId)
+			} else if len(config.ConfigDown) > 0 {
+				err = client.registerAggregate(ctx, &num, config, config.ConfigDown, cfgId)
 			} else {
 				err = client.deregisterAggregate(ctx, &num, config, cfgId)
 			}
@@ -91,7 +96,7 @@ func (client *CaddyClient) Register(ctx context.Context, register bool, configs 
 	return nil
 }
 
-func (client *CaddyClient) registerScalar(ctx context.Context, num *int, config *ConfigItem) error {
+func (client *CaddyClient) registerScalar(ctx context.Context, num *int, config *ConfigItem, data json.RawMessage) error {
 	for {
 		res, actualConfig, present, etag, err := client.getConfig(ctx, config.MountPoint)
 		if err != nil {
@@ -110,9 +115,9 @@ func (client *CaddyClient) registerScalar(ctx context.Context, num *int, config 
 		}
 
 		var scalar interface{}
-		err = json.Unmarshal(config.Config, &scalar)
+		err = json.Unmarshal(data, &scalar)
 		if err != nil {
-			return fmt.Errorf("cannot unmarshal scalar config %s, %v", string(config.Config), err)
+			return fmt.Errorf("cannot unmarshal scalar config %s, %v", string(data), err)
 		}
 
 		var array []interface{}
@@ -125,9 +130,9 @@ func (client *CaddyClient) registerScalar(ctx context.Context, num *int, config 
 			return nil // scalar already present
 		}
 
-		res, retry, err := client.postConfig(ctx, etag, config.MountPoint, config.Config)
+		res, retry, err := client.postConfig(ctx, etag, config.MountPoint, data)
 		if res != nil {
-			log.Printf("caddy: POST /id/%s (create scalar %s): %v\n", config.MountPoint, string(config.Config), res.Status)
+			log.Printf("caddy: POST /id/%s (create scalar %s): %v\n", config.MountPoint, string(data), res.Status)
 		}
 		if err != nil {
 			return err
@@ -198,7 +203,7 @@ func (client *CaddyClient) deregisterScalar(ctx context.Context, num *int, confi
 	}
 }
 
-func (client *CaddyClient) registerAggregate(ctx context.Context, num *int, config *ConfigItem, cfgId string) error {
+func (client *CaddyClient) registerAggregate(ctx context.Context, num *int, config *ConfigItem, data json.RawMessage, cfgId string) error {
 	for {
 		res, _, present, etag, err := client.getConfig(ctx, cfgId)
 		if err != nil {
@@ -210,12 +215,12 @@ func (client *CaddyClient) registerAggregate(ctx context.Context, num *int, conf
 
 		var retry bool
 		if present {
-			res, retry, err = client.patchConfig(ctx, etag, cfgId, config.Config)
+			res, retry, err = client.patchConfig(ctx, etag, cfgId, data)
 			if res != nil {
 				log.Printf("caddy: PATCH /id/%s (replaces %s): %v\n", cfgId, cfgId, res.Status)
 			}
 		} else {
-			res, retry, err = client.postConfig(ctx, etag, config.MountPoint, config.Config)
+			res, retry, err = client.postConfig(ctx, etag, config.MountPoint, data)
 			if res != nil {
 				log.Printf("caddy: POST /id/%s (creates %s): %v\n", config.MountPoint, cfgId, res.Status)
 			}
@@ -236,6 +241,9 @@ func (client *CaddyClient) deregisterAggregate(ctx context.Context, num *int, co
 	res, _, err := client.deleteConfig(ctx, "", cfgId)
 	if res != nil {
 		log.Printf("caddy: DELETE /id/%s/ (delete in %s): %v\n", cfgId, config.MountPoint, res.Status)
+		if res.StatusCode == 404 {
+			err = nil
+		}
 	}
 	if err != nil {
 		return err
@@ -263,18 +271,38 @@ func (configs ConfigItems) SetDefaults() error {
 
 func (config *ConfigItem) GetId() (string, error) {
 	if config.IsScalar() {
+		if len(config.ConfigDown) > 0 && !JSONType(config.ConfigDown).Scalar {
+			return "", fmt.Errorf("configuration snippet has scalar config (%s) and non scalar config_down (%s)", string(config.Config), string(config.ConfigDown))
+		}
 		return "", nil
+	}
+
+	if len(config.ConfigDown) > 0 && JSONType(config.ConfigDown).Scalar {
+		return "", fmt.Errorf("configuration snippet has non scalar config (%s) and scalar config_down (%s)", string(config.Config), string(config.ConfigDown))
 	}
 
 	var snip = &ConfigSnip{}
 	err := json.Unmarshal(config.Config, snip)
 	if err != nil {
-		return "", fmt.Errorf("failed to get @id from: %v", string(config.Config))
+		return "", fmt.Errorf("failed to get @id from config: %v", string(config.Config))
 	} else if snip.Id == "" {
 		return "", fmt.Errorf("missing @id in config: %v", string(config.Config))
 	}
 
-	return snip.Id, nil
+	id := snip.Id
+
+	if len(config.ConfigDown) > 0 {
+		err = json.Unmarshal(config.Config, snip)
+		if err != nil {
+			return "", fmt.Errorf("failed to get @id from config_down: %v", string(config.ConfigDown))
+		} else if snip.Id == "" {
+			return "", fmt.Errorf("missing @id in config_down: %v", string(config.ConfigDown))
+		} else if snip.Id != id {
+			return "", fmt.Errorf("config id (%s) and config_down id (%s) are mismatching: %v", id, snip.Id, string(config.ConfigDown))
+		}
+	}
+
+	return id, nil
 }
 
 func (cfg *ConfigItem) IsScalar() bool {

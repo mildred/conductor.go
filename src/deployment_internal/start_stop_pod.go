@@ -31,6 +31,8 @@ import (
 // - or as a HTTP query to the pod IP address with a retry mechanism
 
 func StartPod(ctx context.Context, depl *Deployment) error {
+	defer utils.AddPrefix(log.Default(), "start pod: ")()
+
 	var saved_listen_pid = os.Getenv("LISTEN_PID")
 	var saved_listen_fds = os.Getenv("LISTEN_FDS")
 	var saved_listen_fdnames = os.Getenv("LISTEN_FDNAMES")
@@ -44,7 +46,7 @@ func StartPod(ctx context.Context, depl *Deployment) error {
 	// Start the pod or fail
 	//
 
-	log.Printf("start: Start the deployment pod\n")
+	log.Printf("Start the deployment pod\n")
 	err := depl.StartStopPod(true, ".")
 	if err != nil {
 		err = fmt.Errorf("failed to start deployment pod, %v", err)
@@ -56,14 +58,14 @@ func StartPod(ctx context.Context, depl *Deployment) error {
 	// Find the pod IP address, add it to config
 	//
 
-	log.Printf("start: Looking up pod IP address...\n")
+	log.Printf("Looking up pod IP address...\n")
 	addr, err := depl.FindPodIPAddress(ctx)
 	if err != nil {
 		err = fmt.Errorf("failed to find pod IP address, %v", err)
 		SdNotifyOrLog(err.Error())
 		return err
 	}
-	log.Printf("start: Found pod IP address: %s\n", addr)
+	log.Printf("Found pod IP address: %s\n", addr)
 
 	depl.Pod.IPAddress = addr
 
@@ -91,10 +93,10 @@ func StartPod(ctx context.Context, depl *Deployment) error {
 		return err
 	}
 
-	log.Printf("start: executing post-start hooks...")
+	log.Printf("executing post-start hooks...")
 	err = depl.RunHooks(ctx, "post-start", depl.PartName, depl.Vars(), 60*time.Second)
 	if err != nil {
-		log.Printf("start: post-start hooks failed, continuing...")
+		log.Printf("post-start hooks failed, continuing...")
 	}
 
 	//
@@ -104,12 +106,11 @@ func StartPod(ctx context.Context, depl *Deployment) error {
 	// configuration for the service and add the IP address
 	//
 
-	log.Printf("start: Adding deployment to load-balancer...\n")
-	fmt.Fprintf(os.Stderr, "+ systemctl %s start %q\n", dirs.SystemdModeFlag(), DeploymentConfigUnit(depl.DeploymentName))
-	cmd := exec.Command("systemctl", dirs.SystemdModeFlag(), "start", DeploymentConfigUnit(depl.DeploymentName))
+	log.Printf("Adding deployment to load-balancer...\n")
+	cmd := utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "start", DeploymentConfigUnit(depl.DeploymentName))
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	err = cmd.Run()
+	err = utils.RunWithJournal(ctx, cmd, DeploymentConfigUnit(depl.DeploymentName))
 	if err != nil {
 		err = fmt.Errorf("failed to add deployment to load-balancer, %v", err)
 		SdNotifyOrLog(err.Error())
@@ -136,7 +137,7 @@ func StartPod(ctx context.Context, depl *Deployment) error {
 
 		if depl.Pod.SocketProxy.WaitConnect {
 			target := depl.Pod.SocketProxy.ExpandedTarget(depl.Vars())
-			log.Printf("start: Wait service to be ready on %s\n", target)
+			log.Printf("Wait service to be ready on %s\n", target)
 
 			var timeout time.Duration = 0
 			if depl.Pod.SocketProxy.WaitConnectTimeout != "" {
@@ -152,7 +153,7 @@ func StartPod(ctx context.Context, depl *Deployment) error {
 					conn.Close()
 					return utils.STOP
 				} else {
-					log.Printf("start: service not yet answering on %s (%v), will retry in %v...", target, err, delay)
+					log.Printf("service not yet answering on %s (%v), will retry in %v...", target, err, delay)
 					return nil
 				}
 			})
@@ -161,9 +162,9 @@ func StartPod(ctx context.Context, depl *Deployment) error {
 			}
 		}
 
-		log.Printf("start: Startup sequence completed\n")
+		log.Printf("Startup sequence completed\n")
 
-		log.Printf("start: Start the socket activation proxy\n")
+		log.Printf("Start the socket activation proxy\n")
 
 		// log.Println(strings.Join(os.Environ(), "\n"))
 		// for _, f := range activation.Files(false) {
@@ -198,11 +199,10 @@ func StartPod(ctx context.Context, depl *Deployment) error {
 		// waiting for further activation
 
 		log.Printf("systemd-socket-proxyd stopped, triggering a deployment stop\n")
-		fmt.Fprintf(os.Stderr, "+ systemctl %s stop %q\n", dirs.SystemdModeFlag(), DeploymentServiceUnit(depl.DeploymentName))
-		cmd = exec.Command("systemctl", dirs.SystemdModeFlag(), "stop", DeploymentServiceUnit(depl.DeploymentName))
+		cmd = utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "stop", DeploymentServiceUnit(depl.DeploymentName))
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
-		err = cmd.Run()
+		err = utils.RunWithJournal(ctx, cmd, DeploymentServiceUnit(depl.DeploymentName))
 		if err != nil {
 			err = fmt.Errorf("failed to add deployment to load-balancer, %v", err)
 			SdNotifyOrLog(err.Error())
@@ -211,13 +211,13 @@ func StartPod(ctx context.Context, depl *Deployment) error {
 
 	} else {
 
-		log.Printf("start: Startup sequence completed\n")
+		log.Printf("Startup sequence completed\n")
 
 		//
 		// Notify that the deployment is ready
 		//
 
-		log.Printf("start: Notify READY=1 and stop main process\n")
+		log.Printf("Notify READY=1 and stop main process\n")
 		_, err = daemon.SdNotify(false, daemon.SdNotifyReady)
 		if err != nil {
 			return err
@@ -230,6 +230,8 @@ func StartPod(ctx context.Context, depl *Deployment) error {
 }
 
 func StopPod(ctx context.Context, depl *Deployment) error {
+	defer utils.AddPrefix(log.Default(), "stop pod: ")()
+
 	//
 	// Run the pre-stop hooks (via systemd-run specific scope)
 	//
@@ -241,31 +243,30 @@ func StopPod(ctx context.Context, depl *Deployment) error {
 	//    (command inside the container or HTTP request)
 	//
 
-	log.Printf("stop: executing pre-stop hooks...")
+	log.Printf("executing pre-stop hooks...")
 	err := depl.RunHooks(ctx, "pre-stop", depl.PartName, depl.Vars(), 60*time.Second)
 	if err != nil {
-		log.Printf("stop: pre-stop hooks failed, continuing...")
+		log.Printf("pre-stop hooks failed, continuing...")
 	}
 
 	//
 	// Remove the IP address from the load balancer
 	//
 
-	log.Printf("stop: Removing deployment from load-balancer...\n")
-	fmt.Fprintf(os.Stderr, "+ systemctl %s stop %q\n", dirs.SystemdModeFlag(), DeploymentConfigUnit(depl.DeploymentName))
-	cmd := exec.Command("systemctl", dirs.SystemdModeFlag(), "stop", DeploymentConfigUnit(depl.DeploymentName))
+	log.Printf(" Removing deployment from load-balancer...\n")
+	cmd := utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "stop", DeploymentConfigUnit(depl.DeploymentName))
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	err = cmd.Run()
+	err = utils.RunWithJournal(ctx, cmd, DeploymentConfigUnit(depl.DeploymentName))
 	if err != nil {
-		log.Printf("stop: ERROR when removing from the load-balancer: %v\n", err)
+		log.Printf("ERROR when removing from the load-balancer: %v\n", err)
 	}
 
 	//
 	// Stop the containers
 	//
 
-	log.Printf("stop: Stopping the containers...\n")
+	log.Printf("Stopping the containers...\n")
 	err = depl.StartStopPod(false, ".")
 	if err != nil {
 		err = fmt.Errorf("failed to stop pod, %v", err)
@@ -273,7 +274,7 @@ func StopPod(ctx context.Context, depl *Deployment) error {
 		return err
 	}
 
-	log.Printf("stop: Stop sequence completed\n")
+	log.Printf("Stop sequence completed\n")
 	return nil
 }
 

@@ -324,7 +324,7 @@ func Print(depl_name string, settings PrintSettings) error {
 	if depl.SocketActivated() && depl.Pod != nil {
 		if depl.Pod.HasSocketProxy() {
 			tbl.AddRow("", "")
-			tbl.AddRow("Socket proxy: ", strings.Join(depl.Pod.SocketProxy.CmdlineArgs(depl.Vars()), ""))
+			tbl.AddRow("Socket proxy: ", strings.Join(depl.Pod.SocketProxy.CmdlineArgs(depl.Vars()), " "))
 		}
 		header = "Socket directives:"
 		for i, directive := range depl.Pod.ExpandedSocketDirectives(depl.Vars()) {

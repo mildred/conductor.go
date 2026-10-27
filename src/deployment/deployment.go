@@ -92,7 +92,6 @@ type Deployment struct {
 }
 
 func NewDeploymentFromService(service *service.Service, deployment_name string, seed *DeploymentSeed) *Deployment {
-	log.Printf("prepare: Set up deployment %q from service %q-%q\n", deployment_name, service.AppName, service.InstanceName)
 	var pod *DeploymentPod
 	var f *DeploymentFunction
 

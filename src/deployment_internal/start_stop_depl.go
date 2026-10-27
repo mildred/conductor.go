@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
 	"time"
 
 	"github.com/coreos/go-systemd/v22/daemon"
@@ -14,6 +13,7 @@ import (
 	"github.com/mildred/conductor.go/src/deployment"
 	"github.com/mildred/conductor.go/src/dirs"
 	"github.com/mildred/conductor.go/src/service"
+	"github.com/mildred/conductor.go/src/utils"
 
 	. "github.com/mildred/conductor.go/src/deployment"
 )
@@ -229,11 +229,10 @@ func CaddyRegister(register bool, deployment_name_or_dir, config_name string) er
 				// systemd
 			}
 
-			fmt.Fprintf(os.Stderr, "+ systemctl %s %s %q\n", dirs.SystemdModeFlag(), start, unit_name)
-			cmd := exec.CommandContext(ctx, "systemctl", dirs.SystemdModeFlag(), start, unit_name)
+			cmd := utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), start, unit_name)
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
-			err = cmd.Run()
+			err = utils.RunWithJournal(ctx, cmd, unit_name)
 			if err != nil {
 				err = fmt.Errorf("while %sing the systemd unit %+v, %v", start, unit_name, err)
 				SdNotifyOrLog(err.Error())

@@ -10,7 +10,6 @@ import (
 	"os/exec"
 	"path"
 	"slices"
-	"strings"
 
 	"github.com/mildred/conductor.go/src/dirs"
 	"github.com/mildred/conductor.go/src/service_internal"
@@ -41,6 +40,9 @@ func ReloadServices(inclusive bool, verbose bool) error {
 		}
 
 		log_prefix := log.Prefix()
+		defer func() {
+			log.SetPrefix(log_prefix)
+		}()
 
 		for _, ent := range entries {
 			service_dir := path.Join(dir, ent.Name())
@@ -112,22 +114,20 @@ func ReloadServices(inclusive bool, verbose bool) error {
 	}
 
 	for _, unit := range stop_list {
-		fmt.Fprintf(os.Stderr, "+ systemctl %s disable --now %q\n", dirs.SystemdModeFlag(), unit)
-		cmd := exec.Command("systemctl", dirs.SystemdModeFlag(), "disable", "--now", unit)
+		cmd := utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "disable", "--now", unit)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
-		err = cmd.Run()
+		err = utils.RunWithJournal(ctx, cmd, unit)
 		if err != nil {
 			return err
 		}
 	}
 
 	for _, unit := range start_list {
-		fmt.Fprintf(os.Stderr, "+ systemctl %s enable --now %q\n", dirs.SystemdModeFlag(), unit)
-		cmd := exec.Command("systemctl", dirs.SystemdModeFlag(), "enable", "--now", unit)
+		cmd := utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "enable", "--now", unit)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
-		err = cmd.Run()
+		err = utils.RunWithJournal(ctx, cmd, unit)
 		if err != nil {
 			return err
 		}
@@ -157,7 +157,7 @@ func setDisableConfig(definition_path string, disable bool) error {
 	return nil
 }
 
-func Enable(name string, now bool) error {
+func Enable(ctx context.Context, name string, now bool) error {
 	definition_path, err := ServiceDirByName(name)
 	if err != nil {
 		return err
@@ -175,18 +175,19 @@ func Enable(name string, now bool) error {
 
 	var cmd *exec.Cmd
 	if now {
-		fmt.Fprintf(os.Stderr, "+ systemctl %s enable --now %q\n", dirs.SystemdModeFlag(), unit)
-		cmd = exec.Command("systemctl", dirs.SystemdModeFlag(), "enable", "--now", unit)
+		cmd = utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "enable", "--now", unit)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		return utils.RunWithJournal(ctx, cmd, unit)
 	} else {
-		fmt.Fprintf(os.Stderr, "+ systemctl %s enable %q\n", dirs.SystemdModeFlag(), unit)
-		cmd = exec.Command("systemctl", dirs.SystemdModeFlag(), "enable", unit)
+		cmd = utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "enable", unit)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		return cmd.Run()
 	}
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
 }
 
-func Disable(name string, now bool) error {
+func Disable(ctx context.Context, name string, now bool) error {
 	definition_path, err := ServiceDirByName(name)
 	if err != nil {
 		return err
@@ -204,15 +205,16 @@ func Disable(name string, now bool) error {
 
 	var cmd *exec.Cmd
 	if now {
-		fmt.Fprintf(os.Stderr, "+ systemctl %s disable --now %q\n", dirs.SystemdModeFlag(), unit)
-		cmd = exec.Command("systemctl", dirs.SystemdModeFlag(), "disable", "--now", unit)
+		cmd = utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "disable", "--now", unit)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		return utils.RunWithJournal(ctx, cmd, unit)
 	} else {
-		fmt.Fprintf(os.Stderr, "+ systemctl %s disable %q\n", dirs.SystemdModeFlag(), unit)
-		cmd = exec.Command("systemctl", dirs.SystemdModeFlag(), "disable", unit)
+		cmd = utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "disable", unit)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		return cmd.Run()
 	}
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
 }
 
 type StartOpts struct {
@@ -220,7 +222,7 @@ type StartOpts struct {
 	Background bool
 }
 
-func Start(definition_path string, opts StartOpts) error {
+func Start(ctx context.Context, definition_path string, opts StartOpts) error {
 	if opts.Foreground && opts.Background {
 		return fmt.Errorf("cannot specify both backgroudn and foreground operation")
 	}
@@ -241,33 +243,34 @@ func Start(definition_path string, opts StartOpts) error {
 	}
 
 	if !background {
+		defer utils.AddPrefix(log.Default(), "[%s] start: ", definition_path)()
+
 		config_unit, err := ServiceConfigUnitByName(definition_path)
 		if err != nil {
 			return err
 		}
 
-		fmt.Fprintf(os.Stderr, "+ systemctl %s start %q\n", dirs.SystemdModeFlag(), config_unit)
-		cmd := exec.Command("systemctl", dirs.SystemdModeFlag(), "start", config_unit)
+		cmd := utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "start", config_unit)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
-		err = cmd.Run()
+		err = utils.RunWithJournal(ctx, cmd, config_unit)
 		if err != nil {
 			return err
 		}
 
 		err = service_internal.StartOrReload(definition_path, service_internal.StartOrReloadOpts{
 			ExitWhenStarted: true,
+			NoLogPrefix:     true,
 		})
 		if err != nil {
 			return err
 		}
 	}
 
-	fmt.Fprintf(os.Stderr, "+ systemctl %s start %q\n", dirs.SystemdModeFlag(), unit)
-	cmd := exec.Command("systemctl", dirs.SystemdModeFlag(), "start", unit)
+	cmd := utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "start", unit)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	return utils.RunWithJournal(ctx, cmd, unit)
 }
 
 type StopOpts struct {
@@ -275,8 +278,7 @@ type StopOpts struct {
 	RemoveAllDeployments bool
 }
 
-func Stop(definition_path string, opts StopOpts) error {
-	ctx := context.Background()
+func Stop(ctx context.Context, definition_path string, opts StopOpts) error {
 	unit, err := ServiceUnitByName(definition_path)
 	if err != nil {
 		return err
@@ -292,6 +294,7 @@ func Stop(definition_path string, opts StopOpts) error {
 		if err != nil {
 			return err
 		}
+		defer utils.AddPrefix(log.Default(), "[%s] stop: ", definition_path)()
 	}
 
 	var args []string = []string{dirs.SystemdModeFlag(), "stop"}
@@ -300,11 +303,15 @@ func Stop(definition_path string, opts StopOpts) error {
 	}
 	args = append(args, unit)
 
-	fmt.Fprintf(os.Stderr, "+ systemctl %s\n", strings.Join(args, " "))
-	cmd := exec.CommandContext(ctx, "systemctl", args...)
+	cmd := utils.LogCommand(ctx, "systemctl", args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	errs := cmd.Run()
+	var errs error
+	if opts.NoBlock {
+		errs = cmd.Run()
+	} else {
+		errs = utils.RunWithJournal(ctx, cmd, unit)
+	}
 
 	if opts.RemoveAllDeployments {
 		err := service_internal.RemoveAllDeployments(ctx, definition_path)
@@ -322,7 +329,7 @@ type RestartOpts struct {
 	NoBlock    bool
 }
 
-func Restart(definition_path string, opts RestartOpts) error {
+func Restart(ctx context.Context, definition_path string, opts RestartOpts) error {
 	if opts.Foreground && opts.Background {
 		return fmt.Errorf("cannot specify both backgroudn and foreground operation")
 	}
@@ -354,21 +361,24 @@ func Restart(definition_path string, opts RestartOpts) error {
 		}
 		args = append(args, unit)
 
-		fmt.Fprintf(os.Stderr, "+ systemctl %s\n", strings.Join(args, " "))
-		cmd := exec.Command("systemctl", args...)
+		cmd := utils.LogCommand(ctx, "systemctl", args...)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
-		return cmd.Run()
+		if opts.NoBlock {
+			return cmd.Run()
+		} else {
+			return utils.RunWithJournal(ctx, cmd, unit)
+		}
 
 	} else {
-		err := Stop(definition_path, StopOpts{
+		err := Stop(ctx, definition_path, StopOpts{
 			RemoveAllDeployments: true,
 		})
 		if err != nil {
 			return err
 		}
 
-		return Start(definition_path, StartOpts{
+		return Start(ctx, definition_path, StartOpts{
 			Foreground: true,
 		})
 	}
@@ -380,7 +390,7 @@ type ReloadOpts struct {
 	NoBlock    bool
 }
 
-func Reload(definition_path string, opts ReloadOpts) error {
+func Reload(ctx context.Context, definition_path string, opts ReloadOpts) error {
 	if opts.Foreground && opts.Background {
 		return fmt.Errorf("cannot specify both backgroudn and foreground operation")
 	}
@@ -408,7 +418,6 @@ func Reload(definition_path string, opts ReloadOpts) error {
 
 	var active bool
 
-	var ctx = context.Background()
 	sd, err := utils.NewSystemdClient(ctx)
 	if err != nil {
 		return err
@@ -444,11 +453,14 @@ func Reload(definition_path string, opts ReloadOpts) error {
 	}
 	args = append(args, unit)
 
-	fmt.Fprintf(os.Stderr, "+ systemctl %s\n", strings.Join(args, " "))
-	cmd := exec.Command("systemctl", args...)
+	cmd := utils.LogCommand(ctx, "systemctl", args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	if opts.NoBlock {
+		return cmd.Run()
+	} else {
+		return utils.RunWithJournal(ctx, cmd, unit)
+	}
 }
 
 func readConfigSetFile(filename string) (map[string]interface{}, error) {

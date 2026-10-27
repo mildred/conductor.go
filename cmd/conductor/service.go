@@ -6,7 +6,6 @@ import (
 	"io"
 	"log"
 	"os"
-	"os/exec"
 	"strconv"
 	"strings"
 	"time"
@@ -19,6 +18,7 @@ import (
 	"github.com/mildred/conductor.go/src/service"
 	"github.com/mildred/conductor.go/src/service_internal"
 	"github.com/mildred/conductor.go/src/service_public"
+	"github.com/mildred/conductor.go/src/utils"
 )
 
 type strlist []string
@@ -97,7 +97,7 @@ func cmd_service_enable() *flaggy.Subcommand {
 	cmd.AddPositionalValue(&service, "service", 1, true, "The service to act on")
 
 	cmd.CommandUsed = Hook(func() error {
-		return service_public.Enable(service, now)
+		return service_public.Enable(context.Background(), service, now)
 	})
 	return cmd
 }
@@ -112,7 +112,7 @@ func cmd_service_disable() *flaggy.Subcommand {
 	cmd.AddPositionalValue(&service, "service", 1, true, "The service to act on")
 
 	cmd.CommandUsed = Hook(func() error {
-		return service_public.Disable(service, now)
+		return service_public.Disable(context.Background(), service, now)
 	})
 	return cmd
 }
@@ -132,7 +132,7 @@ func cmd_service_start() *flaggy.Subcommand {
 			return fmt.Errorf("Cannot specify both --background and --foreground flags")
 		}
 
-		return service_public.Start(service, service_public.StartOpts{
+		return service_public.Start(context.Background(), service, service_public.StartOpts{
 			Foreground: foreground_flag,
 			Background: background_flag,
 		})
@@ -152,7 +152,7 @@ func cmd_service_stop() *flaggy.Subcommand {
 	cmd.AddPositionalValue(&service, "service", 1, true, "The service to act on")
 
 	cmd.CommandUsed = Hook(func() error {
-		return service_public.Stop(service, service_public.StopOpts{
+		return service_public.Stop(context.Background(), service, service_public.StopOpts{
 			NoBlock:              no_block || force,
 			RemoveAllDeployments: force,
 		})
@@ -177,7 +177,7 @@ func cmd_service_reload() *flaggy.Subcommand {
 			return fmt.Errorf("Cannot specify both --background and --foreground flags")
 		}
 
-		return service_public.Reload(service, service_public.ReloadOpts{
+		return service_public.Reload(context.Background(), service, service_public.ReloadOpts{
 			Foreground: foreground_flag,
 			Background: background_flag,
 			NoBlock:    no_block,
@@ -242,7 +242,7 @@ func cmd_service_restart() *flaggy.Subcommand {
 	cmd.AddPositionalValue(&service, "service", 1, true, "The service to act on")
 
 	cmd.CommandUsed = Hook(func() error {
-		return service_public.Restart(service, service_public.RestartOpts{
+		return service_public.Restart(context.Background(), service, service_public.RestartOpts{
 			NoBlock: no_block,
 		})
 	})
@@ -302,12 +302,11 @@ func cmd_service_deploy() *flaggy.Subcommand {
 		}
 
 		if start {
-			fmt.Fprintf(os.Stderr, "+ systemctl %s start %s\n", dirs.SystemdModeFlag(), main_unit)
-			cmd := exec.Command("systemctl", dirs.SystemdModeFlag(), "start", main_unit)
+			cmd := utils.LogCommand(context.Background(), "systemctl", dirs.SystemdModeFlag(), "start", main_unit)
 			cmd.Stdin = os.Stdin
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
-			err := cmd.Run()
+			err := utils.RunWithJournal(context.Background(), cmd, main_unit)
 			if err != nil {
 				return err
 			}
@@ -447,8 +446,7 @@ func cmd_service_status() *flaggy.Subcommand {
 			}
 		}
 
-		fmt.Fprintf(os.Stderr, "+ systemctl %s\n", strings.Join(cli, " "))
-		cmd := exec.Command("systemctl", cli...)
+		cmd := utils.LogCommand(context.Background(), "systemctl", cli...)
 		cmd.Stdin = os.Stdin
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
@@ -632,7 +630,7 @@ func cmd_service_config_set() *flaggy.Subcommand {
 		//
 
 		if !no_reload_flag {
-			return service_public.Reload(service_descr, service_public.ReloadOpts{
+			return service_public.Reload(context.Background(), service_descr, service_public.ReloadOpts{
 				Foreground: foreground_flag,
 				Background: background_flag,
 				NoBlock:    no_block_flag,
