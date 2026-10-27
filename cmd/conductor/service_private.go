@@ -83,6 +83,7 @@ func cmd_private_service_start() *flaggy.Subcommand {
 		return service_internal.StartOrReload(service, service_internal.StartOrReloadOpts{
 			Restart:            false,
 			MaxDeploymentIndex: max_deployment_index,
+			ReuseDeplIfStatic:  true,
 		})
 
 	})

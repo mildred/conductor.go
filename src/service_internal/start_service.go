@@ -28,6 +28,7 @@ type StartOrReloadOpts struct {
 	ExitWhenStarted    bool
 	Restart            bool
 	ReuseDepl          bool
+	ReuseDeplIfStatic  bool
 	NoLogPrefix        bool
 	MaxDeploymentIndex int
 	StopTimeout        time.Duration
@@ -104,6 +105,10 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 	service, err := LoadServiceByName(service_name)
 	if err != nil {
 		return err
+	}
+
+	if service.IsStaticDeployment() && opts.ReuseDeplIfStatic {
+		opts.ReuseDepl = true
 	}
 
 	//
