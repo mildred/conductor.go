@@ -243,24 +243,9 @@ func Start(ctx context.Context, definition_path string, opts StartOpts) error {
 	}
 
 	if !background {
-		defer utils.AddPrefix(log.Default(), "[%s] start: ", definition_path)()
-
-		config_unit, err := ServiceConfigUnitByName(definition_path)
-		if err != nil {
-			return err
-		}
-
-		cmd := utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "start", config_unit)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		err = utils.RunWithJournal(ctx, cmd, config_unit)
-		if err != nil {
-			return err
-		}
-
 		err = service_internal.StartOrReload(definition_path, service_internal.StartOrReloadOpts{
 			ExitWhenStarted: true,
-			NoLogPrefix:     true,
+			StartConfig:     true,
 		})
 		if err != nil {
 			return err

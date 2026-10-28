@@ -17,4 +17,5 @@ Environment=CONDUCTOR_SYSTEMD_UNIT=%n
 ExecStartPre=-/bin/sh -xc "exec conductor _ service deregister %f"
 ExecStartPre=/bin/sh  -xc "exec conductor _ service register %f"
 ExecStart=/bin/true
+ExecReload=/bin/sh  -xc "exec conductor _ service register %f"
 ExecStopPost=/bin/sh  -xc "exec conductor _ service deregister %f"

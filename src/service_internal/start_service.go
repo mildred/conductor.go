@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/coreos/go-systemd/v22/daemon"
+	"github.com/taigrr/systemctl/properties"
 
 	"github.com/mildred/conductor.go/src/caddy"
 	"github.com/mildred/conductor.go/src/deployment"
@@ -29,7 +30,7 @@ type StartOrReloadOpts struct {
 	Restart            bool
 	ReuseDepl          bool
 	ReuseDeplIfStatic  bool
-	NoLogPrefix        bool
+	StartConfig        bool
 	MaxDeploymentIndex int
 	StopTimeout        time.Duration
 	TermTimeout        time.Duration
@@ -49,9 +50,9 @@ func stopServicesOrLog(ctx context.Context, depl *deployment.Deployment, units [
 }
 
 func StartOrReload(service_name string, opts StartOrReloadOpts) error {
-	if !opts.NoLogPrefix && opts.Restart {
+	if opts.Restart {
 		defer utils.AddPrefix(log.Default(), "[%s] restart: ", service_name)()
-	} else if !opts.NoLogPrefix {
+	} else {
 		defer utils.AddPrefix(log.Default(), "[%s] start: ", service_name)()
 	}
 
@@ -109,6 +110,45 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 
 	if service.IsStaticDeployment() && opts.ReuseDeplIfStatic {
 		opts.ReuseDepl = true
+	}
+
+	//
+	// Ensure conductor-service-config@.service is reloaded
+	//
+
+	config_unit := ServiceConfigUnit(service.BasePath)
+
+	if opts.StartConfig {
+		cmd := utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "start", config_unit)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		err = utils.RunWithJournal(ctx, cmd, config_unit)
+		if err != nil {
+			return err
+		}
+	}
+
+	sd, err := utils.NewSystemdClient(ctx)
+	if err != nil {
+		return err
+	}
+
+	prop, _ := sd.GetUnitPropertyContext(ctx, config_unit, string(properties.StateChangeTimestamp))
+	if prop != nil {
+		if timestamp, ok := prop.Value.Value().(uint64); ok {
+			active_since := time.Unix(int64(timestamp/1e6), int64(timestamp%1e6))
+			now := time.Now()
+			if now.Sub(active_since).Abs() > 10*time.Second {
+				log.Printf("Service configuration last change at %v, reloading...", active_since)
+				cmd := utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "reload", config_unit)
+				cmd.Stdout = os.Stdout
+				cmd.Stderr = os.Stderr
+				err = utils.RunWithJournal(ctx, cmd, config_unit)
+				if err != nil {
+					return err
+				}
+			}
+		}
 	}
 
 	//
