@@ -88,7 +88,7 @@ func PrintService(name string, settings PrintSettings) error {
 	units.ToTable().Print()
 	fmt.Println()
 
-	configs, err := service.ProxyConfig(ctx)
+	configs, err := service.ProxyConfig(ctx, false)
 	if err != nil {
 		fmt.Printf("Error getting proxy config: %v\n", err)
 		fmt.Println()
@@ -102,9 +102,9 @@ func PrintService(name string, settings PrintSettings) error {
 		}
 
 		if settings.ShowProxyLocation {
-			tbl = table.New("Reverse-Proxy configuration", "Location", "Present", "Configuration (matchers)", "Upstreams")
+			tbl = table.New("Reverse-Proxy configuration", "Source", "Location", "Present", "Configuration (matchers)", "Upstreams")
 		} else {
-			tbl = table.New("Reverse-Proxy configuration", "Present", "Configuration (matchers)", "Upstreams")
+			tbl = table.New("Reverse-Proxy configuration", "Source", "Present", "Configuration (matchers)", "Upstreams")
 		}
 		for _, config := range configs {
 			cfg, err := caddy.GetConfig(ctx, config)
@@ -124,19 +124,19 @@ func PrintService(name string, settings PrintSettings) error {
 				}
 
 				if settings.ShowProxyLocation {
-					tbl.AddRow(cfg.Id, cfg.MountPoint, "yes", strings.Join(stringsFromJSON(matches), "\n"), strings.Join(upstreams, "\n"))
+					tbl.AddRow(cfg.Id, cfg.Item.Source, cfg.MountPoint, "yes", strings.Join(stringsFromJSON(matches), "\n"), strings.Join(upstreams, "\n"))
 				} else if cfg.Id == "" {
-					tbl.AddRow(cfg.MountPoint, "yes", string(cfg.Config))
+					tbl.AddRow(cfg.MountPoint, cfg.Item.Source, "yes", string(cfg.Config))
 				} else {
-					tbl.AddRow(cfg.Id, "yes", strings.Join(stringsFromJSON(matches), "\n"), strings.Join(upstreams, "\n"))
+					tbl.AddRow(cfg.Id, cfg.Item.Source, "yes", strings.Join(stringsFromJSON(matches), "\n"), strings.Join(upstreams, "\n"))
 				}
 			} else {
 				if settings.ShowProxyLocation {
-					tbl.AddRow(cfg.Id, cfg.MountPoint, "no", "")
+					tbl.AddRow(cfg.Id, cfg.Item.Source, cfg.MountPoint, "no", "")
 				} else if cfg.Id == "" {
-					tbl.AddRow(cfg.MountPoint, "?", string(cfg.Item.Config))
+					tbl.AddRow(cfg.MountPoint, cfg.Item.Source, "?", string(cfg.Item.Config))
 				} else {
-					tbl.AddRow(cfg.Id, "no", "")
+					tbl.AddRow(cfg.Id, cfg.Item.Source, "no", "")
 				}
 			}
 		}

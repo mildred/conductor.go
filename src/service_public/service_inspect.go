@@ -23,7 +23,7 @@ func Inspect(ctx context.Context, service *Service, state *InspectState) (json.R
 		return nil, err
 	}
 
-	proxy_config, err := service.ProxyConfig(ctx)
+	proxy_config, err := service.ProxyConfig(ctx, false)
 	if err != nil {
 		return nil, err
 	}

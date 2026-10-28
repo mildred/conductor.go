@@ -37,6 +37,7 @@ func (f *DeploymentFunction) ProxyConfig(ctx context.Context, depl *Deployment) 
 		result = append(result, &caddy.ConfigItem{
 			MountPoint: reverse.UpstreamsPath,
 			Config:     config,
+			Source:     "function",
 		})
 	}
 

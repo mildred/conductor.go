@@ -57,6 +57,7 @@ func (pod *DeploymentPod) ProxyConfig(depl *Deployment) (caddy.ConfigItems, erro
 		result = append(result, &caddy.ConfigItem{
 			MountPoint: reverse.UpstreamsPath,
 			Config:     config,
+			Source:     "pod",
 		})
 	}
 

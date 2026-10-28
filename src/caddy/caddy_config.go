@@ -30,6 +30,7 @@ type ConfigItem struct {
 	ConfigDown   json.RawMessage `json:"config_down,omitempty"`
 	RegisterOnly bool            `json:"register_only"`
 	Id           string          `json:"-"`
+	Source       string          `json:"-"`
 }
 
 type ConfigItems []*ConfigItem

@@ -342,6 +342,13 @@ func Print(depl_name string, settings PrintSettings) error {
 	var configs caddy.ConfigItems
 	configs_errors := false
 
+	configs, err = depl.Service.ProxyConfig(ctx, true)
+	if err != nil {
+		fmt.Printf("Error getting service proxy config: %v\n", err)
+		fmt.Println()
+		configs_errors = true
+	}
+
 	if depl.SocketActivated() {
 		cfgs, err := depl.ProxyConfig(ctx, "deployment-socket")
 		if err != nil {
@@ -374,9 +381,9 @@ func Print(depl_name string, settings PrintSettings) error {
 		}
 
 		if settings.ShowProxyLocation {
-			tbl = table.New("Reverse-Proxy configuration", "Present", "Dial")
+			tbl = table.New("Reverse-Proxy configuration", "Source", "Present", "Dial")
 		} else {
-			tbl = table.New("Reverse-Proxy configuration", "Present", "Dial")
+			tbl = table.New("Reverse-Proxy configuration", "Source", "Present", "Dial")
 		}
 		for _, config := range configs {
 			cfg, err := caddy.GetConfig(context.Background(), config)
@@ -387,19 +394,19 @@ func Print(depl_name string, settings PrintSettings) error {
 			if cfg.Present {
 				dial, err := cfg.Dial()
 				if err != nil {
-					return err
+					return fmt.Errorf("while reading the dial address for %s, %v", string(cfg.Config), err)
 				}
 
 				if settings.ShowProxyLocation {
-					tbl.AddRow(cfg.Id, cfg.MountPoint, "yes", dial)
+					tbl.AddRow(cfg.IdOrMount(), cfg.Item.Source, cfg.MountPoint, "yes", dial)
 				} else {
-					tbl.AddRow(cfg.Id, "yes", dial)
+					tbl.AddRow(cfg.IdOrMount(), cfg.Item.Source, "yes", dial)
 				}
 			} else {
 				if settings.ShowProxyLocation {
-					tbl.AddRow(cfg.Id, cfg.MountPoint, "no", "")
+					tbl.AddRow(cfg.IdOrMount(), cfg.Item.Source, cfg.MountPoint, "no", "")
 				} else {
-					tbl.AddRow(cfg.Id, "no", "")
+					tbl.AddRow(cfg.IdOrMount(), cfg.Item.Source, "no", "")
 				}
 			}
 		}

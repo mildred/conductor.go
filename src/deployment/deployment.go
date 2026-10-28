@@ -236,7 +236,7 @@ func (depl *Deployment) ProxyConfig(ctx context.Context, config_name string) (ca
 	if depl.Pod != nil {
 		cfg, err := depl.Pod.ProxyConfig(depl)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("reading %s pod proxy config", config_name, err)
 		}
 
 		configs = append(configs, cfg...)
@@ -245,28 +245,31 @@ func (depl *Deployment) ProxyConfig(ctx context.Context, config_name string) (ca
 	if depl.Function != nil {
 		cfg, err := depl.Function.ProxyConfig(ctx, depl)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("reading %s function proxy config", config_name, err)
 		}
 
 		configs = append(configs, cfg...)
 	}
 
 	if depl.ProxyConfigTemplate != "" {
-		var c caddy.ConfigItems
+		var cfgs caddy.ConfigItems
 		err := tmpl.RunTemplateJSON(ctx, depl.ProxyConfigTemplate, append(
 			depl.Vars(),
 			"CONDUCTOR_PROXY_CONFIG="+config_name,
-		), &c)
+		), &cfgs)
 		if err != nil {
-			return nil, fmt.Errorf("while running the proxy-config template, %v", err)
+			return nil, fmt.Errorf("while running the %v proxy-config template, %v", config_name, err)
 		}
 
-		configs = append(configs, c...)
+		for _, c := range cfgs {
+			c.Source = config_name
+			configs = append(configs, c)
+		}
 	}
 
 	err := configs.SetDefaults()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("setting proxy config defaults for %v, %v", config_name, err)
 	}
 
 	return configs, nil

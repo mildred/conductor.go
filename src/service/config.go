@@ -608,41 +608,45 @@ func (service *Service) Parts() ([]string, error) {
 	return res, nil
 }
 
-func (service *Service) ProxyConfig(ctx context.Context) (caddy.ConfigItems, error) {
+func (service *Service) ProxyConfig(ctx context.Context, exclude_parts bool) (caddy.ConfigItems, error) {
 	var configs caddy.ConfigItems
 
-	for _, pod := range service.Pods {
-		cfgs, err := pod.ReverseProxyConfigs(service)
-		if err != nil {
-			return nil, err
+	if !exclude_parts {
+		for _, pod := range service.Pods {
+			cfgs, err := pod.ReverseProxyConfigs(service)
+			if err != nil {
+				return nil, fmt.Errorf("reading pod proxy config, %v", err)
+			}
+			configs = append(configs, cfgs...)
 		}
-		configs = append(configs, cfgs...)
-	}
 
-	for _, f := range service.Functions {
-		cfgs, err := f.ReverseProxyConfigs(ctx, service)
-		if err != nil {
-			return nil, err
+		for _, f := range service.Functions {
+			cfgs, err := f.ReverseProxyConfigs(ctx, service)
+			if err != nil {
+				return nil, fmt.Errorf("reading function proxy config, %v", err)
+			}
+			configs = append(configs, cfgs...)
 		}
-		configs = append(configs, cfgs...)
 	}
-
 	if service.ProxyConfigTemplate != "" {
-		var c caddy.ConfigItems
+		var cfgs caddy.ConfigItems
 		err := tmpl.RunTemplateJSON(ctx, service.ProxyConfigTemplate, append(
 			service.Vars(),
 			"CONDUCTOR_PROXY_CONFIG=service",
-		), &c)
+		), &cfgs)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("reading service proxy configs, %v", err)
 		}
 
-		configs = append(configs, c...)
+		for _, c := range cfgs {
+			c.Source = "service"
+			configs = append(configs, c)
+		}
 	}
 
 	err := configs.SetDefaults()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("setting proxy config defaults for service, %v", err)
 	}
 
 	return configs, nil
@@ -784,7 +788,7 @@ func (s *Service) RunHooks(ctx context.Context, when string, part string, vars [
 		log.Printf("No hook executed for %s", when)
 	} else {
 		duration := time.Now().Sub(start_time)
-		log.Printf("[hook %s] Completed %d hooks in %v\n", when, executed, duration)
+		log.Printf("Completed %d hooks in %v\n", executed, duration)
 	}
 	return nil
 }

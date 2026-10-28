@@ -372,7 +372,7 @@ func CaddyRegister(ctx context.Context, register bool, service_name string) erro
 		return err
 	}
 
-	configs, err := service.ProxyConfig(ctx)
+	configs, err := service.ProxyConfig(ctx, false)
 	if err != nil {
 		return err
 	} else if len(configs) == 0 {
