@@ -57,7 +57,7 @@ func (client *CaddyClient) Register(ctx context.Context, register bool, configs 
 			log.Printf("caddy: Deregister configuration for %s in %s", config.Id, config.MountPoint)
 		}
 
-		cfgId, err := config.GetId()
+		cfgId, err := config.GetCompositeId()
 		if err != nil {
 			return err
 		}
@@ -107,12 +107,9 @@ func (client *CaddyClient) registerScalar(ctx context.Context, num *int, config 
 			log.Printf("caddy: GET /id/%s: %v\n", config.MountPoint, res.Status)
 		}
 
-		if !present {
-			return fmt.Errorf("cannot add scalar configuration to %s, not found", config.MountPoint)
-		}
-
-		if !JSONType(actualConfig).Array {
-			return fmt.Errorf("scalar values can only be mounted on arrays, attempt to mount to %v on %s", config.MountPoint, string(actualConfig))
+		typ := JSONType(actualConfig)
+		if present && !typ.Array && !typ.Scalar {
+			return fmt.Errorf("scalar values can only be mounted on arrays or scalars, attempt to mount to %v on %s", config.MountPoint, string(actualConfig))
 		}
 
 		var scalar interface{}
@@ -121,14 +118,20 @@ func (client *CaddyClient) registerScalar(ctx context.Context, num *int, config 
 			return fmt.Errorf("cannot unmarshal scalar config %s, %v", string(data), err)
 		}
 
-		var array []interface{}
-		err = json.Unmarshal(actualConfig, &array)
-		if err != nil {
-			return fmt.Errorf("cannot unmarshal actual config at %s, %v", config.MountPoint, err)
-		}
+		if typ.Array {
+			var array []interface{}
+			err = json.Unmarshal(actualConfig, &array)
+			if err != nil {
+				return fmt.Errorf("cannot unmarshal actual config at %s, %v", config.MountPoint, err)
+			}
 
-		if slices.Contains(array, scalar) {
-			return nil // scalar already present
+			if slices.Contains(array, scalar) {
+				return nil // scalar already present in array
+			}
+		} else if !present || typ.Scalar {
+			if string(actualConfig) == string(data) {
+				return nil // scalar already present
+			}
 		}
 
 		res, retry, err := client.postConfig(ctx, etag, config.MountPoint, data)
@@ -158,11 +161,12 @@ func (client *CaddyClient) deregisterScalar(ctx context.Context, num *int, confi
 		}
 
 		if !present {
-			return fmt.Errorf("cannot add scalar configuration to %s, not found", config.MountPoint)
+			return nil
 		}
 
-		if !JSONType(actualConfig).Array {
-			return fmt.Errorf("scalar values can only be mounted on arrays, attempt to mount to %v on %s", config.MountPoint, string(actualConfig))
+		typ := JSONType(actualConfig)
+		if present && !typ.Array && !typ.Scalar {
+			return fmt.Errorf("scalar values can only be mounted on arrays or scalars, attempt to mount to %v on %s", config.MountPoint, string(actualConfig))
 		}
 
 		var scalar interface{}
@@ -171,30 +175,48 @@ func (client *CaddyClient) deregisterScalar(ctx context.Context, num *int, confi
 			return fmt.Errorf("cannot unmarshal scalar config %s, %v", string(config.Config), err)
 		}
 
-		var array []interface{}
-		err = json.Unmarshal(actualConfig, &array)
-		if err != nil {
-			return fmt.Errorf("cannot unmarshal actual config at %s, %v", config.MountPoint, err)
+		var retry bool
+
+		if typ.Array {
+			var array []interface{}
+			err = json.Unmarshal(actualConfig, &array)
+			if err != nil {
+				return fmt.Errorf("cannot unmarshal actual config at %s, %v", config.MountPoint, err)
+			}
+
+			if !slices.Contains(array, scalar) {
+				return nil // value is not present
+			}
+
+			array = slices.DeleteFunc(array, func(val interface{}) bool { return val == scalar })
+
+			newConfig, err := json.Marshal(array)
+			if err != nil {
+				return err
+			}
+
+			res, retry, err = client.patchConfig(ctx, etag, config.MountPoint, newConfig)
+			if res != nil {
+				log.Printf("caddy: PATCH /id/%s (delete scalar %s): %v\n", config.MountPoint, string(config.Config), res.Status)
+			}
+			if err != nil {
+				return err
+			}
+
+		} else if typ.Scalar {
+			res, retry, err = client.deleteConfig(ctx, etag, config.MountPoint)
+			if res != nil {
+				if string(actualConfig) == string(config.Config) {
+					log.Printf("caddy: DELETE /id/%s (delete scalar %s): %v\n", config.MountPoint, string(config.Config), res.Status)
+				} else {
+					log.Printf("caddy: DELETE /id/%s (delete scalar %s modified since %s): %v\n", config.MountPoint, string(actualConfig), string(config.Config), res.Status)
+				}
+			}
+			if err != nil {
+				return err
+			}
 		}
 
-		if !slices.Contains(array, scalar) {
-			return nil // value is not present
-		}
-
-		array = slices.DeleteFunc(array, func(val interface{}) bool { return val == scalar })
-
-		newConfig, err := json.Marshal(array)
-		if err != nil {
-			return err
-		}
-
-		res, retry, err := client.patchConfig(ctx, etag, config.MountPoint, newConfig)
-		if res != nil {
-			log.Printf("caddy: PATCH /id/%s (delete scalar %s): %v\n", config.MountPoint, string(config.Config), res.Status)
-		}
-		if err != nil {
-			return err
-		}
 		if retry {
 			continue
 		}
@@ -261,7 +283,7 @@ func (configs ConfigItems) SetDefaults() error {
 		config.DeprecatedId = ""
 
 		var err error
-		config.Id, err = config.GetId()
+		config.Id, err = config.GetCompositeId()
 		if err != nil {
 			return err
 		}
@@ -270,7 +292,7 @@ func (configs ConfigItems) SetDefaults() error {
 	return nil
 }
 
-func (config *ConfigItem) GetId() (string, error) {
+func (config *ConfigItem) GetCompositeId() (string, error) {
 	if config.IsScalar() {
 		if len(config.ConfigDown) > 0 && !JSONType(config.ConfigDown).Scalar {
 			return "", fmt.Errorf("configuration snippet has scalar config (%s) and non scalar config_down (%s)", string(config.Config), string(config.ConfigDown))
@@ -320,6 +342,8 @@ func JSONType(data json.RawMessage) (result struct {
 	Number  bool
 	Array   bool
 	Object  bool
+	Invalid bool
+	Empty   bool
 }) {
 	for _, b := range data { // skips whitespace automatically with range
 		switch b {
@@ -354,9 +378,11 @@ func JSONType(data json.RawMessage) (result struct {
 			result.String = true
 			return
 		default:
+			result.Invalid = true
 			return // invalid as root
 		}
 	}
+	result.Empty = true
 	return // empty or only whitespace
 }
 
@@ -415,7 +441,19 @@ func getDial(upstream_json json.RawMessage) (string, error) {
 	return upstream.Dial, nil
 }
 
+func (cfg *ConfigStatus) IdOrMount() string {
+	if cfg.Id == "" {
+		return cfg.MountPoint
+	} else {
+		return cfg.Id
+	}
+}
+
 func (cfg *ConfigStatus) Dial() (string, error) {
+	if cfg.Item.IsScalar() {
+		return "", nil
+	}
+
 	return getDial(cfg.Config)
 }
 
