@@ -13,16 +13,26 @@ import (
 func AddPrefix(logger *log.Logger, format string, args ...any) func() {
 	old_prefix := log.Prefix()
 	log.SetPrefix(old_prefix + fmt.Sprintf(format, args...))
+
+	once := true
 	return func() {
-		log.SetPrefix(old_prefix)
+		if once {
+			log.SetPrefix(old_prefix)
+			once = false
+		}
 	}
 }
 
 func ReplacePrefix(logger *log.Logger, format string, args ...any) func() {
 	old_prefix := log.Prefix()
 	log.SetPrefix(fmt.Sprintf(format, args...))
+
+	once := true
 	return func() {
-		log.SetPrefix(old_prefix)
+		if once {
+			log.SetPrefix(old_prefix)
+			once = false
+		}
 	}
 }
 

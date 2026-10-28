@@ -31,7 +31,8 @@ import (
 // - or as a HTTP query to the pod IP address with a retry mechanism
 
 func StartPod(ctx context.Context, depl *Deployment) error {
-	defer utils.AddPrefix(log.Default(), "start pod: ")()
+	reset_log_prefix := utils.AddPrefix(log.Default(), "start pod: ")
+	defer reset_log_prefix()
 
 	var saved_listen_pid = os.Getenv("LISTEN_PID")
 	var saved_listen_fds = os.Getenv("LISTEN_FDS")
@@ -199,15 +200,27 @@ func StartPod(ctx context.Context, depl *Deployment) error {
 		// waiting for further activation
 
 		log.Printf("systemd-socket-proxyd stopped, triggering a deployment stop\n")
-		cmd = utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "stop", DeploymentServiceUnit(depl.DeploymentName))
+
+		reset_log_prefix()
+		err = StopPod(ctx, depl)
+		if err != nil {
+			SdNotifyOrLog(err.Error())
+			return err
+		}
+
+		defer utils.AddPrefix(log.Default(), "stop pod: ")()
+
+		cmd = utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "stop", "--no-block", DeploymentServiceUnit(depl.DeploymentName))
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		err = utils.RunWithJournal(ctx, cmd, DeploymentServiceUnit(depl.DeploymentName))
 		if err != nil {
-			err = fmt.Errorf("failed to add deployment to load-balancer, %v", err)
+			err = fmt.Errorf("failed to trigger a deployment stop through systemctl, %v", err)
 			SdNotifyOrLog(err.Error())
 			return err
 		}
+
+		return nil
 
 	} else {
 
@@ -223,9 +236,9 @@ func StartPod(ctx context.Context, depl *Deployment) error {
 			return err
 		}
 
-	}
+		return nil
 
-	return nil
+	}
 
 }
 
