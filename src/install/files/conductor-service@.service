@@ -11,6 +11,8 @@ NotifyAccess=all
 TimeoutSec=300
 RemainAfterExit=yes
 
+Environment=CONDUCTOR_SYSTEMD_UNIT=%n
+
 # Do not use notify-reload as systemd cannot detect the ready signal at the end
 # of the reload because of a mismatching PID. Type=notify is enough, end of
 # reload is signaled by the exit of the reload process.

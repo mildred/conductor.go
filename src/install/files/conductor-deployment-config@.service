@@ -12,6 +12,8 @@ WorkingDirectory=%t/conductor/deployments/%i
 TimeoutStartSec=0
 RemainAfterExit=yes
 
+Environment=CONDUCTOR_SYSTEMD_UNIT=%n
+
 ExecStartPre=-/bin/sh -xc "exec conductor _ deployment deregister"
 ExecStartPre=/bin/sh  -xc "exec conductor _ deployment register"
 ExecStart=/bin/true
