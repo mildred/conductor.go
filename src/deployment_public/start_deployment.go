@@ -10,7 +10,7 @@ import (
 )
 
 func Start(ctx context.Context, deployment_name string) error {
-	depl, err := deployment.ReadDeploymentByName(deployment_name, true)
+	depl, err := deployment.ReadDeploymentByName(deployment_name, true, true)
 	if err != nil {
 		return err
 	}

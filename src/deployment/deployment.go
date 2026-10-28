@@ -61,13 +61,43 @@ func DeploymentSocketPath(name string) string {
 	return path.Join(DeploymentRunDir, name, "stream.socket")
 }
 
-func DeploymentDirByName(name string, allow_dir bool) (string, string, error) {
+func DeploymentDirByName(name string, allow_dir bool, allow_service_name bool) (string, string, error) {
 	if allow_dir && (strings.Contains(name, "/") || name == ".") {
 		depl_dir, err := filepath.Abs(name)
 		return depl_dir, path.Base(depl_dir), err
-	} else {
-		return DeploymentDirByNameOnly(name), name, nil
 	}
+
+	depl_dir := DeploymentDirByNameOnly(name)
+
+	if !allow_service_name {
+		return depl_dir, name, nil
+	}
+
+	if _, e := os.Stat(depl_dir); os.IsNotExist(e) {
+		service_dir, err := service.ServiceDirByName(name)
+		if err != nil {
+			return "", "", fmt.Errorf("deployment %s is not found in %s and service %s could not be loaded (%v)", name, depl_dir, name, err)
+		}
+
+		deployments, err := List(ListOpts{FilterServiceDir: service_dir})
+		if err != nil {
+			return "", "", fmt.Errorf("while listing deployments of %s, %v", name, err)
+		}
+
+		if len(deployments) == 1 {
+			depl_dir = DeploymentDirByNameOnly(deployments[0].DeploymentName)
+		} else if len(deployments) > 1 {
+			var deployment_names []string
+			for _, d := range deployments {
+				deployment_names = append(deployment_names, d.DeploymentName)
+			}
+			return "", "", fmt.Errorf("no unique deployment for service %s: %s", name, strings.Join(deployment_names, ", "))
+		} else {
+			return "", "", fmt.Errorf("no deployment for service %s", name)
+		}
+	}
+
+	return depl_dir, name, nil
 }
 
 func DeploymentDirByNameOnly(name string) string {
@@ -80,6 +110,7 @@ type Deployment struct {
 	ServiceDir           string              `json:"service_dir"`
 	ServiceId            string              `json:"service_id"`
 	DeploymentName       string              `json:"conductor_deployment"`
+	DeploymentDir        string              `json:"-"`
 	PartName             string              `json:"part_name"`
 	PartId               string              `json:"part_id"`
 	PodName              string              `json:"pod_name"`
@@ -113,6 +144,7 @@ func NewDeploymentFromService(service *service.Service, deployment_name string, 
 		ServiceDir:           service.BasePath,
 		ServiceId:            service.Id,
 		DeploymentName:       deployment_name,
+		DeploymentDir:        DeploymentDirByNameOnly(deployment_name),
 		PartName:             seed.PartName,
 		PartId:               seed.PartId,
 		PodName:              "conductor-" + deployment_name,
@@ -124,8 +156,8 @@ func NewDeploymentFromService(service *service.Service, deployment_name string, 
 	}
 }
 
-func ReadDeploymentByName(name string, allow_dir_in_name bool) (*Deployment, error) {
-	path, depl_name, err := DeploymentDirByName(name, allow_dir_in_name)
+func ReadDeploymentByName(name string, allow_dir_in_name, allow_service_name bool) (*Deployment, error) {
+	path, depl_name, err := DeploymentDirByName(name, allow_dir_in_name, allow_service_name)
 	if err != nil {
 		return nil, err
 	}
@@ -165,7 +197,7 @@ func ReadDeployment(dir, deployment_id string) (*Deployment, error) {
 
 		return depl, nil
 	} else {
-		return LoadDeployment(path.Join(dir, ConfigName))
+		return LoadDeployment(dir, path.Join(dir, ConfigName))
 	}
 }
 
@@ -352,10 +384,10 @@ func (depl *Deployment) Save(fname string) error {
 }
 
 func LoadDeploymentDir(dir string) (*Deployment, error) {
-	return LoadDeployment(path.Join(dir, ConfigName))
+	return LoadDeployment(dir, path.Join(dir, ConfigName))
 }
 
-func LoadDeployment(fname string) (*Deployment, error) {
+func LoadDeployment(deployment_dir, fname string) (*Deployment, error) {
 	// log.Printf("Read file %s\n", fname)
 	f, err := os.Open(fname)
 	if err != nil {
@@ -367,6 +399,7 @@ func LoadDeployment(fname string) (*Deployment, error) {
 
 	res.Service.BasePath = res.ServiceDir
 	res.Service.Id = res.ServiceId
+	res.DeploymentDir = deployment_dir
 
 	// log.Printf("Loaded deployment %s, service %s-%s\n", res.DeploymentName, res.AppName, res.InstanceName)
 	return res, err

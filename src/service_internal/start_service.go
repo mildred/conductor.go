@@ -227,7 +227,7 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 
 	log.Printf("Removing obsolete deployments (except %v)...\n", depl_names)
 
-	deployments, err := deployment_util.List(deployment_util.ListOpts{
+	deployments, err := deployment.List(deployment.ListOpts{
 		FilterServiceDir: service.BasePath,
 	})
 	if err != nil {
@@ -314,7 +314,7 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 		all_parts_ok := true
 
 		for part, part_id := range part_ids {
-			deployments, err := deployment_util.List(deployment_util.ListOpts{
+			deployments, err := deployment.List(deployment.ListOpts{
 				FilterServiceDir: service.BasePath,
 				FilterPartName:   &part,
 			})

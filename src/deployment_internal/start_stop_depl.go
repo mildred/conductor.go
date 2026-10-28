@@ -30,7 +30,7 @@ import (
 func Prepare(deployment_name_or_dir string) error {
 	ctx := context.Background()
 
-	dir, deployment_name, err := deployment.DeploymentDirByName(deployment_name_or_dir, true)
+	dir, deployment_name, err := deployment.DeploymentDirByName(deployment_name_or_dir, true, false)
 	if err != nil {
 		return err
 	}
@@ -98,7 +98,7 @@ func Prepare(deployment_name_or_dir string) error {
 func Start(deployment_name string, function bool) error {
 	ctx := context.Background()
 
-	depl, err := deployment.ReadDeploymentByName(deployment_name, true)
+	depl, err := deployment.ReadDeploymentByName(deployment_name, true, false)
 	if err != nil {
 		return err
 	}
@@ -128,7 +128,7 @@ func Stop(ctx context.Context, deployment_name string, function bool) error {
 	// Load deployment configuration
 	//
 
-	depl, err := deployment.ReadDeploymentByName(deployment_name, true)
+	depl, err := deployment.ReadDeploymentByName(deployment_name, true, false)
 	if err != nil {
 		return err
 	}
@@ -147,7 +147,7 @@ func Stop(ctx context.Context, deployment_name string, function bool) error {
 func Cleanup(deployment_name_or_dir string) error {
 	ctx := context.Background()
 
-	dir, deployment_name, err := deployment.DeploymentDirByName(deployment_name_or_dir, true)
+	dir, deployment_name, err := deployment.DeploymentDirByName(deployment_name_or_dir, true, false)
 	if err != nil {
 		return err
 	}
@@ -187,7 +187,7 @@ func CaddyRegister(register bool, deployment_name_or_dir, config_name string) er
 		prefix = "deregister"
 	}
 
-	depl, err := deployment.ReadDeploymentByName(deployment_name_or_dir, true)
+	depl, err := deployment.ReadDeploymentByName(deployment_name_or_dir, true, false)
 	if err != nil {
 		return fmt.Errorf("while loading deployment %+v, %v", ConfigName, err)
 	}

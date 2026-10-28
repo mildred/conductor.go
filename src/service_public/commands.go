@@ -69,7 +69,7 @@ func RunServiceCommand(service *Service, direct bool, strictVersion bool, env []
 
 		for _, filterServiceId := range filterServiceIds {
 			var err error
-			deployments, err = deployment_util.List(deployment_util.ListOpts{
+			deployments, err = deployment.List(deployment.ListOpts{
 				FilterServiceId:  filterServiceId,
 				FilterServiceDir: service.BasePath,
 			})

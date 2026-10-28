@@ -118,7 +118,7 @@ func cmd_deployment_systemd(cmd_name, descr string) func() *flaggy.Subcommand {
 				cli = append(cli, "--signal="+signal)
 			}
 			for _, id := range ids {
-				depl, err := deployment.ReadDeploymentByName(id, true)
+				depl, err := deployment.ReadDeploymentByName(id, true, true)
 				if err != nil {
 					return err
 				}
@@ -188,7 +188,7 @@ func cmd_deployment_env() *flaggy.Subcommand {
 	cmd.CommandUsed = Hook(func() error {
 		log.Default().SetOutput(io.Discard)
 
-		depl, err := deployment.ReadDeploymentByName(depl_name, true)
+		depl, err := deployment.ReadDeploymentByName(depl_name, true, true)
 		if err != nil {
 			return err
 		}

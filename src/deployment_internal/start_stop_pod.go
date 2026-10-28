@@ -292,7 +292,7 @@ func StopPod(ctx context.Context, depl *Deployment) error {
 }
 
 func Template(dir string, template string) error {
-	depl, err := LoadDeployment(path.Join(dir, ConfigName))
+	depl, err := LoadDeployment(dir, path.Join(dir, ConfigName))
 	if err != nil {
 		return err
 	}

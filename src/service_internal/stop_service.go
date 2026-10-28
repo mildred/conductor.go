@@ -12,6 +12,7 @@ import (
 
 	"github.com/coreos/go-systemd/v22/daemon"
 
+	"github.com/mildred/conductor.go/src/deployment"
 	"github.com/mildred/conductor.go/src/deployment_public"
 	"github.com/mildred/conductor.go/src/deployment_util"
 	"github.com/mildred/conductor.go/src/utils"
@@ -84,7 +85,7 @@ func Stop(ctx context.Context, service_name string, opts StopOpts) error {
 
 	log.Printf("Stopping all deployments...\n")
 
-	deployments, err := deployment_util.List(deployment_util.ListOpts{
+	deployments, err := deployment.List(deployment.ListOpts{
 		FilterServiceDir: service.BasePath,
 	})
 	if err != nil {
@@ -167,7 +168,7 @@ func Kill(ctx context.Context, service_name string, signal string) error {
 		return err
 	}
 
-	deployments, err := deployment_util.List(deployment_util.ListOpts{
+	deployments, err := deployment.List(deployment.ListOpts{
 		FilterServiceDir: service.BasePath,
 	})
 	if err != nil {
@@ -206,7 +207,7 @@ func RemoveAllDeployments(ctx context.Context, service_name string) error {
 		return err
 	}
 
-	deployments, err := deployment_util.List(deployment_util.ListOpts{
+	deployments, err := deployment.List(deployment.ListOpts{
 		FilterServiceDir: service_dir,
 	})
 	if err != nil {

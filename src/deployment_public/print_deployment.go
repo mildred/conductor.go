@@ -18,7 +18,6 @@ import (
 	"github.com/mildred/conductor.go/src/utils"
 
 	. "github.com/mildred/conductor.go/src/deployment"
-	. "github.com/mildred/conductor.go/src/deployment_util"
 )
 
 type PrintListSettings struct {
@@ -267,7 +266,7 @@ func PrintInspect(deployments ...string) error {
 	}
 
 	for _, depl_name := range deployments {
-		depl, err := ReadDeploymentByName(depl_name, true)
+		depl, err := ReadDeploymentByName(depl_name, true, true)
 		if err != nil {
 			return err
 		}
@@ -300,7 +299,7 @@ type PrintSettings struct {
 func Print(depl_name string, settings PrintSettings) error {
 	ctx := context.Background()
 
-	depl, err := ReadDeploymentByName(depl_name, true)
+	depl, err := ReadDeploymentByName(depl_name, true, true)
 	if err != nil {
 		return err
 	}
