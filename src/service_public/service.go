@@ -274,8 +274,11 @@ func Start(ctx context.Context, definition_path string, opts StartOpts) error {
 }
 
 type StopOpts struct {
+	Foreground           bool
+	Background           bool
 	NoBlock              bool
 	RemoveAllDeployments bool
+	KillUnstoppable      bool
 }
 
 func Stop(ctx context.Context, definition_path string, opts StopOpts) error {
@@ -289,8 +292,15 @@ func Stop(ctx context.Context, definition_path string, opts StopOpts) error {
 		return err
 	}
 
-	if svc.IsStaticDeployment() {
-		err = service_internal.Stop(ctx, definition_path)
+	background := opts.Background || svc.IsDynamicDeployment()
+	if opts.Foreground {
+		background = false
+	}
+
+	if !background {
+		err = service_internal.Stop(ctx, definition_path, service_internal.StopOpts{
+			KillUnstoppable: opts.KillUnstoppable,
+		})
 		if err != nil {
 			return err
 		}
@@ -321,6 +331,19 @@ func Stop(ctx context.Context, definition_path string, opts StopOpts) error {
 	}
 
 	return errs
+}
+
+type KillOpts struct {
+	KillSignal string
+}
+
+func Kill(ctx context.Context, definition_path string, opts KillOpts) error {
+	err := service_internal.Kill(ctx, definition_path, opts.KillSignal)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 type RestartOpts struct {

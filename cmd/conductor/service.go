@@ -144,17 +144,47 @@ func cmd_service_stop() *flaggy.Subcommand {
 	var service string
 	var no_block bool
 	var force bool
+	var kill bool
+	var background_flag, foreground_flag bool
 
 	cmd := flaggy.NewSubcommand("stop") // "SERVICE",
 	cmd.Description = "Stop a service"
 	cmd.Bool(&no_block, "", "no-block", "Do not block while restarting")
 	cmd.Bool(&force, "", "force", "Do not block and remove all deployments")
+	cmd.Bool(&kill, "", "kill", "If stop does not work, revert to SIGSTOP and SIGKILL (does not apply in background)")
+	cmd.Bool(&background_flag, "", "background", "Perform the reload in background")
+	cmd.Bool(&foreground_flag, "", "foreground", "Perform the reload in foreground")
 	cmd.AddPositionalValue(&service, "service", 1, true, "The service to act on")
 
 	cmd.CommandUsed = Hook(func() error {
 		return service_public.Stop(context.Background(), service, service_public.StopOpts{
 			NoBlock:              no_block || force,
 			RemoveAllDeployments: force,
+			KillUnstoppable:      kill,
+			Background:           background_flag,
+			Foreground:           foreground_flag || kill,
+		})
+	})
+	return cmd
+}
+
+func cmd_service_kill() *flaggy.Subcommand {
+	var service string
+	var signal string
+	var kill bool
+
+	cmd := flaggy.NewSubcommand("kill") // "SERVICE",
+	cmd.Description = "Stop a service by killing its deployments"
+	cmd.String(&signal, "", "signal", "Signal to send")
+	cmd.Bool(&kill, "-9", "KILL", "Use SIGKILL signal")
+	cmd.AddPositionalValue(&service, "service", 1, true, "The service to act on")
+
+	cmd.CommandUsed = Hook(func() error {
+		if kill {
+			signal = "KILL"
+		}
+		return service_public.Kill(context.Background(), service, service_public.KillOpts{
+			KillSignal: signal,
 		})
 	})
 	return cmd
@@ -685,6 +715,7 @@ func cmd_service() *flaggy.Subcommand {
 	cmd.AttachSubcommand(cmd_service_reload(), 1)
 	cmd.AttachSubcommand(cmd_service_rolling_restart(), 1)
 	cmd.AttachSubcommand(cmd_service_restart(), 1)
+	cmd.AttachSubcommand(cmd_service_kill(), 1)
 	cmd.AttachSubcommand(cmd_service_deploy(), 1)
 	cmd.AttachSubcommand(cmd_service_inspect(), 1)
 	cmd.AttachSubcommand(cmd_service_ls(), 1)

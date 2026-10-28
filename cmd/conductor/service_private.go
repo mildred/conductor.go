@@ -119,7 +119,7 @@ func cmd_private_service_stop() *flaggy.Subcommand {
 	cmd.Description = "Stop a service"
 	cmd.AddPositionalValue(&service, "service", 1, true, "The service to act on")
 	cmd.CommandUsed = Hook(func() error {
-		return service_internal.Stop(context.Background(), service)
+		return service_internal.Stop(context.Background(), service, service_internal.StopOpts{})
 	})
 	return cmd
 }

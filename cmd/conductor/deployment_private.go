@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+
 	"github.com/integrii/flaggy"
 
 	"github.com/mildred/conductor.go/src/deployment_internal"
@@ -44,7 +46,7 @@ func cmd_private_deployment_stop() *flaggy.Subcommand {
 	cmd.AddPositionalValue(&deployment_name, "deployment", 1, false, "The deployment, default to the current directory deployment")
 
 	cmd.CommandUsed = Hook(func() error {
-		return deployment_internal.Stop(deployment_name, function)
+		return deployment_internal.Stop(context.Background(), deployment_name, function)
 	})
 	return cmd
 }

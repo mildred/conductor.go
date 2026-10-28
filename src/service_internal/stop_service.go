@@ -19,8 +19,17 @@ import (
 	. "github.com/mildred/conductor.go/src/service"
 )
 
-func Stop(ctx context.Context, service_name string) error {
+type StopOpts struct {
+	KillUnstoppable    bool
+	UnstoppableTimeout time.Duration
+}
+
+func Stop(ctx context.Context, service_name string, opts StopOpts) error {
 	defer utils.AddPrefix(log.Default(), "[%s] stop: ", service_name)()
+
+	if opts.UnstoppableTimeout == 0 {
+		opts.UnstoppableTimeout = 5 * time.Second
+	}
 
 	//
 	// Notify stop in progress
@@ -90,7 +99,46 @@ func Stop(ctx context.Context, service_name string) error {
 
 		func() {
 			defer cancel()
-			deployment_public.Stop(ctx, d.DeploymentName)
+
+			if opts.KillUnstoppable {
+				stopped := false
+
+				func() {
+					stopCtx, stopCancel := context.WithTimeout(ctx, opts.UnstoppableTimeout)
+					defer stopCancel()
+					err := deployment_public.Stop(stopCtx, d.DeploymentName)
+					if err != nil {
+						log.Printf("Stop deployment %s error: %v", d.DeploymentName, err)
+					}
+					stopped = stopCtx.Err() == nil
+				}()
+
+				if !stopped {
+					func() {
+						killCtx, killCancel := context.WithTimeout(ctx, opts.UnstoppableTimeout)
+						defer killCancel()
+						err := deployment_public.Kill(killCtx, d.DeploymentName, "TERM")
+						if err != nil {
+							log.Printf("Kill deployment %s with %s error: %v", d.DeploymentName, "TERM", err)
+						}
+						stopped = killCtx.Err() == nil
+					}()
+				}
+
+				if !stopped {
+					err := deployment_public.Kill(ctx, d.DeploymentName, "KILL")
+					if err != nil {
+						log.Printf("Kill deployment %s with %s error: %v", d.DeploymentName, "KILL", err)
+					}
+				}
+
+			} else {
+				err := deployment_public.Stop(ctx, d.DeploymentName)
+				if err != nil {
+					log.Printf("Stop deployment %s error: %v", d.DeploymentName, err)
+				}
+			}
+
 		}()
 	}
 
@@ -107,8 +155,35 @@ func Stop(ctx context.Context, service_name string) error {
 	return nil
 }
 
+func Kill(ctx context.Context, service_name string, signal string) error {
+	if signal == "" {
+		signal = "TERM"
+	}
+
+	defer utils.AddPrefix(log.Default(), "[%s] kill %s: ", service_name, signal)()
+
+	service, err := LoadServiceByName(service_name)
+	if err != nil {
+		return err
+	}
+
+	deployments, err := deployment_util.List(deployment_util.ListOpts{
+		FilterServiceDir: service.BasePath,
+	})
+	if err != nil {
+		return err
+	}
+
+	for _, d := range deployments {
+		log.Printf("Killing deployment %s...\n", d.DeploymentName)
+		deployment_public.Kill(ctx, d.DeploymentName, signal)
+	}
+
+	return nil
+}
+
 func Cleanup(ctx context.Context, service_name string) error {
-	errs := Stop(ctx, service_name)
+	errs := Stop(ctx, service_name, StopOpts{})
 
 	//
 	// Remove temp files if there is any

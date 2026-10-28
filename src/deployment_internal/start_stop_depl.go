@@ -114,9 +114,7 @@ func Start(deployment_name string, function bool) error {
 	}
 }
 
-func Stop(deployment_name string, function bool) error {
-	ctx := context.Background()
-
+func Stop(ctx context.Context, deployment_name string, function bool) error {
 	//
 	// Notify the deployment is stopping
 	//
