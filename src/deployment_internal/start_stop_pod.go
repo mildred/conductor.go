@@ -287,6 +287,18 @@ func StopPod(ctx context.Context, depl *Deployment) error {
 		return err
 	}
 
+	//
+	// Reset the pod IP address
+	//
+
+	depl.Pod.IPAddress = ""
+	err = depl.Save(ConfigName)
+	if err != nil {
+		err = fmt.Errorf("failed to save pod to reset IP address, %v", err)
+		SdNotifyOrLog(err.Error())
+		return err
+	}
+
 	log.Printf("Stop sequence completed\n")
 	return nil
 }
