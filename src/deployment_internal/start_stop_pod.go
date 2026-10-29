@@ -18,6 +18,8 @@ import (
 
 	. "github.com/mildred/conductor.go/src/deployment"
 	"github.com/mildred/conductor.go/src/dirs"
+	"github.com/mildred/conductor.go/src/status_socket"
+	"github.com/mildred/conductor.go/src/trace_connections"
 	"github.com/mildred/conductor.go/src/utils"
 )
 
@@ -123,6 +125,11 @@ func StartPod(ctx context.Context, depl *Deployment) error {
 		os.Setenv("LISTEN_FDS", saved_listen_fds)
 		os.Setenv("LISTEN_FDNAMES", saved_listen_fdnames)
 
+		activation_files := activation.Files(false)
+		if len(activation_files) < 1 {
+			return fmt.Errorf("Cannot start proxy, no activation file descriptors passed")
+		}
+
 		//
 		// Start systemd-socket-proxyd if socket activation must be performed through
 		// the proxy (the proxy is notifying READY=1)
@@ -183,18 +190,50 @@ func StartPod(ctx context.Context, depl *Deployment) error {
 		// 	return err
 		// }
 
+		pid_chan := make(chan int, 1)
+		defer close(pid_chan)
+
+		requests := make(chan trace_connections.Request, 0)
+		defer close(requests)
+
+		ctx1, cancel1 := context.WithCancel(ctx)
+		defer cancel1()
+
+		err = trace_connections.StartTrace(ctx1, int(activation_files[0].Fd()), pid_chan, requests)
+		if err != nil {
+			log.Printf("Cannot enable deployment %s, %v", status_socket.LifeStatusSocketName, err)
+		} else {
+			log.Printf("Started tracing socket connections and report to %s", status_socket.LifeStatusSocketName)
+			err = status_socket.StartDeploymentStatus(ctx1, depl, func() interface{} {
+				return trace_connections.AskMetrics(requests)
+			})
+			if err != nil {
+				SdNotifyOrLog(err.Error())
+				return err
+			}
+		}
+
 		args := depl.Pod.SocketProxy.CmdlineArgs(depl.Vars())
 		fmt.Fprintf(os.Stderr, "+ systemd-socket-proxyd %s\n", strings.Join(args, " "))
 		cmd = exec.CommandContext(ctx, "/bin/sh", append([]string{"-c", "export LISTEN_PID=$$; exec \"$0\" \"$@\"", "/usr/lib/systemd/systemd-socket-proxyd"}, args...)...)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
-		cmd.ExtraFiles = activation.Files(false)
-		err = cmd.Run()
+		cmd.ExtraFiles = activation_files
+		err = cmd.Start()
 		if err != nil {
 			log.Printf("systemd-socket-proxyd failed: %v\n", err)
 			SdNotifyOrLog(err.Error())
 			return err
 		}
+		pid_chan <- cmd.Process.Pid
+		err = cmd.Wait()
+		if err != nil {
+			log.Printf("systemd-socket-proxyd failed: %v\n", err)
+			SdNotifyOrLog(err.Error())
+			return err
+		}
+
+		cancel1()
 
 		// Proxy stopped gracefully, it means that it wants the service to stop
 		// waiting for further activation
