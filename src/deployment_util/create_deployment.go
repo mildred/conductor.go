@@ -239,11 +239,13 @@ func CreateDeploymentFromService(name string, svc *service.Service, seed *Deploy
 	depl := deployment.NewDeploymentFromService(svc, name, seed)
 
 	var unit_name string
+	var socket_unit_name string
 	var service_directives []string
 	var socket_directives []string
 	if seed.IsPod {
 		pod := svc.Pods.FindPod(seed.PartName)
-		unit_name = DeploymentMainUnit(svc, seed.PartName, name)
+		unit_name = DeploymentServiceUnit(name)
+		socket_unit_name = DeploymentSocketUnitOrBlank(svc, seed.PartName, name)
 		service_directives = pod.ServiceDirectives
 		if pod.SocketActivated {
 			socket_directives = pod.ExpandedSocketDirectives(depl.Vars())
@@ -265,7 +267,10 @@ func CreateDeploymentFromService(name string, svc *service.Service, seed *Deploy
 		}
 	}
 
+	var reload = false
+
 	if unit_name != "" {
+		reload = true
 
 		err = os.MkdirAll(dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode(), unit_name+".d"), 0755)
 		if err != nil {
@@ -291,8 +296,12 @@ func CreateDeploymentFromService(name string, svc *service.Service, seed *Deploy
 				return "", err
 			}
 		}
+	}
 
+	if socket_unit_name != "" {
 		if len(socket_directives) > 0 {
+			reload = true
+
 			var conf string
 			conf += "[Unit]\n"
 			conf += "Requires=" + DeploymentSocketConfigUnit(name) + "\n\n"
@@ -306,7 +315,9 @@ func CreateDeploymentFromService(name string, svc *service.Service, seed *Deploy
 				return "", err
 			}
 		}
+	}
 
+	if reload {
 		cmd := exec.Command("systemctl", dirs.SystemdModeFlag(), "daemon-reload")
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
@@ -314,7 +325,6 @@ func CreateDeploymentFromService(name string, svc *service.Service, seed *Deploy
 		if err != nil {
 			return "", fmt.Errorf("while running systemctl %s daemon-reload, %v", dirs.SystemdModeFlag(), err)
 		}
-
 	}
 
 	return dir, nil

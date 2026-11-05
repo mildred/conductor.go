@@ -572,3 +572,12 @@ func DeploymentMainUnit(s *service.Service, part_name string, deployment_name st
 
 	return DeploymentServiceUnit(deployment_name)
 }
+
+func DeploymentSocketUnitOrBlank(s *service.Service, part_name string, deployment_name string) string {
+	pod := s.Pods.FindPod(part_name)
+	if pod != nil && pod.SocketActivated {
+		return DeploymentSocketUnit(deployment_name)
+	}
+
+	return ""
+}
