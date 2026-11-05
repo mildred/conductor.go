@@ -65,6 +65,11 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 	var ctx = context.Background()
 	var deferred func() = func() {}
 
+	sd, err := utils.NewSystemdClient(ctx)
+	if err != nil {
+		return err
+	}
+
 	//
 	// [restart] Notify systemd reload in progress
 	//
@@ -128,11 +133,6 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 		}
 	}
 
-	sd, err := utils.NewSystemdClient(ctx)
-	if err != nil {
-		return err
-	}
-
 	prop, _ := sd.GetUnitPropertyContext(ctx, config_unit, string(properties.StateChangeTimestamp))
 	if prop != nil {
 		if timestamp, ok := prop.Value.Value().(uint64); ok {
@@ -190,6 +190,34 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 			MaxIndex:  opts.MaxDeploymentIndex,
 			ReuseDepl: opts.ReuseDepl,
 		})
+		if err != nil {
+			return err
+		}
+
+		err = depl.TemplateAll(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to template deployment, %v", err)
+		}
+
+		err = depl.RunHooks(ctx, "pre-create", depl.PartName, depl.Vars(), 60*time.Second)
+		if err != nil {
+			return err
+		}
+
+		if seed.IsPod {
+			//
+			// Create the pod or fail
+			//
+
+			log.Printf("Create the deployment pod\n")
+			err := depl.KubePlayPod(deployment.PodCreate, depl.DeploymentDir)
+			if err != nil {
+				err = fmt.Errorf("failed to create deployment pod, %v", err)
+				return err
+			}
+		}
+
+		err = depl.RunHooks(ctx, "pre-activate", depl.PartName, depl.Vars(), 60*time.Second)
 		if err != nil {
 			return err
 		}
@@ -254,6 +282,11 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 
 		}
 
+		err = depl.RunHooks(ctx, "post-activate", depl.PartName, depl.Vars(), 60*time.Second)
+		if err != nil {
+			return err
+		}
+
 	}
 
 	//
@@ -281,6 +314,12 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 
 		log.Printf("Removing deployment %s...\n", d.DeploymentName)
 
+		err = d.RunHooks(ctx, "pre-remove", d.PartName, d.Vars(), 60*time.Second)
+		if err != nil {
+			log.Printf("ERROR executing pre-remote hooks for %s (but continuing): %v", d.DeploymentName, err)
+			continue
+		}
+
 		ctx, cancel := context.WithCancel(context.Background())
 		go utils.ExtendTimeout(ctx, 60*time.Second)
 
@@ -290,7 +329,15 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 		}()
 		if err != nil {
 			log.Printf("ERROR removing deployment %s (but continuing): %v", d.DeploymentName, err)
+			continue
 		}
+
+		err = d.RunHooks(ctx, "post-remove", d.PartName, d.Vars(), 60*time.Second)
+		if err != nil {
+			log.Printf("ERROR executing post-remote hooks for %s (but continuing): %v", d.DeploymentName, err)
+			continue
+		}
+
 	}
 
 	//

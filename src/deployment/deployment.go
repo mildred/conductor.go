@@ -405,15 +405,15 @@ func LoadDeployment(deployment_dir, fname string) (*Deployment, error) {
 	return res, err
 }
 
-func (depl *Deployment) StartStopPod(start bool, dir string) error {
-	var configmap_flag string
-	if depl.TemplatedConfigMap != "" {
-		err := os.WriteFile(path.Join(dir, "configmap.yml"), []byte(depl.TemplatedConfigMap), 0644)
-		if err != nil {
-			return err
-		}
-		configmap_flag = "--configmap=" + path.Join(dir, "configmap.yml")
-	}
+type KubePlayOperation = int
+
+const (
+	PodCreate KubePlayOperation = iota
+	PodStart
+	PodStop
+)
+
+func (depl *Deployment) KubePlayPod(op KubePlayOperation, dir string) error {
 
 	err := os.WriteFile(path.Join(dir, "pod.yml"), []byte(depl.TemplatedPod), 0644)
 	if err != nil {
@@ -421,19 +421,37 @@ func (depl *Deployment) StartStopPod(start bool, dir string) error {
 	}
 
 	var args []string
-	if start {
-		args = utils.Compact("kube", "play",
-			"--replace",
-			configmap_flag,
+
+	if op == PodStop {
+		args = utils.Compact("kube", "down")
+	} else {
+		args = utils.Compact("kube", "play")
+	}
+
+	if op == PodStart {
+		args = append(args, "--start", "--replace")
+	} else if op == PodCreate {
+		args = append(args, "--start=false", "--replace")
+	}
+
+	if op != PodStop && depl.TemplatedConfigMap != "" {
+		err := os.WriteFile(path.Join(dir, "configmap.yml"), []byte(depl.TemplatedConfigMap), 0644)
+		if err != nil {
+			return err
+		}
+		args = append(args, "--configmap="+path.Join(dir, "configmap.yml"))
+	}
+
+	if op == PodStart || op == PodCreate {
+		args = append(args, utils.Compact(
 			"--annotation="+fmt.Sprintf("conductor_deployment=%s", depl.DeploymentName),
 			"--annotation="+fmt.Sprintf("conductor_instance=%s", depl.InstanceName),
 			"--annotation="+fmt.Sprintf("conductor_app=%s", depl.AppName),
-			"--log-driver=journald",
-			path.Join(dir, "pod.yml"))
-	} else {
-		args = utils.Compact("kube", "down",
-			path.Join(dir, "pod.yml"))
+			"--log-driver=journald")...)
 	}
+
+	args = append(args, path.Join(dir, "pod.yml"))
+
 	fmt.Fprintf(os.Stderr, "+ podman %q\n", args)
 	cmd := exec.Command("podman", args...)
 	cmd.Stdout = os.Stdout

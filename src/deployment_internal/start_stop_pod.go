@@ -50,7 +50,7 @@ func StartPod(ctx context.Context, depl *Deployment) error {
 	//
 
 	log.Printf("Start the deployment pod\n")
-	err := depl.StartStopPod(true, ".")
+	err := depl.KubePlayPod(PodStart, ".")
 	if err != nil {
 		err = fmt.Errorf("failed to start deployment pod, %v", err)
 		SdNotifyOrLog(err.Error())
@@ -319,7 +319,7 @@ func StopPod(ctx context.Context, depl *Deployment) error {
 	//
 
 	log.Printf("Stopping the containers...\n")
-	err = depl.StartStopPod(false, ".")
+	err = depl.KubePlayPod(PodStop, ".")
 	if err != nil {
 		err = fmt.Errorf("failed to stop pod, %v", err)
 		SdNotifyOrLog(err.Error())
