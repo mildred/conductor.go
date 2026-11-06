@@ -1,6 +1,6 @@
 module github.com/mildred/conductor.go
 
-go 1.23.0
+go 1.25.0
 
 require (
 	github.com/PaesslerAG/jsonpath v0.1.1
@@ -15,11 +15,12 @@ require (
 	github.com/taigrr/systemctl v1.0.10
 	github.com/tailscale/hujson v0.0.0-20250605163823-992244df8c5a
 	github.com/yookoala/realpath v1.0.0
-	golang.org/x/crypto v0.33.0
+	golang.org/x/crypto v0.46.0
 )
 
 require (
 	github.com/PaesslerAG/gval v1.2.4 // indirect
+	github.com/cilium/ebpf v0.22.0 // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
 	github.com/google/go-github/v30 v30.1.0 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
@@ -27,11 +28,13 @@ require (
 	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/tcnksm/go-gitconfig v0.1.2 // indirect
 	github.com/ulikunitz/xz v0.5.12 // indirect
-	golang.org/x/net v0.34.0 // indirect
+	golang.org/x/net v0.48.0 // indirect
 	golang.org/x/oauth2 v0.26.0 // indirect
-	golang.org/x/sys v0.30.0 // indirect
+	golang.org/x/sys v0.43.0 // indirect
 )
 
 replace github.com/integrii/flaggy => github.com/mildred/flaggy v0.0.0-20261023083048-92ca2ea7c944
 
 // replace github.com/integrii/flaggy => ../flaggy
+
+tool github.com/cilium/ebpf/cmd/bpf2go

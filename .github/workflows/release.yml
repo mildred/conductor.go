@@ -7,7 +7,7 @@ on:
       - master
 
 env:
-  GO_VERSION: "1.22.0"
+  GO_VERSION: "1.26.0"
 
 name: Upload release assets after tagging
 jobs:
@@ -25,6 +25,7 @@ jobs:
         run: |
           echo "fetch_tags=false" >> $GITHUB_ENV
           echo "fetch_depth=1" >> $GITHUB_ENV
+      # - run: sudo apt-get install llvm libbpf-dev build-essential linux-headers-$(uname -r)	linux-libc-dev-arm64-cross linux-libc-dev-amd64-cross
       - name: Install Go
         uses: actions/setup-go@v5
         with:
@@ -34,6 +35,7 @@ jobs:
         with:
           fetch-tags: ${{ env.fetch_tags }}
           fetch-depth: ${{ env.fetch_depth }}
+      # - run: go get -tool github.com/cilium/ebpf/cmd/bpf2go@latest
       - if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         run: |
           git  tag | grep -- -latest- | xargs  git tag -d
