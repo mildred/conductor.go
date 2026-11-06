@@ -16,6 +16,7 @@ import (
 	"github.com/mildred/conductor.go/src/deployment"
 	"github.com/mildred/conductor.go/src/deployment_util"
 	"github.com/mildred/conductor.go/src/dirs"
+	"github.com/mildred/conductor.go/src/pidfile"
 	"github.com/mildred/conductor.go/src/tmpl"
 	"github.com/mildred/conductor.go/src/utils"
 
@@ -69,6 +70,17 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 	if err != nil {
 		return err
 	}
+
+	service_dir, err := ServiceDirByName(service_name)
+	if err != nil {
+		return err
+	}
+
+	pidfile, err := pidfile.CreateUpdateOrRetryPIDFile(ctx, ServiceLockFilename(service_dir), time.Second)
+	if err != nil {
+		return err
+	}
+	defer pidfile.Close()
 
 	//
 	// [restart] Notify systemd reload in progress
@@ -384,6 +396,8 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 	// Keep running in the background, and monitor the deployments
 	// (exit with an error if a deployment is missing)
 	//
+
+	pidfile.Close()
 
 	for {
 		// Reload service in case it changes its id

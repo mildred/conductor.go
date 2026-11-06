@@ -202,6 +202,10 @@ func (s *Service) IsDynamicDeployment() bool {
 	return s.StaticDeployments == nil || !*s.StaticDeployments
 }
 
+func ServiceLockFilename(path string) string {
+	return dirs.Join(dirs.SelfRuntimeDir, "services", unit.UnitNamePathEscape(path), "pidfile")
+}
+
 func ServiceUnit(path string) string {
 	return fmt.Sprintf("conductor-service@%s.service", unit.UnitNamePathEscape(path))
 }

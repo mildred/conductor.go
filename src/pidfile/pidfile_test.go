@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/makifdb/pidfile"
+	"github.com/mildred/conductor.go/src/pidfile"
 )
 
 // tempPIDFile creates a temporary PID file and returns its path using os.TempDir.
@@ -36,7 +36,7 @@ func tempPIDFile(t *testing.T) string {
 func TestCreateOrUpdatePIDFile(t *testing.T) {
 	pidFilePath := tempPIDFile(t)
 
-	if err := pidfile.CreateOrUpdatePIDFile(pidFilePath); err != nil {
+	if _, err := pidfile.CreateOrUpdatePIDFile(pidFilePath); err != nil {
 		t.Errorf("Failed to create PID file: %v", err)
 	}
 
@@ -72,7 +72,7 @@ func TestCreateOrUpdatePIDFileExistingActiveProcess(t *testing.T) {
 	}
 
 	// Call CreateOrUpdatePIDFile and expect an error indicating the PID already exists
-	err := pidfile.CreateOrUpdatePIDFile(pidFilePath)
+	err := _, pidfile.CreateOrUpdatePIDFile(pidFilePath)
 	if !errors.Is(err, pidfile.ErrPIDExists) {
 		t.Errorf("Expected ErrPIDExists error, but got: %v", err)
 	}

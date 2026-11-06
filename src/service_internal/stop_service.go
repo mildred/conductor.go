@@ -15,6 +15,7 @@ import (
 	"github.com/mildred/conductor.go/src/deployment"
 	"github.com/mildred/conductor.go/src/deployment_public"
 	"github.com/mildred/conductor.go/src/deployment_util"
+	"github.com/mildred/conductor.go/src/pidfile"
 	"github.com/mildred/conductor.go/src/utils"
 
 	. "github.com/mildred/conductor.go/src/service"
@@ -32,11 +33,22 @@ func Stop(ctx context.Context, service_name string, opts StopOpts) error {
 		opts.UnstoppableTimeout = 5 * time.Second
 	}
 
+	service_dir, err := ServiceDirByName(service_name)
+	if err != nil {
+		return err
+	}
+
+	pidfile, err := pidfile.CreateUpdateOrRetryPIDFile(ctx, ServiceLockFilename(service_dir), time.Second)
+	if err != nil {
+		return err
+	}
+	defer pidfile.Close()
+
 	//
 	// Notify stop in progress
 	//
 
-	_, err := daemon.SdNotify(false, daemon.SdNotifyStopping)
+	_, err = daemon.SdNotify(false, daemon.SdNotifyStopping)
 	if err != nil {
 		return err
 	}
