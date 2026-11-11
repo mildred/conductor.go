@@ -9,7 +9,7 @@ import (
 // GenerateRandomULAPrefix generates a random IPv6 Unique Local Address (ULA) prefix.
 // The prefix is in the form fc00::/48 or fd00::/48 (a common convention).
 // The first 8 bits are 1111 110x (FC or FD), and the next 40 bits are random.
-func GenerateRandomULAPrefix(size int) string {
+func GenerateRandomULAPrefix(size int, show_cidr bool) string {
 	var ip = make(net.IP, 16)
 
 	rand.Read(ip)
@@ -21,5 +21,9 @@ func GenerateRandomULAPrefix(size int) string {
 
 	ip = ip.Mask(net.CIDRMask(size, 128))
 
-	return fmt.Sprintf("%s/%d", ip.To16().String(), size)
+	if show_cidr {
+		return fmt.Sprintf("%s/%d", ip.To16().String(), size)
+	} else {
+		return ip.To16().String()
+	}
 }

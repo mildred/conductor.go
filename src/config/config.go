@@ -25,7 +25,7 @@ func InstallConfig() error {
 	}
 
 	if cfg.ULAPrefix == "" {
-		cfg.ULAPrefix = GenerateRandomULAPrefix(64)
+		cfg.ULAPrefix = GenerateRandomULAPrefix(64, true)
 		fmt.Printf(": ula_prefix = %q\n", cfg.ULAPrefix)
 		modified = true
 	}

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log"
 
@@ -92,12 +93,57 @@ func cmd_addr_update() *flaggy.Subcommand {
 	return cmd
 }
 
+func cmd_addr_ula_prefix() *flaggy.Subcommand {
+	var generate, no_cidr bool
+	var size int
+
+	cmd := flaggy.NewSubcommand("ula-prefix")
+	cmd.Bool(&generate, "g", "generate", "Show a random ULA prefix instead")
+	cmd.Int(&size, "", "size", "Size of the generated ULA prefix")
+	cmd.Bool(&no_cidr, "n", "no-cidr", "Hide the CIDR")
+	cmd.Description = "Show the system ULA prefix"
+
+	cmd.CommandUsed = Hook(func() error {
+		log.Default().SetOutput(io.Discard)
+
+		if generate {
+			if size == 0 {
+				size = 64
+			}
+			fmt.Println(config.GenerateRandomULAPrefix(size, !no_cidr))
+		} else {
+			cfg, err := config.ReadConfig()
+			if err != nil {
+				return err
+			}
+
+			var a = addr.NewAddr(cfg)
+			err = a.Init()
+			if err != nil {
+				return err
+			}
+
+			defer a.Close()
+
+			if no_cidr {
+				fmt.Println(a.ULAPrefixNoCidr())
+			} else {
+				fmt.Println(a.ULAPrefix)
+			}
+		}
+
+		return nil
+	})
+	return cmd
+}
+
 func cmd_addr() *flaggy.Subcommand {
 	cmd := flaggy.NewSubcommand("addr")
 	cmd.Description = "Address subcommand"
 	cmd.AttachSubcommand(cmd_addr_update(), 1)
 	cmd.AttachSubcommand(cmd_addr_up(), 1)
 	cmd.AttachSubcommand(cmd_addr_down(), 1)
+	cmd.AttachSubcommand(cmd_addr_ula_prefix(), 1)
 	cmd.RequireSubcommand = true
 	return cmd
 }
