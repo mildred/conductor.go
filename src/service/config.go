@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/alessio/shellescape"
+	"github.com/coreos/go-systemd/v22/dbus"
 	"github.com/coreos/go-systemd/v22/unit"
 	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
 	"github.com/tailscale/hujson"
@@ -59,7 +60,8 @@ type Service struct {
 	Inherit                 *InheritedFile             `json:"-"`
 	AppName                 string                     `json:"app_name,omitempty"`      // my-app
 	InstanceName            string                     `json:"instance_name,omitempty"` // staging
-	Disable                 *bool                      `json:"disable"`
+	DisableCondition        *bool                      `json:"disable"`
+	HideIfDisabled          bool                       `json:"hide_if_disabled"`
 	AutoRestart             *bool                      `json:"auto_restart,omitempty"`
 	StaticDeployments       *bool                      `json:"static_deployments"`
 	LoadBalancerService     *string                    `json:"load_balancer_service,omitempty"`
@@ -672,6 +674,38 @@ func (service *Service) ProxyConfig(ctx context.Context, exclude_parts bool) (ca
 	return configs, nil
 }
 
+func (s *Service) EnableState(ctx context.Context, sd *dbus.Conn) (string, error) {
+	var err error
+	if sd == nil {
+		sd, err = utils.NewSystemdClient(ctx)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	prop, err := sd.GetUnitPropertyContext(ctx, ServiceUnit(s.BasePath), "UnitFileState")
+	if err != nil {
+		return "", err
+	}
+
+	return prop.Value.Value().(string), nil
+}
+
+func (s *Service) IsEnabled(ctx context.Context, sd *dbus.Conn) (bool, error) {
+	enable_state, err := s.EnableState(ctx, sd)
+	if err != nil {
+		return false, err
+	}
+
+	if enable_state == "disabled" {
+		return false, nil
+	} else if enable_state == "enabled" {
+		return true, nil
+	}
+
+	return false, fmt.Errorf("Cannot detect if a unit is enabled because %s LoadState=%s", ServiceUnit(s.BasePath), enable_state)
+}
+
 func (c *DisplayColumn) UnmarshalJSON(data []byte) error {
 	var value interface{}
 	err := json.Unmarshal(data, &value)
@@ -731,8 +765,8 @@ func (s *Service) GetDisplayColumn(c DisplayColumn, runner CommandRunnerDisplayC
 
 func (s *Service) EvaluateCondition(verbose bool) (condition bool, disable bool, err error) {
 	disable = false
-	if s.Disable != nil {
-		disable = *s.Disable
+	if s.DisableCondition != nil {
+		disable = *s.DisableCondition
 		if verbose {
 			log.Printf("Check service disabled: %v", disable)
 		}

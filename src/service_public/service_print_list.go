@@ -85,14 +85,15 @@ func (sel *Selector) match_val(val string) (bool, error) {
 }
 
 type ListSettings struct {
-	FilterApplication string
-	FilterConfig      map[string][]Selector
-	FilterJSONPaths   []string
-	All               bool
-	ResumeBefore      *Selector
-	ResumeAfter       *Selector
-	StopBefore        *Selector
-	StopAfter         *Selector
+	FilterApplication   string
+	FilterConfig        map[string][]Selector
+	FilterJSONPaths     []string
+	All                 bool
+	EnableHiddenSetting bool
+	ResumeBefore        *Selector
+	ResumeAfter         *Selector
+	StopBefore          *Selector
+	StopAfter           *Selector
 }
 
 type PrintListSettings struct {
@@ -146,6 +147,7 @@ type ListItem struct {
 	InspectedRaw json.RawMessage
 	Service      *service.Service
 	Condition    bool
+	EnableState  string
 }
 
 func List(ctx context.Context, settings ListSettings) (*ListItems, error) {
@@ -158,7 +160,7 @@ func List(ctx context.Context, settings ListSettings) (*ListItems, error) {
 
 	units, err := sd.ListUnitsByPatternsContext(ctx, nil, []string{"conductor-service@*.service"})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("cannot list service units, %v", err)
 	}
 
 	var list_service_dirs []string
@@ -276,6 +278,11 @@ func List(ctx context.Context, settings ListSettings) (*ListItems, error) {
 		service := list_services[i]
 		u := list_status[i]
 
+		enable_state, err := service.EnableState(ctx, sd)
+		if err != nil {
+			errs = errors.Join(errs, fmt.Errorf("Error getting enable state for %v-%v: %v", service.AppName, service.InstanceName, err))
+		}
+
 		condition, _, err := service.EvaluateCondition(false)
 		if err != nil {
 			errs = errors.Join(errs, fmt.Errorf("Error evaluating condition for %v-%v: %v", service.AppName, service.InstanceName, err))
@@ -285,6 +292,12 @@ func List(ctx context.Context, settings ListSettings) (*ListItems, error) {
 		var filtered_out = false
 		if !settings.All {
 			filtered_out = !condition && u.LoadState == "" && u.ActiveState == ""
+		}
+
+		if settings.EnableHiddenSetting && !filtered_out {
+			if service.HideIfDisabled && enable_state == "disabled" {
+				filtered_out = true
+			}
 		}
 
 		inspectState := InspectState{
@@ -350,6 +363,7 @@ func List(ctx context.Context, settings ListSettings) (*ListItems, error) {
 					InspectedRaw: msg,
 					Service:      service,
 					Condition:    condition,
+					EnableState:  enable_state,
 				})
 			}
 
@@ -377,6 +391,10 @@ func List(ctx context.Context, settings ListSettings) (*ListItems, error) {
 func PrintList(settings PrintListSettings) error {
 	var ctx = context.Background()
 	list, errs := List(ctx, settings.ListSettings)
+
+	if list == nil {
+		return fmt.Errorf("cannot establish services list, %v", errs)
+	}
 
 	var rows [][]interface{}
 	row := []interface{}{"Name", "App", "Instance", "Enabled", "Active", "State"}
@@ -418,12 +436,12 @@ func PrintList(settings PrintListSettings) error {
 				name = service.BasePath
 			}
 
-			enabled_state := u.LoadState
-			if service.Disable != nil && *service.Disable {
+			enabled_state := item.EnableState
+			if service.DisableCondition != nil && *service.DisableCondition {
 				if enabled_state == "" {
-					enabled_state = "disabled"
+					enabled_state = "blocked"
 				} else {
-					enabled_state = "disabled(" + enabled_state + ")"
+					enabled_state = "blocked(" + enabled_state + ")"
 				}
 			} else if !item.Condition {
 				if enabled_state == "" {

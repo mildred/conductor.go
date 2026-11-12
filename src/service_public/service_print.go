@@ -38,7 +38,18 @@ func PrintService(name string, settings PrintSettings) error {
 	tbl.AddRow("Path", service.BasePath)
 	tbl.AddRow("Filename", service.FileName)
 	tbl.AddRow("Id", service.Id)
-	if service.Disable != nil && *service.Disable {
+
+	enable, err := service.IsEnabled(ctx, nil)
+	if err != nil {
+		tbl.AddRow("Enabled", fmt.Sprintf("error: %v", err))
+		err = nil
+	} else if enable {
+		tbl.AddRow("Enabled", "yes")
+	} else {
+		tbl.AddRow("Enabled", "no")
+	}
+
+	if service.DisableCondition != nil && *service.DisableCondition {
 		tbl.AddRow("Disable", "yes")
 	} else {
 		tbl.AddRow("Disable", "no")

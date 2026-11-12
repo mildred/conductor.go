@@ -3,6 +3,7 @@
         "instance_name": "",
         "load_balancer_service": "",
         "auto_restart": false,
+        "hide_if_disabled": true,
         "parts": [
           {
             "type": "daemon",

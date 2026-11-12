@@ -32,9 +32,17 @@ func ExtendTimeout(ctx context.Context, extra_time time.Duration) {
 
 func NewSystemdClient(ctx context.Context) (*dbus.Conn, error) {
 	if dirs.AsRoot {
-		return dbus.NewSystemConnectionContext(ctx)
+		conn, err := dbus.NewSystemConnectionContext(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("cannot connect to system bus, %v", err)
+		}
+		return conn, nil
 	} else {
-		return dbus.NewUserConnectionContext(ctx)
+		conn, err := dbus.NewUserConnectionContext(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("cannot connect to session bus, %v\nAdvice: maybe you should run conductor as root\n", err)
+		}
+		return conn, nil
 	}
 }
 

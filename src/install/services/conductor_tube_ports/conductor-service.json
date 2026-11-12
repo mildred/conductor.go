@@ -2,6 +2,7 @@
         "app_name": "conductor_tube_ports",
         "instance_name": "",
         "auto_restart": false,
+        "hide_if_disabled": true,
         "hooks": [
                 {
                         "name": "init",

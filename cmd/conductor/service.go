@@ -419,14 +419,15 @@ func cmd_service_ls() *flaggy.Subcommand {
 
 		return service_public.PrintList(service_public.PrintListSettings{
 			ListSettings: service_public.ListSettings{
-				FilterApplication: app_flag,
-				FilterConfig:      c,
-				FilterJSONPaths:   filter_jsonpaths,
-				All:               all,
-				ResumeBefore:      resume_before,
-				ResumeAfter:       resume_after,
-				StopBefore:        stop_before,
-				StopAfter:         stop_after,
+				FilterApplication:   app_flag,
+				FilterConfig:        c,
+				FilterJSONPaths:     filter_jsonpaths,
+				All:                 all,
+				EnableHiddenSetting: !all,
+				ResumeBefore:        resume_before,
+				ResumeAfter:         resume_after,
+				StopBefore:          stop_before,
+				StopAfter:           stop_after,
 			},
 			JSONPath:     jsonpath,
 			Unit:         unit,
