@@ -14,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mildred/conductor.go/src/addr"
 	"github.com/mildred/conductor.go/src/caddy"
 	"github.com/mildred/conductor.go/src/dirs"
 	"github.com/mildred/conductor.go/src/service"
@@ -336,25 +335,12 @@ func (depl *Deployment) Vars() ([]string, error) {
 		excluded = depl.Function.ExcludeVars
 	}
 
-	var firstAddrName string
-	addrNames := depl.AddrNames()
-	if len(addrNames) > 0 {
-		firstAddrName = addrNames[0]
-		a, err := addr.DefaultAddrReadOnly()
-		if err != nil {
-			return nil, err
-		}
-		for _, addrName := range addrNames {
-			v, err := a.EnvVars(addrName)
-			if err != nil {
-				return nil, err
-			}
-
-			vars = append(vars, v...)
-		}
+	svc_vars, err := depl.Service.VarsExcluding(excluded)
+	if err != nil {
+		return nil, err
 	}
 
-	vars = append(vars, depl.Service.VarsExcluding(excluded)...)
+	vars = append(vars, svc_vars...)
 	vars = append(vars,
 		"CONDUCTOR_SERVICE_PART="+depl.PartName,
 		"CONDUCTOR_DEPLOYMENT="+depl.DeploymentName,
@@ -366,8 +352,6 @@ func (depl *Deployment) Vars() ([]string, error) {
 		"CONDUCTOR_DEPLOYMENT_SOCKET_CONFIG_UNIT="+depl.SocketConfigUnit(),
 		"CONDUCTOR_DEPLOYMENT_CONFIG_UNIT="+DeploymentConfigUnit(depl.DeploymentName),
 		"CONDUCTOR_PART_ID="+depl.PartId,
-		"CONDUCTOR_ADDR_NAMES="+strings.Join(addrNames, " "),
-		"CONDUCTOR_ADDR_NAME="+firstAddrName,
 	)
 
 	if depl.Pod != nil {

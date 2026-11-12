@@ -28,6 +28,11 @@ func Inspect(ctx context.Context, service *Service, state *InspectState) (json.R
 		return nil, err
 	}
 
+	svars, err := service.Vars()
+	if err != nil {
+		return nil, err
+	}
+
 	exported := struct {
 		*Service
 		Inherit          []*InheritFile    `json:"inherit"`
@@ -51,7 +56,7 @@ func Inspect(ctx context.Context, service *Service, state *InspectState) (json.R
 		Id:               service.Id,
 		ProxyConfig:      proxy_config,
 		ConditionMatched: condition_matched,
-		Vars:             service.Vars(),
+		Vars:             svars,
 	}
 
 	var buf bytes.Buffer

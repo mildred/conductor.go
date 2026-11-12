@@ -22,6 +22,13 @@ func (part *ServiceDaemon) FixPaths(dir string) error {
 	if err := fix_path(dir, &part.PartIdTemplate, false); err != nil {
 		return err
 	}
+
+	if len(part.Exec) > 0 {
+		if err := fix_path(dir, &part.Exec[0], true); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 

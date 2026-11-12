@@ -1,2 +1,25 @@
 {
+  "admin": {
+    "listen": "caddy:2019"
+  },
+  "apps": {
+    "http": {
+      "servers": {
+        "master": {
+          "listen": [
+            "caddy:443"
+          ],
+          "routes": { [
+            {
+              "handle": {
+                "handler": "static_response",
+                "status_code": "200",
+                "body": "OK"
+              }
+            }
+          ] }
+        }
+      }
+    }
+  }
 }

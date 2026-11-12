@@ -15,7 +15,12 @@ type ServiceCommandRunner struct {
 }
 
 func (s *ServiceCommandRunner) RunCommandGetValue(c *ServiceCommand, cmd_name string, args ...string) (string, error) {
-	cmd, err := PrepareCommand(c, s.BasePath, s.Vars(), cmd_name, args...)
+	vars, err := s.Vars()
+	if err != nil {
+		return "", err
+	}
+
+	cmd, err := PrepareCommand(c, s.BasePath, vars, cmd_name, args...)
 	if err != nil {
 		return "", err
 	}

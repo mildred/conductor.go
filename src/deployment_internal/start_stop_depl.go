@@ -15,6 +15,7 @@ import (
 	"github.com/mildred/conductor.go/src/deployment"
 	"github.com/mildred/conductor.go/src/dirs"
 	"github.com/mildred/conductor.go/src/service"
+	"github.com/mildred/conductor.go/src/service_util"
 	"github.com/mildred/conductor.go/src/utils"
 
 	. "github.com/mildred/conductor.go/src/deployment"
@@ -81,6 +82,15 @@ func Prepare(deployment_name_or_dir string) error {
 	// if err != nil {
 	// 	return err
 	// }
+
+	//
+	// Bring addr up (if not already up by service)
+	//
+
+	err = service_util.BringAddrUp(ctx, depl.Service)
+	if err != nil {
+		return err
+	}
 
 	//
 	// Run the pre-start hooks (via systemd-run specific scope)

@@ -12,13 +12,13 @@ import (
 	"github.com/coreos/go-systemd/v22/daemon"
 	"github.com/taigrr/systemctl/properties"
 
-	"github.com/mildred/conductor.go/src/addr"
 	"github.com/mildred/conductor.go/src/caddy"
 	"github.com/mildred/conductor.go/src/deployment"
 	"github.com/mildred/conductor.go/src/deployment_internal"
 	"github.com/mildred/conductor.go/src/deployment_util"
 	"github.com/mildred/conductor.go/src/dirs"
 	"github.com/mildred/conductor.go/src/pidfile"
+	"github.com/mildred/conductor.go/src/service_util"
 	"github.com/mildred/conductor.go/src/tmpl"
 	"github.com/mildred/conductor.go/src/utils"
 
@@ -154,7 +154,7 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 			now := time.Now()
 			if now.Sub(active_since).Abs() > 10*time.Second {
 				log.Printf("Service configuration last change at %v, reloading...", active_since)
-				cmd := utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "reload", config_unit)
+				cmd := utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "try-reload-or-restart", config_unit)
 				cmd.Stdout = os.Stdout
 				cmd.Stderr = os.Stderr
 				err = utils.RunWithJournal(ctx, cmd, config_unit)
@@ -169,7 +169,12 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 	// Run pre-start-service hook
 	//
 
-	err = service.RunHooks(ctx, "pre-start-service", "", service.Vars(), 60*time.Second)
+	svars, err := service.Vars()
+	if err != nil {
+		return err
+	}
+
+	err = service.RunHooks(ctx, "pre-start-service", "", svars, 60*time.Second)
 	if err != nil {
 		return err
 	}
@@ -178,20 +183,9 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 	// Bring address up
 	//
 
-	addrNames := service.AddrNames()
-	if len(addrNames) > 0 {
-		a, err := addr.OpenDefaultAddr()
-		if err != nil {
-			return err
-		}
-		defer a.Close()
-
-		for _, addrName := range addrNames {
-			err = a.Up(ctx, addrName)
-			if err != nil {
-				return err
-			}
-		}
+	err = service_util.BringAddrUp(ctx, service)
+	if err != nil {
+		return err
 	}
 
 	//
@@ -262,7 +256,7 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 
 		depl_names = append(depl_names, depl.DeploymentName)
 
-		if seed.IsPod {
+		if seed.IsPod || seed.IsDaemon {
 
 			ctx, cancel := context.WithCancel(context.Background())
 			go utils.ExtendTimeout(ctx, 60*time.Second)
@@ -385,7 +379,12 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 	// Run post-start-service hook
 	//
 
-	err = service.RunHooks(ctx, "post-start-service", "", service.Vars(), 60*time.Second)
+	svars, err = service.Vars()
+	if err != nil {
+		return err
+	}
+
+	err = service.RunHooks(ctx, "post-start-service", "", svars, 60*time.Second)
 	if err != nil {
 		return err
 	}
@@ -535,5 +534,10 @@ func Template(ctx context.Context, service_name string, template string) error {
 		return err
 	}
 
-	return tmpl.RunTemplateStdout(ctx, template, service.Vars())
+	svars, err := service.Vars()
+	if err != nil {
+		return err
+	}
+
+	return tmpl.RunTemplateStdout(ctx, template, svars)
 }

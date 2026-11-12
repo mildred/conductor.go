@@ -149,6 +149,13 @@ func (a *Addr) Init() error {
 		return fmt.Errorf("mkdir failed, %v", err)
 	}
 
+	hosts_file := fmt.Sprintf("/run/%s/hosts", a.UnitName())
+	f, err := os.OpenFile(hosts_file, os.O_APPEND|os.O_CREATE, 0644)
+	if err != nil {
+		return fmt.Errorf("create file failed, %v", err)
+	}
+	f.Close()
+
 	currentTime := time.Now().Local()
 	err = os.Chtimes(fmt.Sprintf("/run/%s/hosts", a.UnitName()), currentTime, currentTime)
 	if err != nil {
@@ -210,13 +217,15 @@ func (a *Addr) Update() error {
 
 	var result []string
 	var skip bool
+	var inserted bool
 	for _, line := range lines {
 		if line == begin {
 			h, err := os.ReadFile(small_hosts_file)
 			if err != nil {
 				return err
 			}
-			result = append(result, line, strings.TrimSuffix(string(h), "\n"))
+			result = append(result, line, strings.TrimRight(string(h), "\n"))
+			inserted = true
 			skip = true
 		}
 		if line == end {
@@ -225,6 +234,14 @@ func (a *Addr) Update() error {
 		if !skip {
 			result = append(result, line)
 		}
+	}
+	if !inserted {
+		h, err := os.ReadFile(small_hosts_file)
+		if err != nil {
+			return err
+		}
+		result = append(result, begin, strings.TrimRight(string(h), "\n"), end)
+		inserted = true
 	}
 
 	new_hosts := joinLines(result)
@@ -417,19 +434,21 @@ func (a *Addr) Up(ctx context.Context, new_host string) error {
 		return err
 	}
 
-	fmt.Fprintf(os.Stderr, "+ ip addr del %s dev lo 2>/dev/null || true\n", ip6)
-	cmd = exec.CommandContext(ctx, "ip", "addr", "del", ip6, "dev", "lo")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = nil
-	_ = cmd.Run()
+	if ip6 != "" {
+		fmt.Fprintf(os.Stderr, "+ ip addr del %s dev lo 2>/dev/null || true\n", ip6)
+		cmd = exec.CommandContext(ctx, "ip", "addr", "del", ip6, "dev", "lo")
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = nil
+		_ = cmd.Run()
 
-	fmt.Fprintf(os.Stderr, "+ ip addr add %s dev %s\n", ip6, a.InterfaceName())
-	cmd = exec.CommandContext(ctx, "ip", "addr", "add", ip6, "dev", a.InterfaceName())
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	err = cmd.Run()
-	if err != nil {
-		return err
+		fmt.Fprintf(os.Stderr, "+ ip addr add %s dev %s\n", ip6, a.InterfaceName())
+		cmd = exec.CommandContext(ctx, "ip", "addr", "add", ip6, "dev", a.InterfaceName())
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		err = cmd.Run()
+		if err != nil {
+			return err
+		}
 	}
 
 	err = a.Update()
@@ -586,19 +605,21 @@ func (a *Addr) Down(ctx context.Context, new_host string) error {
 		return err
 	}
 
-	fmt.Fprintf(os.Stderr, "+ ip addr del %s dev lo\n", ip6)
-	cmd := exec.CommandContext(ctx, "ip", "addr", "del", ip6, "dev", "lo")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	_ = cmd.Run()
+	if ip6 != "" {
+		fmt.Fprintf(os.Stderr, "+ ip addr del %s dev lo\n", ip6)
+		cmd := exec.CommandContext(ctx, "ip", "addr", "del", ip6, "dev", "lo")
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		_ = cmd.Run()
 
-	fmt.Fprintf(os.Stderr, "+ ip addr del %s dev %s\n", ip6, a.InterfaceName())
-	cmd = exec.CommandContext(ctx, "ip", "addr", "del", ip6, "dev", a.InterfaceName())
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	err = cmd.Run()
-	if err != nil {
-		return err
+		fmt.Fprintf(os.Stderr, "+ ip addr del %s dev %s\n", ip6, a.InterfaceName())
+		cmd = exec.CommandContext(ctx, "ip", "addr", "del", ip6, "dev", a.InterfaceName())
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		err = cmd.Run()
+		if err != nil {
+			return err
+		}
 	}
 
 	return a.Update()
@@ -665,6 +686,10 @@ func readHostsFile(fname string, ignoreMissing bool) ([]Host, error) {
 
 	res := []Host{}
 	for _, line := range strings.Split(string(data), "\n") {
+		if line == "" {
+			continue
+		}
+
 		parts := Spaces.Split(line, -1)
 		var h = Host{
 			Line: &line,

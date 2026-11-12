@@ -16,7 +16,12 @@ import (
 )
 
 func EnableService(ctx context.Context, svc *service.Service, now bool) error {
-	err := svc.RunHooks(ctx, "pre-enable-service", "", svc.Vars(), 60*time.Second)
+	vars, err := svc.Vars()
+	if err != nil {
+		return err
+	}
+
+	err = svc.RunHooks(ctx, "pre-enable-service", "", vars, 60*time.Second)
 	if err != nil {
 		return err
 	}
@@ -26,7 +31,12 @@ func EnableService(ctx context.Context, svc *service.Service, now bool) error {
 		return err
 	}
 
-	err = svc.RunHooks(ctx, "post-enable-service", "", svc.Vars(), 60*time.Second)
+	vars, err = svc.Vars()
+	if err != nil {
+		return err
+	}
+
+	err = svc.RunHooks(ctx, "post-enable-service", "", vars, 60*time.Second)
 	if err != nil {
 		return err
 	}
@@ -68,7 +78,12 @@ func DisableService(ctx context.Context, svc *service.Service, now bool) error {
 		return err
 	}
 
-	err = svc.RunHooks(ctx, "pre-disable-service", "", svc.Vars(), 60*time.Second)
+	vars, err := svc.Vars()
+	if err != nil {
+		return err
+	}
+
+	err = svc.RunHooks(ctx, "pre-disable-service", "", vars, 60*time.Second)
 	if err != nil {
 		return err
 	}
@@ -92,7 +107,12 @@ func DisableService(ctx context.Context, svc *service.Service, now bool) error {
 		}
 	}
 
-	err = svc.RunHooks(ctx, "post-disable-service", "", svc.Vars(), 60*time.Second)
+	vars, err = svc.Vars()
+	if err != nil {
+		return err
+	}
+
+	err = svc.RunHooks(ctx, "post-disable-service", "", vars, 60*time.Second)
 	if err != nil {
 		return err
 	}

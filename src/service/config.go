@@ -22,6 +22,7 @@ import (
 	"github.com/yookoala/realpath"
 	"golang.org/x/crypto/sha3"
 
+	"github.com/mildred/conductor.go/src/addr"
 	"github.com/mildred/conductor.go/src/caddy"
 	"github.com/mildred/conductor.go/src/dirs"
 	"github.com/mildred/conductor.go/src/tmpl"
@@ -213,6 +214,10 @@ func ServiceNameFromFile(service_file string) (string, error) {
 	}
 
 	return "", nil
+}
+
+func (s *Service) GetServiceName() (string, error) {
+	return ServiceNameFromFile(filepath.Join(s.BasePath, ConfigName))
 }
 
 func (s *Service) GetVersion() ServiceVersion {
@@ -563,7 +568,12 @@ func (service *Service) PartId(ctx context.Context, part_name string) (string, e
 	}
 
 	if part_id_template != "" {
-		data, err := tmpl.RunTemplate(ctx, part_id_template, append(service.VarsExcluding(excluded_vars),
+		vars, err := service.VarsExcluding(excluded_vars)
+		if err != nil {
+			return "", err
+		}
+
+		data, err := tmpl.RunTemplate(ctx, part_id_template, append(vars,
 			"CONDUCTOR_SERVICE_PART="+part_name,
 		))
 
@@ -585,11 +595,11 @@ func join_paths(base, path string) string {
 	}
 }
 
-func (service *Service) Vars() []string {
+func (service *Service) Vars() ([]string, error) {
 	return service.VarsExcluding(nil)
 }
 
-func (service *Service) VarsExcluding(excluded []string) []string {
+func (service *Service) VarsExcluding(excluded []string) ([]string, error) {
 	name := service.Name
 	if name == "" {
 		name = service.BasePath
@@ -600,6 +610,28 @@ func (service *Service) VarsExcluding(excluded []string) []string {
 			vars = append(vars, fmt.Sprintf("%s=%s", k, v))
 		}
 	}
+
+	var firstAddrName string
+	addrNames, err := service.AddrNames()
+	if err != nil {
+		return nil, err
+	}
+	if len(addrNames) > 0 {
+		firstAddrName = addrNames[0]
+		a, err := addr.DefaultAddrReadOnly()
+		if err != nil {
+			return nil, fmt.Errorf("could not get default addr, %v", err)
+		}
+		for _, addrName := range addrNames {
+			v, err := a.EnvVars(addrName)
+			if err != nil {
+				return nil, fmt.Errorf("could not get environment for address %s, %v", addrName, err)
+			}
+
+			vars = append(vars, v...)
+		}
+	}
+
 	vars = append(vars,
 		"CONDUCTOR_APP="+service.AppName,
 		"CONDUCTOR_INSTANCE="+service.InstanceName,
@@ -608,11 +640,13 @@ func (service *Service) VarsExcluding(excluded []string) []string {
 		"CONDUCTOR_SERVICE_DIR="+service.BasePath,
 		"CONDUCTOR_SERVICE_UNIT="+ServiceUnit(service.BasePath),
 		"CONDUCTOR_SERVICE_CONFIG_UNIT="+ServiceConfigUnit(service.BasePath),
+		"CONDUCTOR_ADDR_NAMES="+strings.Join(addrNames, " "),
+		"CONDUCTOR_ADDR_NAME="+firstAddrName,
 	)
-	return vars
+	return vars, nil
 }
 
-func (service *Service) AddrNames() []string {
+func (service *Service) AddrNames() ([]string, error) {
 	has_daemon := false
 	for _, p := range service.Parts {
 		if p.PartType() == DaemonType {
@@ -621,12 +655,17 @@ func (service *Service) AddrNames() []string {
 		}
 	}
 
+	name, err := service.GetServiceName()
+	if err != nil {
+		return nil, err
+	}
+
 	if !has_daemon {
-		return []string{}
-	} else if service.Name == "" {
-		return []string{}
+		return []string{}, nil
+	} else if name == "" {
+		return []string{}, nil
 	} else {
-		return []string{utils.ToDNSName(service.Name)}
+		return []string{utils.ToDNSName(name)}, nil
 	}
 }
 
@@ -693,8 +732,13 @@ func (service *Service) ProxyConfig(ctx context.Context, exclude_parts bool) (ca
 	}
 	if service.ProxyConfigTemplate != "" {
 		var cfgs caddy.ConfigItems
-		err := tmpl.RunTemplateJSON(ctx, service.ProxyConfigTemplate, append(
-			service.Vars(),
+
+		vars, err := service.Vars()
+		if err != nil {
+			return nil, err
+		}
+
+		err = tmpl.RunTemplateJSON(ctx, service.ProxyConfigTemplate, append(vars,
 			"CONDUCTOR_PROXY_CONFIG=service",
 		), &cfgs)
 		if err != nil {

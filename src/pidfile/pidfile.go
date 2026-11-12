@@ -137,7 +137,7 @@ func isProcessActive(pid int) (bool, error) {
 
 	err = process.Signal(syscall.Signal(0))
 	if err != nil {
-		if err == syscall.ESRCH {
+		if err == syscall.ESRCH || err == os.ErrProcessDone {
 			// The process does not exist
 			return false, nil
 		}

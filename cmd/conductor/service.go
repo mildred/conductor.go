@@ -698,7 +698,12 @@ func cmd_service_env() *flaggy.Subcommand {
 			return err
 		}
 
-		for _, v := range service.Vars() {
+		vars, err := service.Vars()
+		if err != nil {
+			return err
+		}
+
+		for _, v := range vars {
 			fmt.Printf("%s\n", v)
 		}
 

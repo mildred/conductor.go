@@ -111,6 +111,11 @@ func RunServiceCommand(service *Service, direct bool, strictVersion bool, env []
 		}
 	}
 
-	err := RunCommand(command, direct, service.BasePath, append(service.Vars(), env...), cmd_name, args...)
+	svars, err := service.Vars()
+	if err != nil {
+		return err
+	}
+
+	err = RunCommand(command, direct, service.BasePath, append(svars, env...), cmd_name, args...)
 	return err
 }

@@ -65,13 +65,18 @@ func PrintService(name string, settings PrintSettings) error {
 		tbl.AddRow("Condition", "blocking")
 	}
 
-	header := "Variables:"
-	for i, v := range service.Vars() {
-		if i == 0 {
-			tbl.AddRow("", "")
+	svars, err := service.Vars()
+	if err != nil {
+		tbl.AddRow("Variables:", err.Error())
+	} else {
+		header := "Variables:"
+		for i, v := range svars {
+			if i == 0 {
+				tbl.AddRow("", "")
+			}
+			tbl.AddRow(header, v)
+			header = ""
 		}
-		tbl.AddRow(header, v)
-		header = ""
 	}
 
 	tbl.Print()

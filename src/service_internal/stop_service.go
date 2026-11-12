@@ -67,7 +67,12 @@ func Stop(ctx context.Context, service_name string, opts StopOpts) error {
 	// Run pre-stop-service hook
 	//
 
-	err = service.RunHooks(ctx, "pre-stop-service", "", service.Vars(), 60*time.Second)
+	svars, err := service.Vars()
+	if err != nil {
+		return err
+	}
+
+	err = service.RunHooks(ctx, "pre-stop-service", "", svars, 60*time.Second)
 	if err != nil {
 		return err
 	}
@@ -160,7 +165,10 @@ func Stop(ctx context.Context, service_name string, opts StopOpts) error {
 	// Bring address down
 	//
 
-	addrNames := service.AddrNames()
+	addrNames, err := service.AddrNames()
+	if err != nil {
+		return err
+	}
 	if len(addrNames) > 0 {
 		a, err := addr.OpenDefaultAddr()
 		if err != nil {
@@ -180,7 +188,12 @@ func Stop(ctx context.Context, service_name string, opts StopOpts) error {
 	// Run post-stop-service hook
 	//
 
-	err = service.RunHooks(ctx, "post-stop-service", "", service.Vars(), 60*time.Second)
+	svars, err = service.Vars()
+	if err != nil {
+		return err
+	}
+
+	err = service.RunHooks(ctx, "post-stop-service", "", svars, 60*time.Second)
 	if err != nil {
 		return err
 	}
