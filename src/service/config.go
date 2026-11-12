@@ -66,6 +66,8 @@ type Service struct {
 	StaticDeployments       *bool                      `json:"static_deployments"`
 	LoadBalancerService     *string                    `json:"load_balancer_service,omitempty"`
 	Conditions              []ServiceCondition         `json:"conditions"`
+	Transitive              bool                       `json:"transitive,omitempty"`
+	Requires                []ServiceRequire           `json:"requires,omitempty"`
 	Config                  map[string]*ConfigValue    `json:"config,omitempty"`                // key-value pairs for config and templating, CHANNEL=staging
 	ProxyConfigTemplate     string                     `json:"proxy_config_template,omitempty"` // Template file for the load-balancer config
 	Parts                   ServiceParts               `json:"parts,omitempty"`
@@ -77,6 +79,17 @@ type Service struct {
 	DisplayServiceDepConfig *[]DisplayColumn           `json:"display_service_deployment_config"`
 	DisplayDeploymentConfig []DisplayColumn            `json:"display_deployment_config"`
 	Commands                map[string]*ServiceCommand `json:"commands"`
+}
+
+type ServiceRequire struct {
+	After bool   `json:"after,omitempty"`
+	Name  string `json:"name,omitempty"`
+	Path  string `json:"path,omitempty"`
+
+	// TODO: require by app and instance requires scanning all services each time
+	// a requirement must be computed and is heavy
+	// App      string `json:"app,omitempty"`
+	// Instance string `json:"instance,omitempty"`
 }
 
 type DisplayColumn struct {
@@ -92,6 +105,7 @@ type DisplayColumnData struct {
 const ConfigName = "conductor-service.json"
 
 var ServiceDirs = dirs.MultiJoin("services", append([]string{dirs.SelfRuntimeDir}, append(dirs.SelfConfigDirs, dirs.SelfDataDirs...)...)...)
+var ServiceDirHome = dirs.Join(dirs.SelfConfigHome, "services")
 
 func ServiceFileByName(name string) (string, error) {
 	if name == "." || strings.HasPrefix(name, "/") || strings.HasPrefix(name, "./") {

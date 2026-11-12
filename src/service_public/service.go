@@ -7,9 +7,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
-	"path"
-	"slices"
 
 	"github.com/mildred/conductor.go/src/dirs"
 	"github.com/mildred/conductor.go/src/service_internal"
@@ -17,124 +14,6 @@ import (
 
 	. "github.com/mildred/conductor.go/src/service"
 )
-
-func ReloadServices(inclusive bool, verbose bool) error {
-	var ctx = context.Background()
-	sd, err := utils.NewSystemdClient(ctx)
-	if err != nil {
-		return err
-	}
-
-	//
-	// Reload services in well-known dirs
-	//
-
-	var seen_service_dirs []string
-	var start_list []string
-	var stop_list []string
-
-	for _, dir := range ServiceDirs {
-		entries, err := os.ReadDir(dir)
-		if err != nil && !os.IsNotExist(err) {
-			return err
-		}
-
-		log_prefix := log.Prefix()
-		defer func() {
-			log.SetPrefix(log_prefix)
-		}()
-
-		for _, ent := range entries {
-			service_dir := path.Join(dir, ent.Name())
-			log.SetPrefix(fmt.Sprintf("%s%s: ", log_prefix, service_dir))
-
-			_, err = os.Stat(path.Join(service_dir, ConfigName))
-			if err != nil && !os.IsNotExist(err) {
-				log.Printf("ignore service, error while querying service file: %v\n", err)
-				continue
-			} else if err != nil {
-				// ignore error, this is not a valid service dir
-				continue
-			}
-
-			service_dir, err = ServiceRealpath(service_dir)
-			if err != nil {
-				return err
-			}
-
-			serv, err := LoadServiceDir(service_dir)
-			if err != nil {
-				log.Printf("ignore service, cannot load configuration: %v\n", err)
-				continue
-			}
-
-			seen_service_dirs = append(seen_service_dirs, service_dir)
-
-			if verbose {
-				log.Printf("evaluate conditions...")
-			}
-			condition, disable, err := serv.EvaluateCondition(verbose)
-			if err != nil {
-				log.Printf("ignore service, cannot evaluate conditions: %v\n", err)
-				continue
-			}
-
-			if disable || !condition {
-				stop_list = append(stop_list, ServiceUnit(service_dir))
-				if verbose && disable {
-					log.Printf("service is disabled explicitely")
-				} else if verbose && !condition {
-					log.Printf("service is disabled because conditions do not match")
-				}
-			} else {
-				start_list = append(start_list, ServiceUnit(service_dir))
-				if verbose {
-					log.Printf("service is enabled")
-				}
-			}
-		}
-
-		log.SetPrefix(log_prefix)
-	}
-
-	if !inclusive {
-		existing_units, err := sd.ListUnitsByPatternsContext(ctx, nil, []string{"conductor-service@*.service"})
-		if err != nil {
-			return err
-		}
-
-		for _, u := range existing_units {
-			service := ServiceDirFromUnit(u.Name)
-			if service == "" || slices.Contains(seen_service_dirs, service) {
-				continue
-			}
-
-			stop_list = append(stop_list, u.Name)
-		}
-	}
-
-	for _, unit := range stop_list {
-		cmd := utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "disable", "--now", unit)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		err = utils.RunWithJournal(ctx, cmd, unit)
-		if err != nil {
-			return err
-		}
-	}
-
-	for _, unit := range start_list {
-		cmd := utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "enable", "--now", unit)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		err = utils.RunWithJournal(ctx, cmd, unit)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
 
 func setDisableConfig(definition_path string, disable bool) error {
 	serv, err := LoadServiceDir(definition_path)
@@ -187,23 +66,12 @@ func Disable(ctx context.Context, name string, now bool) error {
 		return err
 	}
 
-	unit, err := ServiceUnitByName(definition_path)
+	svc, err := LoadServiceByName(definition_path)
 	if err != nil {
 		return err
 	}
 
-	var cmd *exec.Cmd
-	if now {
-		cmd = utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "disable", "--now", unit)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		return utils.RunWithJournal(ctx, cmd, unit)
-	} else {
-		cmd = utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "disable", unit)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		return cmd.Run()
-	}
+	return service_internal.DisableService(context.Background(), svc, now)
 }
 
 type StartOpts struct {

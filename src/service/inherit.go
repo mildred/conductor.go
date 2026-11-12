@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"path/filepath"
 	"strings"
+
+	"github.com/tailscale/hujson"
 )
 
 type InheritFileBase struct {
@@ -38,9 +40,16 @@ func (f *InheritFile) UnmarshalJSON(data []byte) error {
 }
 
 func DecodeInherit(data []byte, dir string) (*InheritedFile, error) {
-	inherited := &InheritedFile{}
 	var inherited_single InheritedFileSingle
-	err := json.Unmarshal(data, &inherited_single)
+	var err error
+	inherited := &InheritedFile{}
+
+	data, err = hujson.Standardize(data)
+	if err != nil {
+		return nil, err
+	}
+
+	err = json.Unmarshal(data, &inherited_single)
 
 	if err == nil && inherited_single.Inherit != nil {
 		inherited.Inherit = append(inherited.Inherit, inherited_single.Inherit)

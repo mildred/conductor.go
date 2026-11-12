@@ -295,7 +295,7 @@ func List(ctx context.Context, settings ListSettings) (*ListItems, error) {
 		}
 
 		if settings.EnableHiddenSetting && !filtered_out {
-			if service.HideIfDisabled && enable_state == "disabled" {
+			if service.HideIfDisabled && enable_state == "disabled" && u.ActiveState == "" {
 				filtered_out = true
 			}
 		}

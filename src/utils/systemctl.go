@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"syscall"
 
 	"github.com/alessio/shellescape"
 	"github.com/mildred/conductor.go/src/dirs"
@@ -32,8 +33,12 @@ func RunWithJournal(ctx context.Context, cmd *exec.Cmd, unfiltered_units ...stri
 		journal.Stderr = os.Stderr
 		err := journal.Start()
 		if err != nil {
-			return fmt.Errorf("Error executing journalctl %s, %v", shellescape.QuoteCommand(args), err)
+			return fmt.Errorf("Error starting journalctl %s, %v", shellescape.QuoteCommand(args), err)
 		}
+		defer func() {
+			journal.Process.Signal(syscall.SIGTERM)
+			journal.Process.Signal(syscall.SIGKILL)
+		}()
 	}
 
 	return cmd.Run()

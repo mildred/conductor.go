@@ -1,19 +1,21 @@
 {
-        "app_name": "conductor_tube_ports",
-        "instance_name": "",
-        "auto_restart": false,
-        "hide_if_disabled": true,
-        "hooks": [
-                {
-                        "name": "init",
-                        "when": "pre-start-service",
-                        "exec": ["./init.sh"]
-                },
-                {
-                        "name": "clean",
-                        "when": "post-stop-service",
-                        "exec": ["./clean.sh"]
-                }
-        ]
+  "app_name": "conductor_tube_ports",
+  "instance_name": "",
+  "auto_restart": false,
+  "hide_if_disabled": true,
+  "transitive": true,
+  "disable": true,
+  "hooks": [
+    {
+      "name": "init",
+      "when": "pre-start-service",
+      "exec": ["./init.sh"]
+    },
+    {
+      "name": "clean",
+      "when": "post-stop-service",
+      "exec": ["./clean.sh"]
+    }
+  ]
 }
 

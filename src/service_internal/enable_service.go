@@ -62,6 +62,44 @@ func EnableService(ctx context.Context, svc *service.Service, now bool) error {
 	}
 }
 
+func DisableService(ctx context.Context, svc *service.Service, now bool) error {
+	unit, err := service.ServiceUnitByName(svc.BasePath)
+	if err != nil {
+		return err
+	}
+
+	err = svc.RunHooks(ctx, "pre-disable-service", "", svc.Vars(), 60*time.Second)
+	if err != nil {
+		return err
+	}
+
+	var cmd *exec.Cmd
+	if now {
+		cmd = utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "disable", "--now", unit)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		err = utils.RunWithJournal(ctx, cmd, unit)
+		if err != nil {
+			return err
+		}
+	} else {
+		cmd = utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "disable", unit)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		err = cmd.Run()
+		if err != nil {
+			return err
+		}
+	}
+
+	err = svc.RunHooks(ctx, "post-disable-service", "", svc.Vars(), 60*time.Second)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func setLoadBalancerService(ctx context.Context, svc *service.Service) error {
 	sd, err := utils.NewSystemdClient(ctx)
 	if err != nil {

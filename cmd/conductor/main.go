@@ -11,6 +11,7 @@ import (
 	"github.com/integrii/flaggy"
 
 	"github.com/mildred/conductor.go/src/api"
+	"github.com/mildred/conductor.go/src/apply"
 	"github.com/mildred/conductor.go/src/deployment"
 	"github.com/mildred/conductor.go/src/deployment_public"
 	"github.com/mildred/conductor.go/src/install"
@@ -54,7 +55,7 @@ func cmd_private() *flaggy.Subcommand {
 	return cmd
 }
 
-func cmd_reload() *flaggy.Subcommand {
+func cmd_reload(ctx context.Context) *flaggy.Subcommand {
 	var inclusive bool
 	var verbose bool
 
@@ -70,6 +71,19 @@ func cmd_reload() *flaggy.Subcommand {
 
 	cmd.CommandUsed = Hook(func() error {
 		return service_public.ReloadServices(inclusive, verbose)
+	})
+	return cmd
+}
+
+func cmd_apply(ctx context.Context) *flaggy.Subcommand {
+	cmd := flaggy.NewSubcommand("apply")
+	cmd.Description = "Apply the configuration in the current directory"
+
+	cmd.CommandUsed = Hook(func() error {
+		return apply.Apply(ctx, apply.ApplyOpts{
+			ShowDiff:    true,
+			Interactive: true,
+		})
 	})
 	return cmd
 }
@@ -243,7 +257,8 @@ func Main(ctx context.Context) error {
 	f.AttachSubcommand(cmd_addr(), 1)
 	f.AttachSubcommand(cmd_peer(), 1)
 	f.AttachSubcommand(cmd_run(), 1)
-	f.AttachSubcommand(cmd_reload(), 1)
+	f.AttachSubcommand(cmd_reload(ctx), 1)
+	f.AttachSubcommand(cmd_apply(ctx), 1)
 	f.AttachSubcommand(cmd_api_server(), 1)
 	f.AttachSubcommand(cmd_system(), 1)
 	f.AttachSubcommand(cmd_private(), 1)
@@ -257,7 +272,9 @@ func Main(ctx context.Context) error {
 }
 
 func main() {
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	err := Main(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)

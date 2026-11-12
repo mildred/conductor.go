@@ -1,31 +1,36 @@
 {
-        "app_name": "conductor_caddy",
-        "instance_name": "",
-        "load_balancer_service": "",
-        "auto_restart": false,
-        "hide_if_disabled": true,
-        "parts": [
-          {
-            "type": "daemon",
-            "exec": ["./run-caddy.sh"]
-          }
-        ],
-        "hooks": [
-                {
-                        "name": "install",
-                        "when": "pre-start-service",
-                        "exec": ["./install.sh"]
-                },
-                {
-                        "name": "init",
-                        "when": "pre-start-service",
-                        "exec": ["./init.sh"]
-                },
-                {
-                        "name": "clean",
-                        "when": "post-stop-service",
-                        "exec": ["./clean.sh"]
-                }
-        ]
+  "app_name": "conductor_caddy",
+  "instance_name": "",
+  "load_balancer_service": "",
+  "auto_restart": false,
+  "hide_if_disabled": true,
+  "transitive": true,
+  "disable": true,
+  "requires": [
+    {"name": "conductor_tube_ports", "after": true}
+  ],
+  "parts": [
+    {
+      "type": "daemon",
+      "exec": ["./run-caddy.sh"]
+    }
+  ],
+  "hooks": [
+    {
+      "name": "install",
+      "when": "pre-start-service",
+      "exec": ["./install.sh"]
+    },
+    {
+      "name": "init",
+      "when": "pre-start-service",
+      "exec": ["./init.sh"]
+    },
+    {
+      "name": "clean",
+      "when": "post-stop-service",
+      "exec": ["./clean.sh"]
+    }
+  ]
 }
 
