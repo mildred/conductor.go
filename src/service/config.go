@@ -58,6 +58,7 @@ type Service struct {
 	Name                    string                     `json:"-"`
 	Id                      string                     `json:"-"`
 	Inherit                 *InheritedFile             `json:"-"`
+	Version                 *ServiceVersion            `json:"version,omitempty"`
 	AppName                 string                     `json:"app_name,omitempty"`      // my-app
 	InstanceName            string                     `json:"instance_name,omitempty"` // staging
 	DisableCondition        *bool                      `json:"disable"`
@@ -82,9 +83,10 @@ type Service struct {
 }
 
 type ServiceRequire struct {
-	After bool   `json:"after,omitempty"`
-	Name  string `json:"name,omitempty"`
-	Path  string `json:"path,omitempty"`
+	After        bool   `json:"after,omitempty"`
+	Name         string `json:"name,omitempty"`
+	Path         string `json:"path,omitempty"`
+	LoadBalancer bool   `json:"load_balancer,omitempty"`
 
 	// TODO: require by app and instance requires scanning all services each time
 	// a requirement must be computed and is heavy
@@ -213,11 +215,36 @@ func ServiceNameFromFile(service_file string) (string, error) {
 	return "", nil
 }
 
+func (s *Service) GetVersion() ServiceVersion {
+	if s.Version == nil {
+		return ServiceVersion{DefaultVersion}
+	}
+	return *s.Version
+}
+
+func (s *Service) VersionBefore(year, month, day, hour int) bool {
+	return s.GetVersion().Before(time.Date(year, time.Month(month), day, hour, 0, 0, 0, nil))
+}
+
+func (s *Service) VersionNotBefore(year, month, day, hour int) bool {
+	return !s.GetVersion().Before(time.Date(year, time.Month(month), day, hour, 0, 0, 0, nil))
+}
+
 func (s *Service) IsStaticDeployment() bool {
 	return !s.IsDynamicDeployment() // s.StaticDeployments != nil && *s.StaticDeployments
 }
+
 func (s *Service) IsDynamicDeployment() bool {
-	return s.StaticDeployments == nil || !*s.StaticDeployments
+	if s.StaticDeployments == nil {
+		// default value
+		if s.VersionBefore(2026, 11, 12, 0) {
+			return true
+		} else {
+			return false
+		}
+	} else {
+		return !*s.StaticDeployments
+	}
 }
 
 func ServiceLockFilename(path string) string {
@@ -867,4 +894,40 @@ func (h *Hook) ExpandedExec(vars []string) []string {
 
 func (cmd *ServiceCommand) ExpandedExec(vars []string) []string {
 	return utils.ExpandAllVars(cmd.Exec, vars)
+}
+
+func (svc *Service) ServiceRequirements() (res []ServiceRequire, requirements_conf string, load_balancer *string, err error) {
+	var num_requirements int = 0
+
+	if svc.LoadBalancerService != nil {
+		load_balancer = svc.LoadBalancerService
+	}
+
+	for _, req := range svc.Requires {
+		var path string
+		if req.Name != "" {
+			req.Path, err = ServiceDirByName(req.Name)
+			if err != nil {
+				return nil, "", nil, err
+			}
+		}
+		if req.Path != "" {
+			requirements_conf += "Requires=" + ServiceUnit(path) + "\n"
+			if req.After {
+				requirements_conf += "After=" + ServiceUnit(path) + "\n"
+			}
+			if req.LoadBalancer {
+				unit := ServiceUnit(req.Path)
+				load_balancer = &unit
+			}
+			num_requirements += 1
+			res = append(res, req)
+		}
+	}
+
+	if num_requirements > 0 {
+		requirements_conf = "[Unit]\n" + requirements_conf
+	}
+
+	return res, requirements_conf, load_balancer, nil
 }

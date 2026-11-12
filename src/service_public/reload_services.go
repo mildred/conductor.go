@@ -90,7 +90,7 @@ func ReloadServices(inclusive bool, verbose bool) error {
 				}
 			} else {
 				start_list = append(start_list, serv)
-				setServiceRequirements(ctx, serv)
+				service_internal.SetServiceRequirements(ctx, serv, false)
 				if err != nil {
 					log.Printf("ignore service, cannot set requirements: %v\n", err)
 					continue
@@ -169,54 +169,4 @@ func ReloadServices(inclusive bool, verbose bool) error {
 	}
 
 	return errs
-}
-
-func setServiceRequirements(ctx context.Context, svc *service.Service) error {
-	var err error
-	var requirements_conf = "[Unit]\n"
-	var num_requirements int = 0
-
-	for _, req := range svc.Requires {
-		var path string
-		if req.Path != "" {
-			path = req.Path
-		}
-		if req.Name != "" {
-			path, err = service.ServiceDirByName(req.Name)
-			if err != nil {
-				return err
-			}
-		}
-		if path != "" {
-			requirements_conf += "Requires=" + service.ServiceUnit(path) + "\n"
-			if req.After {
-				requirements_conf += "After=" + service.ServiceUnit(path) + "\n"
-			}
-			num_requirements += 1
-		}
-	}
-
-	cfgdir := dirs.Join(dirs.ConfigHome, "systemd", dirs.SystemdMode(), service.ServiceUnit(svc.BasePath)+".d")
-
-	if num_requirements == 0 {
-		return unsetServiceRequirements(ctx, svc)
-	} else {
-		// log.Printf("Create %s", cfgdir)
-		err = os.MkdirAll(cfgdir, 0755)
-		if err != nil {
-			return err
-		}
-
-		log.Printf("Write %s", dirs.Join(cfgdir, "conductor-requirements.conf"))
-		err = os.WriteFile(dirs.Join(cfgdir, "conductor-requirements.conf"), []byte(requirements_conf), 0o644)
-		if err != nil {
-			return err
-		}
-
-		return nil
-	}
-}
-
-func unsetServiceRequirements(ctx context.Context, svc *service.Service) error {
-	return os.RemoveAll(dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode(), service.ServiceUnit(svc.BasePath)+".d", "conductor-requirements.conf"))
 }

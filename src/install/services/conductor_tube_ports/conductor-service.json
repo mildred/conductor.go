@@ -1,4 +1,5 @@
 {
+  "version": "2026-11-12",
   "app_name": "conductor_tube_ports",
   "instance_name": "",
   "auto_restart": false,
