@@ -171,12 +171,7 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 	// Run pre-start-service hook
 	//
 
-	svars, err := service.Vars()
-	if err != nil {
-		return err
-	}
-
-	err = service.RunHooks(ctx, "pre-start-service", "", svars, 60*time.Second)
+	err = service.RunHooks(ctx, "pre-start-service", "", nil, 60*time.Second)
 	if err != nil {
 		return err
 	}
@@ -381,12 +376,7 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 	// Run post-start-service hook
 	//
 
-	svars, err = service.Vars()
-	if err != nil {
-		return err
-	}
-
-	err = service.RunHooks(ctx, "post-start-service", "", svars, 60*time.Second)
+	err = service.RunHooks(ctx, "post-start-service", "", nil, 60*time.Second)
 	if err != nil {
 		return err
 	}
@@ -492,13 +482,21 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 var LookupPaths []string = dirs.MultiJoin("services", append(append([]string{dirs.SelfRuntimeDir}, dirs.SelfConfigDirs...), dirs.SelfDataDirs...)...)
 
 func CaddyRegister(ctx context.Context, register bool, service_name string) error {
+	var hook_name string
 	if register {
 		defer utils.ReplacePrefix(log.Default(), "[%s] register: ", service_name)()
+		hook_name = "register-service"
 	} else {
 		defer utils.ReplacePrefix(log.Default(), "[%s] deregister: ", service_name)()
+		hook_name = "deregister-service"
 	}
 
 	service, err := LoadServiceByName(service_name)
+	if err != nil {
+		return err
+	}
+
+	err = service.RunHooks(ctx, "pre-"+hook_name, "", nil, 60*time.Second)
 	if err != nil {
 		return err
 	}
@@ -522,6 +520,11 @@ func CaddyRegister(ctx context.Context, register bool, service_name string) erro
 	}
 
 	err = caddy.Register(ctx, register, configs)
+	if err != nil {
+		return err
+	}
+
+	err = service.RunHooks(ctx, "post-"+hook_name, "", nil, 60*time.Second)
 	if err != nil {
 		return err
 	}

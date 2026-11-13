@@ -885,8 +885,16 @@ func (s *Service) EvaluateCondition(verbose bool) (condition bool, disable bool,
 }
 
 func (s *Service) RunHooks(ctx context.Context, when string, part string, vars []string, extend_timeout time.Duration) error {
+	var err error
 	var executed = 0
 	var start_time = time.Now()
+
+	if vars == nil {
+		vars, err = s.Vars()
+		if err != nil {
+			return err
+		}
+	}
 
 	revert_log := utils.AddPrefix(log.Default(), "[hook %s] ", when)
 	defer revert_log()

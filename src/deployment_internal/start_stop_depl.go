@@ -243,9 +243,13 @@ func Cleanup(deployment_name_or_dir string) error {
 
 func CaddyRegister(register bool, deployment_name_or_dir, config_name string) error {
 	ctx := context.Background()
-	var prefix = "register"
-	if !register {
+	var prefix, hook_name string
+	if register {
+		prefix = "register"
+		hook_name = "register"
+	} else {
 		prefix = "deregister"
+		hook_name = "deregister"
 	}
 
 	depl, err := deployment.ReadDeploymentByName(deployment_name_or_dir, true, false)
@@ -254,6 +258,16 @@ func CaddyRegister(register bool, deployment_name_or_dir, config_name string) er
 	}
 
 	log.Printf("%s: Loaded deployment %s, service %s-%s\n", prefix, depl.DeploymentName, depl.AppName, depl.InstanceName)
+
+	vars, err := depl.Vars()
+	if err != nil {
+		return err
+	}
+
+	err = depl.RunHooks(ctx, "pre-"+hook_name, "", vars, 60*time.Second)
+	if err != nil {
+		return err
+	}
 
 	configs, err := depl.ProxyConfig(ctx, config_name)
 	if err != nil {
@@ -322,6 +336,16 @@ func CaddyRegister(register bool, deployment_name_or_dir, config_name string) er
 			}
 		}
 		break
+	}
+
+	vars, err = depl.Vars()
+	if err != nil {
+		return err
+	}
+
+	err = depl.RunHooks(ctx, "pre-"+hook_name, "", vars, 60*time.Second)
+	if err != nil {
+		return err
 	}
 
 	log.Printf("%s: Completed", prefix)
