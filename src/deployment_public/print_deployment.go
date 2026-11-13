@@ -109,13 +109,13 @@ func PrintList(settings PrintListSettings) error {
 		if extra_service_cols == nil {
 			extra_service_cols = displayServiceConfig
 		} else {
-			utils.IntersectHolesFunc(&extra_service_cols, displayServiceConfig, service.DisplayColumnEqual)
+			utils.UnionFunc(&extra_service_cols, displayServiceConfig, service.DisplayColumnEqual)
 		}
 
 		if extra_depl_cols == nil {
 			extra_depl_cols = depl.DisplayDeploymentConfig
 		} else {
-			utils.IntersectHolesFunc(&extra_depl_cols, depl.DisplayDeploymentConfig, service.DisplayColumnEqual)
+			utils.UnionFunc(&extra_depl_cols, depl.DisplayDeploymentConfig, service.DisplayColumnEqual)
 		}
 	}
 

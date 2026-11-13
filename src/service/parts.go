@@ -121,38 +121,11 @@ func (parts *ServiceParts) UnmarshalJSON(data []byte) error {
 		}
 
 		if minimal_part.Type == PodType {
-			var existing_pod *ServicePod = parts.FindPod(minimal_part.Name)
-			if existing_pod == nil {
-				existing_pod = &ServicePod{
-					ServicePart: ServicePart{
-						MinimalServicePart: minimal_part,
-					},
-				}
-				*parts = append(*parts, existing_pod)
-			}
-			err = json.Unmarshal(raw_part, existing_pod)
+			err = parts.UnmarshalJSONPod(minimal_part.Name, raw_part)
 		} else if minimal_part.Type == DaemonType {
-			p := parts.FindDaemon(minimal_part.Name)
-			if p == nil {
-				p = &ServiceDaemon{
-					ServicePart: ServicePart{
-						MinimalServicePart: minimal_part,
-					},
-				}
-				*parts = append(*parts, p)
-			}
-			err = json.Unmarshal(raw_part, p)
+			err = parts.UnmarshalJSONDaemon(minimal_part.Name, raw_part)
 		} else if minimal_part.Type == FunctionType {
-			var existing_function *ServiceFunction = parts.FindFunction(minimal_part.Name)
-			if existing_function == nil {
-				existing_function = &ServiceFunction{
-					ServicePart: ServicePart{
-						MinimalServicePart: minimal_part,
-					},
-				}
-				*parts = append(*parts, existing_function)
-			}
-			err = json.Unmarshal(raw_part, existing_function)
+			err = parts.UnmarshalJSONFunction(minimal_part.Name, raw_part)
 		} else {
 			err = fmt.Errorf("cannot decode part type %q", minimal_part.Type)
 		}
@@ -162,4 +135,52 @@ func (parts *ServiceParts) UnmarshalJSON(data []byte) error {
 	}
 
 	return nil
+}
+
+func (parts *ServiceParts) UnmarshalJSONPod(name string, raw_part json.RawMessage) error {
+	var existing_pod *ServicePod = parts.FindPod(name)
+	if existing_pod == nil {
+		existing_pod = &ServicePod{
+			ServicePart: ServicePart{
+				MinimalServicePart: MinimalServicePart{name, PodType},
+			},
+		}
+		if p := parts.FindPart(name); p != nil {
+			return fmt.Errorf("Cannot add new part %+v of type %s, a %v if the same name exists", name, PodType, p.PartType())
+		}
+		*parts = append(*parts, existing_pod)
+	}
+	return json.Unmarshal(raw_part, existing_pod)
+}
+
+func (parts *ServiceParts) UnmarshalJSONDaemon(name string, raw_part json.RawMessage) error {
+	p := parts.FindDaemon(name)
+	if p == nil {
+		p = &ServiceDaemon{
+			ServicePart: ServicePart{
+				MinimalServicePart: MinimalServicePart{name, DaemonType},
+			},
+		}
+		if p := parts.FindPart(name); p != nil {
+			return fmt.Errorf("Cannot add new part %+v of type %s, a %v if the same name exists", name, DaemonType, p.PartType())
+		}
+		*parts = append(*parts, p)
+	}
+	return json.Unmarshal(raw_part, p)
+}
+
+func (parts *ServiceParts) UnmarshalJSONFunction(name string, raw_part json.RawMessage) error {
+	var existing_function *ServiceFunction = parts.FindFunction(name)
+	if existing_function == nil {
+		existing_function = &ServiceFunction{
+			ServicePart: ServicePart{
+				MinimalServicePart: MinimalServicePart{name, FunctionType},
+			},
+		}
+		if p := parts.FindPart(name); p != nil {
+			return fmt.Errorf("Cannot add new part %+v of type %s, a %v if the same name exists", name, FunctionType, p.PartType())
+		}
+		*parts = append(*parts, existing_function)
+	}
+	return json.Unmarshal(raw_part, existing_function)
 }

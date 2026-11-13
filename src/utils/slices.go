@@ -23,6 +23,24 @@ func CompactFunc[V any](isempty func(v V) bool, args ...V) []V {
 	return res
 }
 
+func Union[V comparable](list *[]V, list2 []V) {
+	for _, item2 := range list2 {
+		if !slices.Contains(*list, item2) {
+			*list = append(*list, item2)
+		}
+	}
+}
+
+func UnionFunc[V any](list *[]V, list2 []V, eql func(v1, v2 V) bool) {
+	for _, item2 := range list2 {
+		if !slices.ContainsFunc(*list, func(item V) bool {
+			return eql(item2, item)
+		}) {
+			*list = append(*list, item2)
+		}
+	}
+}
+
 func IntersectHoles[V comparable](list *[]V, list2 []V) {
 	var empty V
 	for i, item := range *list {

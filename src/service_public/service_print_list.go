@@ -195,7 +195,7 @@ func List(ctx context.Context, settings ListSettings) (*ListItems, error) {
 		if extra_cols == nil {
 			extra_cols = service.DisplayServiceConfig
 		} else {
-			utils.IntersectHolesFunc(&extra_cols, service.DisplayServiceConfig, DisplayColumnEqual)
+			utils.UnionFunc(&extra_cols, service.DisplayServiceConfig, DisplayColumnEqual)
 		}
 	}
 
@@ -248,7 +248,7 @@ func List(ctx context.Context, settings ListSettings) (*ListItems, error) {
 			if extra_cols == nil {
 				extra_cols = service.DisplayServiceConfig
 			} else {
-				utils.IntersectHolesFunc(&extra_cols, service.DisplayServiceConfig, DisplayColumnEqual)
+				utils.UnionFunc(&extra_cols, service.DisplayServiceConfig, DisplayColumnEqual)
 			}
 		}
 	}

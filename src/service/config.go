@@ -73,8 +73,8 @@ type Service struct {
 	Config                  map[string]*ConfigValue    `json:"config,omitempty"`                // key-value pairs for config and templating, CHANNEL=staging
 	ProxyConfigTemplate     string                     `json:"proxy_config_template,omitempty"` // Template file for the load-balancer config
 	Parts                   ServiceParts               `json:"parts,omitempty"`
-	PodsDeprecated          ServicePods                `json:"pods,omitempty"`
-	FunctionsDeprecated     ServiceFunctions           `json:"functions,omitempty"`
+	PodsDeprecated          []json.RawMessage          `json:"pods,omitempty"`
+	FunctionsDeprecated     []json.RawMessage          `json:"functions,omitempty"`
 	Hooks                   []*Hook                    `json:"hooks,omitempty"`
 	CaddyLoadBalancer       CaddyConfig                `json:"caddy_load_balancer"`
 	DisplayServiceConfig    []DisplayColumn            `json:"display_service_config"`
@@ -382,7 +382,7 @@ func loadService(path string, fix_paths bool, base *Service, inh *InheritFile) (
 		return nil, err
 	}
 
-	err = json.Unmarshal(data, service)
+	err = unmarshalServiceJSON(data, service)
 	if err != nil {
 		return nil, err
 	}
@@ -435,6 +435,45 @@ func loadService(path string, fix_paths bool, base *Service, inh *InheritFile) (
 	}
 
 	return service, nil
+}
+
+func unmarshalServiceJSON(data []byte, service *Service) error {
+	err := json.Unmarshal(data, service)
+	if err != nil {
+		return err
+	}
+
+	for _, raw_pod := range service.PodsDeprecated {
+		var pod_name struct {
+			Name string `json:"name"`
+		}
+		err = json.Unmarshal(raw_pod, &pod_name)
+		if err != nil {
+			return fmt.Errorf("unmarshalling pod for name, %v", err)
+		}
+		err = service.Parts.UnmarshalJSONPod(pod_name.Name, raw_pod)
+		if err != nil {
+			return fmt.Errorf("unmarshalling pod %q, %v", pod_name.Name, err)
+		}
+	}
+	service.PodsDeprecated = nil
+
+	for _, raw_fun := range service.FunctionsDeprecated {
+		var fun_name struct {
+			Name string `json:"name"`
+		}
+		err = json.Unmarshal(raw_fun, &fun_name)
+		if err != nil {
+			return fmt.Errorf("unmarshalling function for name, %v", err)
+		}
+		err = service.Parts.UnmarshalJSONFunction(fun_name.Name, raw_fun)
+		if err != nil {
+			return fmt.Errorf("unmarshalling pod %q, %v", fun_name.Name, err)
+		}
+	}
+	service.FunctionsDeprecated = nil
+
+	return nil
 }
 
 func merge_hooks(layer1 []*Hook, layer2 []*Hook) []*Hook {
@@ -711,23 +750,9 @@ func (service *Service) normalizeParts() error {
 	var names []string
 	for _, part := range service.Parts {
 		if slices.Contains(names, part.PartName()) {
-			return fmt.Errorf("duplicated part %s in service", part.PartName())
+			return fmt.Errorf("duplicated part %+v in service", part.PartName())
 		}
 		names = append(names, part.PartName())
-	}
-	for _, pod := range service.PodsDeprecated {
-		if slices.Contains(names, pod.Name) {
-			return fmt.Errorf("duplicated part %s in service", pod.Name)
-		}
-		names = append(names, pod.Name)
-		service.Parts = append(service.Parts, pod)
-	}
-	for _, f := range service.FunctionsDeprecated {
-		if slices.Contains(names, f.Name) {
-			return fmt.Errorf("duplicated part %s in service", f.Name)
-		}
-		names = append(names, f.Name)
-		service.Parts = append(service.Parts, f)
 	}
 	return nil
 }
