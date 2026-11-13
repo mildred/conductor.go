@@ -135,31 +135,33 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 	// Ensure conductor-service-config@.service is reloaded
 	//
 
-	config_unit := ServiceConfigUnit(service.BasePath)
+	if service.HasProxyConfig() {
+		config_unit := ServiceConfigUnit(service.BasePath)
 
-	if opts.StartConfig {
-		cmd := utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "start", config_unit)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		err = utils.RunWithJournal(ctx, cmd, config_unit)
-		if err != nil {
-			return err
+		if opts.StartConfig {
+			cmd := utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "start", config_unit)
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			err = utils.RunWithJournal(ctx, cmd, config_unit)
+			if err != nil {
+				return err
+			}
 		}
-	}
 
-	prop, _ := sd.GetUnitPropertyContext(ctx, config_unit, string(properties.StateChangeTimestamp))
-	if prop != nil {
-		if timestamp, ok := prop.Value.Value().(uint64); ok {
-			active_since := time.Unix(int64(timestamp/1e6), int64(timestamp%1e6))
-			now := time.Now()
-			if now.Sub(active_since).Abs() > 10*time.Second {
-				log.Printf("Service configuration last change at %v, reloading...", active_since)
-				cmd := utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "try-reload-or-restart", config_unit)
-				cmd.Stdout = os.Stdout
-				cmd.Stderr = os.Stderr
-				err = utils.RunWithJournal(ctx, cmd, config_unit)
-				if err != nil {
-					return err
+		prop, _ := sd.GetUnitPropertyContext(ctx, config_unit, string(properties.StateChangeTimestamp))
+		if prop != nil {
+			if timestamp, ok := prop.Value.Value().(uint64); ok {
+				active_since := time.Unix(int64(timestamp/1e6), int64(timestamp%1e6))
+				now := time.Now()
+				if now.Sub(active_since).Abs() > 10*time.Second {
+					log.Printf("Service configuration last change at %v, reloading...", active_since)
+					cmd := utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "try-reload-or-restart", config_unit)
+					cmd.Stdout = os.Stdout
+					cmd.Stderr = os.Stderr
+					err = utils.RunWithJournal(ctx, cmd, config_unit)
+					if err != nil {
+						return err
+					}
 				}
 			}
 		}

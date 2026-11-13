@@ -269,6 +269,31 @@ func (a *Addr) EnvVars(new_host string) (res []string, err error) {
 	return
 }
 
+var ErrNoAddr = errors.New("no address")
+
+func (a *Addr) GetAddr(new_host string) (ip4, ip6, varname string, err error) {
+	hosts_filename := fmt.Sprintf("/run/%s/hosts", a.UnitName())
+	hosts, err := readHostsFile(hosts_filename, true)
+	if err != nil {
+		return "", "", envname(new_host), err
+	}
+
+	for _, h := range hosts {
+		if slices.Contains(h.Hostnames, new_host+"4") {
+			ip4 = h.Address
+		}
+		if slices.Contains(h.Hostnames, new_host+"6") {
+			ip6 = h.Address
+		}
+	}
+
+	if ip4 == "" || ip6 == "" {
+		err = ErrNoAddr
+	}
+
+	return ip4, ip6, envname(new_host), err
+}
+
 func (a *Addr) Up(ctx context.Context, new_host string) error {
 	//  local NEW_HOST="$1"
 	//  local i prefix ip4 ip6

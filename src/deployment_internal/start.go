@@ -54,6 +54,11 @@ func StartDeploymentConfig(ctx context.Context, depl *Deployment) error {
 	// configuration for the service and add the IP address
 	//
 
+	if !depl.HasProxyConfig() {
+		log.Printf("No load-balancer to configure...\n")
+		return nil
+	}
+
 	log.Printf("Adding deployment to load-balancer...\n")
 	cmd := utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "start", DeploymentConfigUnit(depl.DeploymentName))
 

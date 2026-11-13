@@ -235,6 +235,10 @@ func (s *Service) VersionNotBefore(year, month, day, hour int) bool {
 	return !s.GetVersion().Before(time.Date(year, time.Month(month), day, hour, 0, 0, 0, nil))
 }
 
+func (s *Service) HasProxyConfig() bool {
+	return s.ProxyConfigTemplate != ""
+}
+
 func (s *Service) IsStaticDeployment() bool {
 	return !s.IsDynamicDeployment() // s.StaticDeployments != nil && *s.StaticDeployments
 }
@@ -612,7 +616,7 @@ func (service *Service) VarsExcluding(excluded []string) ([]string, error) {
 	}
 
 	var firstAddrName string
-	addrNames, err := service.AddrNames()
+	addrNames, err := service.AddrNames("")
 	if err != nil {
 		return nil, err
 	}
@@ -623,12 +627,19 @@ func (service *Service) VarsExcluding(excluded []string) ([]string, error) {
 			return nil, fmt.Errorf("could not get default addr, %v", err)
 		}
 		for _, addrName := range addrNames {
-			v, err := a.EnvVars(addrName)
-			if err != nil {
-				return nil, fmt.Errorf("could not get environment for address %s, %v", addrName, err)
+			ip4, ip6, envaddr, err := a.GetAddr(addrName)
+			if err != nil && err != addr.ErrNoAddr {
+				return nil, fmt.Errorf("could not get address for %s, %v", addrName, err)
 			}
 
-			vars = append(vars, v...)
+			vars = append(vars,
+				envaddr+"4="+ip4,
+				envaddr+"6="+ip6)
+			if addrName == firstAddrName {
+				vars = append(vars,
+					"CONDUCTOR_SERVICE_ADDR4="+ip4,
+					"CONDUCTOR_SERVICE_ADDR6="+ip6)
+			}
 		}
 	}
 
@@ -641,17 +652,20 @@ func (service *Service) VarsExcluding(excluded []string) ([]string, error) {
 		"CONDUCTOR_SERVICE_UNIT="+ServiceUnit(service.BasePath),
 		"CONDUCTOR_SERVICE_CONFIG_UNIT="+ServiceConfigUnit(service.BasePath),
 		"CONDUCTOR_ADDR_NAMES="+strings.Join(addrNames, " "),
-		"CONDUCTOR_ADDR_NAME="+firstAddrName,
+		"CONDUCTOR_SERVICE_ADDR_NAME="+firstAddrName,
 	)
 	return vars, nil
 }
 
-func (service *Service) AddrNames() ([]string, error) {
+func (service *Service) AddrNames(filter_part string) ([]string, error) {
+	var parts []string
 	has_daemon := false
 	for _, p := range service.Parts {
 		if p.PartType() == DaemonType {
 			has_daemon = true
-			break
+			if p.PartName() != "" && (filter_part == "" || p.PartName() == filter_part) {
+				parts = append(parts, p.PartName())
+			}
 		}
 	}
 
@@ -665,7 +679,15 @@ func (service *Service) AddrNames() ([]string, error) {
 	} else if name == "" {
 		return []string{}, nil
 	} else {
-		return []string{utils.ToDNSName(name)}, nil
+		var res []string
+		root_name := utils.ToDNSName(name)
+		if filter_part == "" {
+			res = append(res, root_name)
+		}
+		for _, p := range parts {
+			res = append(res, utils.ToDNSName(p)+"."+root_name)
+		}
+		return res, nil
 	}
 }
 

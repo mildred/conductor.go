@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mildred/conductor.go/src/addr"
 	"github.com/mildred/conductor.go/src/caddy"
 	"github.com/mildred/conductor.go/src/dirs"
 	"github.com/mildred/conductor.go/src/service"
@@ -341,6 +342,32 @@ func (depl *Deployment) Vars() ([]string, error) {
 	}
 
 	vars = append(vars, svc_vars...)
+
+	var firstAddrName string
+	addrNames, err := depl.AddrNames(depl.PartName)
+	if err != nil {
+		return nil, err
+	}
+	if len(addrNames) > 0 {
+		firstAddrName = addrNames[0]
+		a, err := addr.DefaultAddrReadOnly()
+		if err != nil {
+			return nil, fmt.Errorf("could not get default addr, %v", err)
+		}
+		for _, addrName := range addrNames {
+			ip4, ip6, _, err := a.GetAddr(addrName)
+			if err != nil && err != addr.ErrNoAddr {
+				return nil, fmt.Errorf("could not get address for %s, %v", addrName, err)
+			}
+
+			if addrName == firstAddrName {
+				vars = append(vars,
+					"CONDUCTOR_DEPLOYMENT_ADDR4="+ip4,
+					"CONDUCTOR_DEPLOYMENT_ADDR6="+ip6)
+			}
+		}
+	}
+
 	vars = append(vars,
 		"CONDUCTOR_SERVICE_PART="+depl.PartName,
 		"CONDUCTOR_DEPLOYMENT="+depl.DeploymentName,
@@ -352,6 +379,7 @@ func (depl *Deployment) Vars() ([]string, error) {
 		"CONDUCTOR_DEPLOYMENT_SOCKET_CONFIG_UNIT="+depl.SocketConfigUnit(),
 		"CONDUCTOR_DEPLOYMENT_CONFIG_UNIT="+DeploymentConfigUnit(depl.DeploymentName),
 		"CONDUCTOR_PART_ID="+depl.PartId,
+		"CONDUCTOR_DEPLOYMENT_ADDR_NAME="+firstAddrName,
 	)
 
 	if depl.Pod != nil {

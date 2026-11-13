@@ -12,11 +12,11 @@ import (
 
 	"github.com/coreos/go-systemd/v22/daemon"
 
-	"github.com/mildred/conductor.go/src/addr"
 	"github.com/mildred/conductor.go/src/deployment"
 	"github.com/mildred/conductor.go/src/deployment_public"
 	"github.com/mildred/conductor.go/src/deployment_util"
 	"github.com/mildred/conductor.go/src/pidfile"
+	"github.com/mildred/conductor.go/src/service_util"
 	"github.com/mildred/conductor.go/src/utils"
 
 	. "github.com/mildred/conductor.go/src/service"
@@ -165,24 +165,7 @@ func Stop(ctx context.Context, service_name string, opts StopOpts) error {
 	// Bring address down
 	//
 
-	addrNames, err := service.AddrNames()
-	if err != nil {
-		return err
-	}
-	if len(addrNames) > 0 {
-		a, err := addr.OpenDefaultAddr()
-		if err != nil {
-			return err
-		}
-		defer a.Close()
-
-		for _, addrName := range addrNames {
-			err = a.Down(ctx, addrName)
-			if err != nil {
-				return err
-			}
-		}
-	}
+	err = service_util.BringAddrDown(ctx, service)
 
 	//
 	// Run post-stop-service hook

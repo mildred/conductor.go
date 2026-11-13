@@ -189,6 +189,13 @@ func PrintList(settings PrintListSettings) error {
 		var ip_addr string
 		if depl.Pod != nil {
 			ip_addr = depl.Pod.IPAddress
+		} else if depl.Daemon != nil {
+			addrs, err := depl.AddrNames(depl.PartName)
+			if err != nil {
+				errs = errors.Join(errs, err)
+			} else {
+				ip_addr = strings.Join(addrs, ",")
+			}
 		}
 		d["DeploymentName"] = depl.DeploymentName
 		d["IP"] = ip_addr
