@@ -22,7 +22,7 @@ type DeploymentDaemon struct {
 
 func (pod *DeploymentPod) TemplatePod(ctx context.Context, depl *Deployment) error {
 	log.Printf("prepare: Templating the pod\n")
-	vars, err := depl.Vars()
+	vars, err := depl.Vars(ctx)
 	if err != nil {
 		return err
 	}

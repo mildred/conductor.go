@@ -65,7 +65,7 @@ func PrintService(name string, settings PrintSettings) error {
 		tbl.AddRow("Condition", "blocking")
 	}
 
-	svars, err := service.Vars()
+	svars, err := service.Vars(ctx)
 	if err != nil {
 		tbl.AddRow("Variables:", err.Error())
 	} else {

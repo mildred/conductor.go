@@ -456,7 +456,7 @@ func PrintList(settings PrintListSettings) error {
 				row = append(row, u.Name)
 			}
 			for _, col := range list.ExtraCols {
-				val, err := service.GetDisplayColumn(col, &service_util.ServiceCommandRunner{Service: service})
+				val, err := service.GetDisplayColumn(ctx, col, &service_util.ServiceCommandRunner{Service: service})
 				if err != nil {
 					return err
 				}

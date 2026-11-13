@@ -36,7 +36,7 @@ func StartSDActivateFunction(ctx context.Context, depl *Deployment, f *Deploymen
 		}
 	}
 
-	vars, err := depl.Vars()
+	vars, err := depl.Vars(ctx)
 	if err != nil {
 		return err
 	}

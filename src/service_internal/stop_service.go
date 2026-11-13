@@ -67,7 +67,7 @@ func Stop(ctx context.Context, service_name string, opts StopOpts) error {
 	// Run pre-stop-service hook
 	//
 
-	svars, err := service.Vars()
+	svars, err := service.Vars(ctx)
 	if err != nil {
 		return err
 	}
@@ -171,7 +171,7 @@ func Stop(ctx context.Context, service_name string, opts StopOpts) error {
 	// Run post-stop-service hook
 	//
 
-	svars, err = service.Vars()
+	svars, err = service.Vars(ctx)
 	if err != nil {
 		return err
 	}

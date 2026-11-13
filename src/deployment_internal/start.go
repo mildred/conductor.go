@@ -33,7 +33,7 @@ func RunStartPostHooks(ctx context.Context, depl *Deployment) error {
 		return err
 	}
 
-	vars, err := depl.Vars()
+	vars, err := depl.Vars(ctx)
 	if err != nil {
 		return err
 	}

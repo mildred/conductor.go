@@ -221,7 +221,7 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 			return fmt.Errorf("failed to template deployment, %v", err)
 		}
 
-		vars, err := depl.Vars()
+		vars, err := depl.Vars(ctx)
 		if err != nil {
 			return err
 		}
@@ -341,7 +341,7 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 
 		log.Printf("Removing deployment %s...\n", d.DeploymentName)
 
-		vars, err := d.Vars()
+		vars, err := d.Vars(ctx)
 		if err != nil {
 			return err
 		}
@@ -539,7 +539,7 @@ func Template(ctx context.Context, service_name string, template string) error {
 		return err
 	}
 
-	svars, err := service.Vars()
+	svars, err := service.Vars(ctx)
 	if err != nil {
 		return err
 	}

@@ -35,7 +35,7 @@ func StartFunction(ctx context.Context, depl *Deployment, function bool) error {
 		}
 	case "sdactivate":
 		if function {
-			vars, err := depl.Vars()
+			vars, err := depl.Vars(ctx)
 			if err != nil {
 				return err
 			}
@@ -109,7 +109,7 @@ func ExecuteDecodedFunction(ctx context.Context, depl *Deployment, f *Deployment
 		return fmt.Errorf("Missing executable")
 	}
 
-	vars, err := depl.Vars()
+	vars, err := depl.Vars(ctx)
 	if err != nil {
 		return err
 	}

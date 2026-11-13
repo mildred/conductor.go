@@ -174,7 +174,7 @@ func PrintList(settings PrintListSettings) error {
 			}
 			dd := map[string]interface{}{}
 			for _, col := range extra_service_cols {
-				val, err := s.GetDisplayColumn(col, &service_util.ServiceCommandRunner{Service: s})
+				val, err := s.GetDisplayColumn(ctx, col, &service_util.ServiceCommandRunner{Service: s})
 				if err != nil {
 					errs = errors.Join(errs, err)
 					row = append(row, "ERROR")
@@ -237,7 +237,7 @@ func PrintList(settings PrintListSettings) error {
 		}
 		dd := map[string]interface{}{}
 		for _, col := range extra_depl_cols {
-			val, err := depl.GetDisplayColumn(col, &service_util.DeploymentCommandRunner{Deployment: depl})
+			val, err := depl.GetDisplayColumn(ctx, col, &service_util.DeploymentCommandRunner{Deployment: depl})
 			if err != nil {
 				errs = errors.Join(errs, err)
 				row = append(row, "ERROR")
@@ -283,7 +283,7 @@ func PrintInspect(deployments ...string) error {
 			return err
 		}
 
-		vars, err := depl.Vars()
+		vars, err := depl.Vars(ctx)
 		if err != nil {
 			return err
 		}
@@ -323,7 +323,7 @@ func Print(depl_name string, settings PrintSettings) error {
 	tbl.AddRow("Service Path", depl.ServiceDir)
 	tbl.AddRow("Service Id", depl.ServiceId)
 
-	vars, err := depl.Vars()
+	vars, err := depl.Vars(ctx)
 	if err != nil {
 		tbl.AddRow("Variables:", err.Error())
 	} else {

@@ -44,11 +44,11 @@ func cmd_private_policy_server() *flaggy.Subcommand {
 	return cmd
 }
 
-func cmd_private() *flaggy.Subcommand {
+func cmd_private(ctx context.Context) *flaggy.Subcommand {
 	cmd := flaggy.NewSubcommand("_")
 	cmd.Description = "Internal commands"
 	cmd.AttachSubcommand(cmd_private_service(), 1)
-	cmd.AttachSubcommand(cmd_private_deployment(), 1)
+	cmd.AttachSubcommand(cmd_private_deployment(ctx), 1)
 	cmd.AttachSubcommand(cmd_private_policy_server(), 1)
 	cmd.AttachSubcommand(cmd_private_api_server(), 1)
 	cmd.RequireSubcommand = true
@@ -189,7 +189,7 @@ func (i *envlist) Set(value string) error {
 	return nil
 }
 
-func cmd_run() *flaggy.Subcommand {
+func cmd_run(ctx context.Context) *flaggy.Subcommand {
 	var d, s string
 	var env envlist
 	var direct bool
@@ -221,7 +221,7 @@ func cmd_run() *flaggy.Subcommand {
 			if cmdname == "" {
 				return deployment_public.PrintListCommands(depl)
 			} else {
-				return deployment_public.RunDeploymentCommand(depl, direct, env, cmdname, args...)
+				return deployment_public.RunDeploymentCommand(ctx, depl, direct, env, cmdname, args...)
 			}
 		} else if d == "" && s != "" {
 			service, err := service.LoadServiceByName(s)
@@ -232,7 +232,7 @@ func cmd_run() *flaggy.Subcommand {
 			if cmdname == "" {
 				return service_public.PrintListCommands(service)
 			} else {
-				return service_public.RunServiceCommand(service, direct, strictVersion, env, cmdname, args...)
+				return service_public.RunServiceCommand(ctx, service, direct, strictVersion, env, cmdname, args...)
 			}
 		}
 
@@ -250,18 +250,18 @@ func Main(ctx context.Context) error {
 
 	f := flaggy.NewParser(os.Args[0])
 	f.Version = version
-	f.AttachSubcommand(cmd_service(), 1)
-	f.AttachSubcommand(cmd_deployment(), 1)
+	f.AttachSubcommand(cmd_service(ctx), 1)
+	f.AttachSubcommand(cmd_deployment(ctx), 1)
 	f.AttachSubcommand(cmd_function(), 1)
 	f.AttachSubcommand(cmd_policy(), 1)
 	f.AttachSubcommand(cmd_addr(), 1)
 	f.AttachSubcommand(cmd_peer(), 1)
-	f.AttachSubcommand(cmd_run(), 1)
+	f.AttachSubcommand(cmd_run(ctx), 1)
 	f.AttachSubcommand(cmd_reload(ctx), 1)
 	f.AttachSubcommand(cmd_apply(ctx), 1)
 	f.AttachSubcommand(cmd_api_server(), 1)
 	f.AttachSubcommand(cmd_system(), 1)
-	f.AttachSubcommand(cmd_private(), 1)
+	f.AttachSubcommand(cmd_private(ctx), 1)
 	f.RequireSubcommand = true
 	err := f.Parse()
 	if err != nil {

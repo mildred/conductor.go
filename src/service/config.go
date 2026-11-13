@@ -70,7 +70,8 @@ type Service struct {
 	Conditions              []ServiceCondition         `json:"conditions"`
 	Transitive              bool                       `json:"transitive,omitempty"`
 	Requires                []ServiceRequire           `json:"requires,omitempty"`
-	Config                  map[string]*ConfigValue    `json:"config,omitempty"`                // key-value pairs for config and templating, CHANNEL=staging
+	Config                  map[string]*ConfigValue    `json:"config,omitempty"` // key-value pairs for config and templating, CHANNEL=staging
+	ConfigTemplate          string                     `json:"config_template,omitempty"`
 	ProxyConfigTemplate     string                     `json:"proxy_config_template,omitempty"` // Template file for the load-balancer config
 	Parts                   ServiceParts               `json:"parts,omitempty"`
 	PodsDeprecated          []json.RawMessage          `json:"pods,omitempty"`
@@ -407,6 +408,10 @@ func loadService(path string, fix_paths bool, base *Service, inh *InheritFile) (
 			return nil, err
 		}
 
+		if err := fix_path(dir, &service.ConfigTemplate, false); err != nil {
+			return nil, err
+		}
+
 		for _, hook := range service.Hooks {
 			if len(hook.Exec) == 0 {
 				continue
@@ -611,7 +616,7 @@ func (service *Service) PartId(ctx context.Context, part_name string) (string, e
 	}
 
 	if part_id_template != "" {
-		vars, err := service.VarsExcluding(excluded_vars)
+		vars, err := service.VarsExcluding(ctx, excluded_vars)
 		if err != nil {
 			return "", err
 		}
@@ -638,11 +643,11 @@ func join_paths(base, path string) string {
 	}
 }
 
-func (service *Service) Vars() ([]string, error) {
-	return service.VarsExcluding(nil)
+func (service *Service) Vars(ctx context.Context) ([]string, error) {
+	return service.VarsExcluding(ctx, nil)
 }
 
-func (service *Service) VarsExcluding(excluded []string) ([]string, error) {
+func (service *Service) VarsExcluding(ctx context.Context, excluded []string) ([]string, error) {
 	name := service.Name
 	if name == "" {
 		name = service.BasePath
@@ -693,6 +698,31 @@ func (service *Service) VarsExcluding(excluded []string) ([]string, error) {
 		"CONDUCTOR_ADDR_NAMES="+strings.Join(addrNames, " "),
 		"CONDUCTOR_SERVICE_ADDR_NAME="+firstAddrName,
 	)
+
+	if ctx.Err() != nil {
+		return vars, ctx.Err()
+	}
+
+	if service.ConfigTemplate != "" {
+		data, err := tmpl.RunTemplate(ctx, service.ConfigTemplate, vars)
+		if err != nil {
+			return nil, fmt.Errorf("running config_template %+s, %v", service.ConfigTemplate, err)
+		}
+		for _, line := range strings.Split(data, "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
+			}
+
+			parts := strings.SplitN(line, "=", 2)
+			if len(parts) < 2 {
+				continue
+			}
+
+			vars = append(vars, line)
+		}
+	}
+
 	return vars, nil
 }
 
@@ -780,7 +810,7 @@ func (service *Service) ProxyConfig(ctx context.Context, exclude_parts bool) (ca
 	if service.ProxyConfigTemplate != "" {
 		var cfgs caddy.ConfigItems
 
-		vars, err := service.Vars()
+		vars, err := service.Vars(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -875,10 +905,10 @@ func DisplayColumnIsEmpty(v DisplayColumn) bool {
 }
 
 type CommandRunnerDisplayCol interface {
-	RunCommandGetValue(c *ServiceCommand, cmd_name string, args ...string) (string, error)
+	RunCommandGetValue(ctx context.Context, c *ServiceCommand, cmd_name string, args ...string) (string, error)
 }
 
-func (s *Service) GetDisplayColumn(c DisplayColumn, runner CommandRunnerDisplayCol) (string, error) {
+func (s *Service) GetDisplayColumn(ctx context.Context, c DisplayColumn, runner CommandRunnerDisplayCol) (string, error) {
 	if c.Config != "" {
 		return s.Config[c.Config].String(), nil
 	} else if len(c.Command) > 0 {
@@ -889,7 +919,7 @@ func (s *Service) GetDisplayColumn(c DisplayColumn, runner CommandRunnerDisplayC
 
 		args := c.Command[1:]
 
-		return runner.RunCommandGetValue(cmd, c.Command[0], args...)
+		return runner.RunCommandGetValue(ctx, cmd, c.Command[0], args...)
 	} else {
 		return "", nil
 	}
@@ -915,7 +945,7 @@ func (s *Service) RunHooks(ctx context.Context, when string, part string, vars [
 	var start_time = time.Now()
 
 	if vars == nil {
-		vars, err = s.Vars()
+		vars, err = s.Vars(ctx)
 		if err != nil {
 			return err
 		}

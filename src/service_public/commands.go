@@ -45,7 +45,7 @@ func PrintListCommands(service *Service) error {
 	return nil
 }
 
-func RunServiceCommand(service *Service, direct bool, strictVersion bool, env []string, cmd_name string, args ...string) error {
+func RunServiceCommand(ctx context.Context, service *Service, direct bool, strictVersion bool, env []string, cmd_name string, args ...string) error {
 	command := service.Commands[cmd_name]
 
 	if command == nil {
@@ -85,12 +85,12 @@ func RunServiceCommand(service *Service, direct bool, strictVersion bool, env []
 			for i, depl := range deployments {
 				st := statuses[i]
 				if st.ActiveState == "active" {
-					vars, err := depl.Vars()
+					vars, err := depl.Vars(ctx)
 					if err != nil {
 						return err
 					}
 
-					return RunCommand(command, direct, deployment.DeploymentDirByNameOnly(depl.DeploymentName), append(vars, env...), cmd_name, args...)
+					return RunCommand(ctx, command, direct, deployment.DeploymentDirByNameOnly(depl.DeploymentName), append(vars, env...), cmd_name, args...)
 				}
 			}
 		}
@@ -111,11 +111,11 @@ func RunServiceCommand(service *Service, direct bool, strictVersion bool, env []
 		}
 	}
 
-	svars, err := service.Vars()
+	svars, err := service.Vars(ctx)
 	if err != nil {
 		return err
 	}
 
-	err = RunCommand(command, direct, service.BasePath, append(svars, env...), cmd_name, args...)
+	err = RunCommand(ctx, command, direct, service.BasePath, append(svars, env...), cmd_name, args...)
 	return err
 }

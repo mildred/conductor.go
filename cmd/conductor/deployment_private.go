@@ -117,7 +117,7 @@ func cmd_private_deployment_deregister() *flaggy.Subcommand {
 	return cmd
 }
 
-func cmd_private_deployment_template() *flaggy.Subcommand {
+func cmd_private_deployment_template(ctx context.Context) *flaggy.Subcommand {
 	var deployment_name string = "."
 	var template string
 
@@ -132,12 +132,12 @@ func cmd_private_deployment_template() *flaggy.Subcommand {
 			deployment_name = "."
 		}
 
-		return deployment_internal.Template(deployment_name, template)
+		return deployment_internal.Template(ctx, deployment_name, template)
 	})
 	return cmd
 }
 
-func cmd_private_deployment() *flaggy.Subcommand {
+func cmd_private_deployment(ctx context.Context) *flaggy.Subcommand {
 	cmd := flaggy.NewSubcommand("deployment")
 	cmd.Description = "Manage conductor deployments"
 	cmd.AttachSubcommand(cmd_private_deployment_prepare(), 1)
@@ -147,7 +147,7 @@ func cmd_private_deployment() *flaggy.Subcommand {
 	cmd.AttachSubcommand(cmd_private_deployment_cleanup(), 1)
 	cmd.AttachSubcommand(cmd_private_deployment_register(), 1)
 	cmd.AttachSubcommand(cmd_private_deployment_deregister(), 1)
-	cmd.AttachSubcommand(cmd_private_deployment_template(), 1)
+	cmd.AttachSubcommand(cmd_private_deployment_template(ctx), 1)
 	cmd.RequireSubcommand = true
 	return cmd
 }

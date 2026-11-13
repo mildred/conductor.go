@@ -190,7 +190,7 @@ func StartNewOrExistingFromService(ctx context.Context, svc *service.Service, se
 	// Symlink the service config over to the deployment directory
 	//
 
-	dir, err := CreateDeploymentFromService(name, svc, seed)
+	dir, err := CreateDeploymentFromService(ctx, name, svc, seed)
 	if err != nil {
 		return nil, "", err
 	}
@@ -203,7 +203,7 @@ func StartNewOrExistingFromService(ctx context.Context, svc *service.Service, se
 	return depl, "", nil
 }
 
-func CreateDeploymentFromService(name string, svc *service.Service, seed *DeploymentSeed) (string, error) {
+func CreateDeploymentFromService(ctx context.Context, name string, svc *service.Service, seed *DeploymentSeed) (string, error) {
 	dir := DeploymentRunPath(name)
 
 	err := os.MkdirAll(dir, 0755)
@@ -248,7 +248,7 @@ func CreateDeploymentFromService(name string, svc *service.Service, seed *Deploy
 		socket_unit_name = DeploymentSocketUnitOrBlank(svc, seed.PartName, name)
 		service_directives = pod.ServiceDirectives
 		if pod.SocketActivated {
-			vars, err := depl.Vars()
+			vars, err := depl.Vars(ctx)
 			if err != nil {
 				return "", err
 			}

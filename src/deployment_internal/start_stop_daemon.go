@@ -16,7 +16,7 @@ import (
 func StartDaemon(ctx context.Context, depl *Deployment) error {
 	var vars []string
 
-	vars, err := depl.Vars()
+	vars, err := depl.Vars(ctx)
 	if err != nil {
 		return err
 	}

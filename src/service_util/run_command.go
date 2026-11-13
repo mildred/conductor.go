@@ -2,6 +2,7 @@ package service_util
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -14,13 +15,13 @@ type ServiceCommandRunner struct {
 	*Service
 }
 
-func (s *ServiceCommandRunner) RunCommandGetValue(c *ServiceCommand, cmd_name string, args ...string) (string, error) {
-	vars, err := s.Vars()
+func (s *ServiceCommandRunner) RunCommandGetValue(ctx context.Context, c *ServiceCommand, cmd_name string, args ...string) (string, error) {
+	vars, err := s.Vars(ctx)
 	if err != nil {
 		return "", err
 	}
 
-	cmd, err := PrepareCommand(c, s.BasePath, vars, cmd_name, args...)
+	cmd, err := PrepareCommand(ctx, c, s.BasePath, vars, cmd_name, args...)
 	if err != nil {
 		return "", err
 	}
@@ -36,13 +37,13 @@ type DeploymentCommandRunner struct {
 	*deployment.Deployment
 }
 
-func (depl *DeploymentCommandRunner) RunCommandGetValue(c *ServiceCommand, cmd_name string, args ...string) (string, error) {
-	vars, err := depl.Vars()
+func (depl *DeploymentCommandRunner) RunCommandGetValue(ctx context.Context, c *ServiceCommand, cmd_name string, args ...string) (string, error) {
+	vars, err := depl.Vars(ctx)
 	if err != nil {
 		return "", err
 	}
 
-	cmd, err := PrepareCommand(c, deployment.DeploymentDirByNameOnly(depl.DeploymentName), vars, cmd_name, args...)
+	cmd, err := PrepareCommand(ctx, c, deployment.DeploymentDirByNameOnly(depl.DeploymentName), vars, cmd_name, args...)
 	if err != nil {
 		return "", err
 	}
@@ -54,7 +55,7 @@ func (depl *DeploymentCommandRunner) RunCommandGetValue(c *ServiceCommand, cmd_n
 	return buf.String(), err
 }
 
-func PrepareCommand(command *ServiceCommand, cwd string, vars []string, cmd_name string, args ...string) (*exec.Cmd, error) {
+func PrepareCommand(ctx context.Context, command *ServiceCommand, cwd string, vars []string, cmd_name string, args ...string) (*exec.Cmd, error) {
 	if command == nil {
 		return nil, fmt.Errorf("Command %q does not exists", cmd_name)
 	}
@@ -70,7 +71,7 @@ func PrepareCommand(command *ServiceCommand, cwd string, vars []string, cmd_name
 
 	args = append(command.ExpandedExec(vars), args...)
 
-	cmd := exec.Command(args[0], args[1:]...)
+	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
 	cmd.Dir = cwd
 	cmd.Stdin = os.Stdin
 	cmd.Stderr = os.Stderr
@@ -83,8 +84,8 @@ func PrepareCommand(command *ServiceCommand, cwd string, vars []string, cmd_name
 	return cmd, nil
 }
 
-func RunCommand(command *ServiceCommand, direct bool, cwd string, vars []string, cmd_name string, args ...string) error {
-	cmd, err := PrepareCommand(command, cwd, vars, cmd_name, args...)
+func RunCommand(ctx context.Context, command *ServiceCommand, direct bool, cwd string, vars []string, cmd_name string, args ...string) error {
+	cmd, err := PrepareCommand(ctx, command, cwd, vars, cmd_name, args...)
 	if err != nil {
 		return err
 	}

@@ -94,7 +94,7 @@ func StartPod(ctx context.Context, depl *Deployment) error {
 		os.Setenv("LISTEN_FDS", saved_listen_fds)
 		os.Setenv("LISTEN_FDNAMES", saved_listen_fdnames)
 
-		vars, err := depl.Vars()
+		vars, err := depl.Vars(ctx)
 		if err != nil {
 			return err
 		}
@@ -268,7 +268,7 @@ func StopPodOrDaemon(ctx context.Context, depl *Deployment) error {
 	//    wait for the service to be quiet
 	//    (command inside the container or HTTP request)
 	//
-	vars, err := depl.Vars()
+	vars, err := depl.Vars(ctx)
 	if err != nil {
 		return err
 	}
@@ -333,13 +333,13 @@ func StopPodOrDaemon(ctx context.Context, depl *Deployment) error {
 	return nil
 }
 
-func Template(dir string, template string) error {
+func Template(ctx context.Context, dir string, template string) error {
 	depl, err := LoadDeployment(dir, path.Join(dir, ConfigName))
 	if err != nil {
 		return err
 	}
 
-	vars, err := depl.Vars()
+	vars, err := depl.Vars(ctx)
 	if err != nil {
 		return err
 	}

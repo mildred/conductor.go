@@ -217,7 +217,7 @@ func (depl *Deployment) TemplateProxyConfig(ctx context.Context, config_name str
 		return nil
 	}
 
-	vars, err := depl.Vars()
+	vars, err := depl.Vars(ctx)
 	if err != nil {
 		return err
 	}
@@ -300,7 +300,7 @@ func (depl *Deployment) ProxyConfig(ctx context.Context, config_name string) (ca
 
 	if depl.ProxyConfigTemplate != "" {
 		var cfgs caddy.ConfigItems
-		vars, err := depl.Vars()
+		vars, err := depl.Vars(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -327,7 +327,7 @@ func (depl *Deployment) ProxyConfig(ctx context.Context, config_name string) (ca
 	return configs, nil
 }
 
-func (depl *Deployment) Vars() ([]string, error) {
+func (depl *Deployment) Vars(ctx context.Context) ([]string, error) {
 	var vars []string
 	var excluded []string = nil
 	if depl.Pod != nil {
@@ -336,7 +336,7 @@ func (depl *Deployment) Vars() ([]string, error) {
 		excluded = depl.Function.ExcludeVars
 	}
 
-	svc_vars, err := depl.Service.VarsExcluding(excluded)
+	svc_vars, err := depl.Service.VarsExcluding(ctx, excluded)
 	if err != nil {
 		return nil, err
 	}

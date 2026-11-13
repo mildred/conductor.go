@@ -28,7 +28,7 @@ func Inspect(ctx context.Context, service *Service, state *InspectState) (json.R
 		return nil, err
 	}
 
-	svars, err := service.Vars()
+	svars, err := service.Vars(ctx)
 	if err != nil {
 		return nil, err
 	}

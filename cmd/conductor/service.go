@@ -279,7 +279,7 @@ func cmd_service_restart() *flaggy.Subcommand {
 	return cmd
 }
 
-func cmd_service_deploy() *flaggy.Subcommand {
+func cmd_service_deploy(ctx context.Context) *flaggy.Subcommand {
 	var service_def, depl_name, part string
 	var start, reuse bool
 	var max_index int = 10
@@ -321,7 +321,7 @@ func cmd_service_deploy() *flaggy.Subcommand {
 			depl_name = depl.DeploymentName
 			main_unit = depl.MainUnit()
 		} else {
-			dir, err := deployment_util.CreateDeploymentFromService(depl_name, service, seed)
+			dir, err := deployment_util.CreateDeploymentFromService(ctx, depl_name, service, seed)
 			if err != nil {
 				return err
 			}
@@ -442,13 +442,17 @@ func cmd_service_ls() *flaggy.Subcommand {
 
 func cmd_service_show(name string) *flaggy.Subcommand {
 	var service string
+	var verbose bool
 
 	cmd := flaggy.NewSubcommand(name) // "SERVICE",
 	cmd.Description = "Show service"
+	cmd.Bool(&verbose, "v", "verbose", "Show log messages")
 	cmd.AddPositionalValue(&service, "service", 1, true, "The service to act on")
 
 	cmd.CommandUsed = Hook(func() error {
-		log.Default().SetOutput(io.Discard)
+		if !verbose {
+			log.Default().SetOutput(io.Discard)
+		}
 
 		return service_public.PrintService(service, service_public.PrintSettings{})
 	})
@@ -457,15 +461,19 @@ func cmd_service_show(name string) *flaggy.Subcommand {
 
 func cmd_service_status() *flaggy.Subcommand {
 	var args []string
+	var verbose bool
 	var all bool
 
 	cmd := flaggy.NewSubcommand("status")
 	cmd.Description = "Status from systemctl"
 	cmd.Bool(&all, "a", "all", "All units")
+	cmd.Bool(&verbose, "v", "verbose", "Show log messages")
 	cmd.AddExtraValues(&args, "service", "The service to act on")
 
 	cmd.CommandUsed = Hook(func() error {
-		log.Default().SetOutput(io.Discard)
+		if !verbose {
+			log.Default().SetOutput(io.Discard)
+		}
 
 		var cli []string = []string{dirs.SystemdModeFlag(), "status"}
 		for _, arg := range args {
@@ -685,7 +693,7 @@ func cmd_service_config() *flaggy.Subcommand {
 	return cmd
 }
 
-func cmd_service_env() *flaggy.Subcommand {
+func cmd_service_env(ctx context.Context) *flaggy.Subcommand {
 	var service_name string
 	cmd := flaggy.NewSubcommand("env") // "SERVICE",
 	cmd.Description = "Print service template environment variables"
@@ -698,7 +706,7 @@ func cmd_service_env() *flaggy.Subcommand {
 			return err
 		}
 
-		vars, err := service.Vars()
+		vars, err := service.Vars(ctx)
 		if err != nil {
 			return err
 		}
@@ -712,7 +720,7 @@ func cmd_service_env() *flaggy.Subcommand {
 	return cmd
 }
 
-func cmd_service() *flaggy.Subcommand {
+func cmd_service(ctx context.Context) *flaggy.Subcommand {
 	cmd := flaggy.NewSubcommand("service")
 	cmd.ShortName = "s"
 	cmd.Description = "Service commands"
@@ -724,7 +732,7 @@ func cmd_service() *flaggy.Subcommand {
 	cmd.AttachSubcommand(cmd_service_rolling_restart(), 1)
 	cmd.AttachSubcommand(cmd_service_restart(), 1)
 	cmd.AttachSubcommand(cmd_service_kill(), 1)
-	cmd.AttachSubcommand(cmd_service_deploy(), 1)
+	cmd.AttachSubcommand(cmd_service_deploy(ctx), 1)
 	cmd.AttachSubcommand(cmd_service_inspect(), 1)
 	cmd.AttachSubcommand(cmd_service_ls(), 1)
 	cmd.AttachSubcommand(cmd_service_show("show"), 1)
@@ -732,7 +740,7 @@ func cmd_service() *flaggy.Subcommand {
 	cmd.AttachSubcommand(cmd_service_status(), 1)
 	cmd.AttachSubcommand(cmd_service_unit(), 1)
 	cmd.AttachSubcommand(cmd_service_config(), 1)
-	cmd.AttachSubcommand(cmd_service_env(), 1)
+	cmd.AttachSubcommand(cmd_service_env(ctx), 1)
 	cmd.RequireSubcommand = true
 	return cmd
 }

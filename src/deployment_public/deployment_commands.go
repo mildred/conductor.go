@@ -1,6 +1,7 @@
 package deployment_public
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -32,7 +33,7 @@ func PrintListCommands(depl *Deployment) error {
 	return nil
 }
 
-func RunDeploymentCommand(depl *Deployment, direct bool, env []string, cmd_name string, args ...string) error {
+func RunDeploymentCommand(ctx context.Context, depl *Deployment, direct bool, env []string, cmd_name string, args ...string) error {
 	command := depl.Commands[cmd_name]
 
 	if command != nil && !command.Deployment {
@@ -44,10 +45,10 @@ func RunDeploymentCommand(depl *Deployment, direct bool, env []string, cmd_name 
 		return err
 	}
 
-	vars, err := depl.Vars()
+	vars, err := depl.Vars(ctx)
 	if err != nil {
 		return err
 	}
 
-	return service_util.RunCommand(command, direct, depl_path, append(vars, env...), cmd_name, args...)
+	return service_util.RunCommand(ctx, command, direct, depl_path, append(vars, env...), cmd_name, args...)
 }

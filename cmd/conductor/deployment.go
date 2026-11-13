@@ -178,7 +178,7 @@ func cmd_deployment_unit() *flaggy.Subcommand {
 	return cmd
 }
 
-func cmd_deployment_env() *flaggy.Subcommand {
+func cmd_deployment_env(ctx context.Context) *flaggy.Subcommand {
 	var depl_name string
 
 	cmd := flaggy.NewSubcommand("env")
@@ -193,7 +193,7 @@ func cmd_deployment_env() *flaggy.Subcommand {
 			return err
 		}
 
-		vars, err := depl.Vars()
+		vars, err := depl.Vars(ctx)
 		if err != nil {
 			return err
 		}
@@ -222,7 +222,7 @@ func cmd_deployment_show(name string) *flaggy.Subcommand {
 	return cmd
 }
 
-func cmd_deployment() *flaggy.Subcommand {
+func cmd_deployment(ctx context.Context) *flaggy.Subcommand {
 	cmd := flaggy.NewSubcommand("deployment")
 	cmd.ShortName = "d"
 	cmd.Description = "Deployment commands"
@@ -235,7 +235,7 @@ func cmd_deployment() *flaggy.Subcommand {
 	cmd.AttachSubcommand(cmd_deployment_restart(), 1)
 	cmd.AttachSubcommand(cmd_deployment_kill(), 1)
 	cmd.AttachSubcommand(cmd_deployment_unit(), 1)
-	cmd.AttachSubcommand(cmd_deployment_env(), 1)
+	cmd.AttachSubcommand(cmd_deployment_env(ctx), 1)
 	cmd.AttachSubcommand(cmd_deployment_show("show"), 1)
 	cmd.AttachSubcommand(cmd_deployment_show("print"), 1)
 	cmd.RequireSubcommand = true

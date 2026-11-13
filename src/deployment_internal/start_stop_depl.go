@@ -96,7 +96,7 @@ func Prepare(deployment_name_or_dir string) error {
 	// Run the pre-start hooks (via systemd-run specific scope)
 	//
 
-	vars, err := depl.Vars()
+	vars, err := depl.Vars(ctx)
 	if err != nil {
 		return err
 	}
@@ -221,7 +221,7 @@ func Cleanup(deployment_name_or_dir string) error {
 
 	log.Printf("cleanup: Loaded deployment %s, service %s-%s\n", depl.DeploymentName, depl.AppName, depl.InstanceName)
 
-	vars, err := depl.Vars()
+	vars, err := depl.Vars(ctx)
 	if err != nil {
 		return err
 	}
@@ -259,7 +259,7 @@ func CaddyRegister(register bool, deployment_name_or_dir, config_name string) er
 
 	log.Printf("%s: Loaded deployment %s, service %s-%s\n", prefix, depl.DeploymentName, depl.AppName, depl.InstanceName)
 
-	vars, err := depl.Vars()
+	vars, err := depl.Vars(ctx)
 	if err != nil {
 		return err
 	}
@@ -338,7 +338,7 @@ func CaddyRegister(register bool, deployment_name_or_dir, config_name string) er
 		break
 	}
 
-	vars, err = depl.Vars()
+	vars, err = depl.Vars(ctx)
 	if err != nil {
 		return err
 	}

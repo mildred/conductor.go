@@ -16,7 +16,7 @@ import (
 )
 
 func EnableService(ctx context.Context, svc *service.Service, now bool) error {
-	vars, err := svc.Vars()
+	vars, err := svc.Vars(ctx)
 	if err != nil {
 		return err
 	}
@@ -31,7 +31,7 @@ func EnableService(ctx context.Context, svc *service.Service, now bool) error {
 		return err
 	}
 
-	vars, err = svc.Vars()
+	vars, err = svc.Vars(ctx)
 	if err != nil {
 		return err
 	}
@@ -78,7 +78,7 @@ func DisableService(ctx context.Context, svc *service.Service, now bool) error {
 		return err
 	}
 
-	vars, err := svc.Vars()
+	vars, err := svc.Vars(ctx)
 	if err != nil {
 		return err
 	}
@@ -107,7 +107,7 @@ func DisableService(ctx context.Context, svc *service.Service, now bool) error {
 		}
 	}
 
-	vars, err = svc.Vars()
+	vars, err = svc.Vars(ctx)
 	if err != nil {
 		return err
 	}
