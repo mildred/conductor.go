@@ -90,14 +90,16 @@ func (c *configlist) Set(value string) error {
 func cmd_service_enable() *flaggy.Subcommand {
 	var service string
 	var now bool
+	var reload bool
 
 	cmd := flaggy.NewSubcommand("enable") // "SERVICE",
 	cmd.Description = "Declare and enable a service"
 	cmd.Bool(&now, "", "now", "start the service")
+	cmd.Bool(&reload, "", "reload", "reload the service if already started")
 	cmd.AddPositionalValue(&service, "service", 1, true, "The service to act on")
 
 	cmd.CommandUsed = Hook(func() error {
-		return service_public.Enable(context.Background(), service, now)
+		return service_public.Enable(context.Background(), service, now, reload)
 	})
 	return cmd
 }
@@ -190,7 +192,7 @@ func cmd_service_kill() *flaggy.Subcommand {
 	return cmd
 }
 
-func cmd_service_reload() *flaggy.Subcommand {
+func cmd_service_reload(ctx context.Context) *flaggy.Subcommand {
 	var service string
 	var no_block bool
 	var background_flag, foreground_flag bool
@@ -207,7 +209,7 @@ func cmd_service_reload() *flaggy.Subcommand {
 			return fmt.Errorf("Cannot specify both --background and --foreground flags")
 		}
 
-		return service_public.Reload(context.Background(), service, service_public.ReloadOpts{
+		return service_public.ReloadByName(ctx, service, service_public.ReloadOpts{
 			Foreground: foreground_flag,
 			Background: background_flag,
 			NoBlock:    no_block,
@@ -235,7 +237,7 @@ func (b *NegativeBoolFlag) String() string { return strconv.FormatBool(!bool(*b.
 
 func (b *NegativeBoolFlag) IsBoolFlag() bool { return true }
 
-func cmd_service_rolling_restart() *flaggy.Subcommand {
+func cmd_service_rolling_restart(ctx context.Context) *flaggy.Subcommand {
 	var service string
 	var max_index int = 10
 	var stop_timeout, term_timeout time.Duration = 0, 5 * time.Second
@@ -251,7 +253,7 @@ func cmd_service_rolling_restart() *flaggy.Subcommand {
 	cmd.AddPositionalValue(&service, "service", 1, true, "The service to act on")
 
 	cmd.CommandUsed = Hook(func() error {
-		return service_internal.StartOrReload(service, service_internal.StartOrReloadOpts{
+		return service_internal.StartOrReloadByName(ctx, service, service_internal.StartOrReloadOpts{
 			Restart:            true,
 			ReuseDepl:          reuse,
 			MaxDeploymentIndex: max_index,
@@ -579,7 +581,7 @@ func cmd_service_config_get() *flaggy.Subcommand {
 	return cmd
 }
 
-func cmd_service_config_set() *flaggy.Subcommand {
+func cmd_service_config_set(ctx context.Context) *flaggy.Subcommand {
 	var service_descr, file_flag string
 	var no_reload_flag, no_block_flag, foreground_flag, background_flag, no_inherit_flag bool
 	var vars []string
@@ -671,7 +673,7 @@ func cmd_service_config_set() *flaggy.Subcommand {
 		//
 
 		if !no_reload_flag {
-			return service_public.Reload(context.Background(), service_descr, service_public.ReloadOpts{
+			return service_public.ReloadByName(ctx, service_descr, service_public.ReloadOpts{
 				Foreground: foreground_flag,
 				Background: background_flag,
 				NoBlock:    no_block_flag,
@@ -683,12 +685,12 @@ func cmd_service_config_set() *flaggy.Subcommand {
 	return cmd
 }
 
-func cmd_service_config() *flaggy.Subcommand {
+func cmd_service_config(ctx context.Context) *flaggy.Subcommand {
 	cmd := flaggy.NewSubcommand("config")
 	cmd.Description = "Manage service configuration"
 	cmd.AttachSubcommand(cmd_service_config_ls(), 1)
 	cmd.AttachSubcommand(cmd_service_config_get(), 1)
-	cmd.AttachSubcommand(cmd_service_config_set(), 1)
+	cmd.AttachSubcommand(cmd_service_config_set(ctx), 1)
 	cmd.RequireSubcommand = true
 	return cmd
 }
@@ -728,8 +730,8 @@ func cmd_service(ctx context.Context) *flaggy.Subcommand {
 	cmd.AttachSubcommand(cmd_service_stop(), 1)
 	cmd.AttachSubcommand(cmd_service_enable(), 1)
 	cmd.AttachSubcommand(cmd_service_disable(), 1)
-	cmd.AttachSubcommand(cmd_service_reload(), 1)
-	cmd.AttachSubcommand(cmd_service_rolling_restart(), 1)
+	cmd.AttachSubcommand(cmd_service_reload(ctx), 1)
+	cmd.AttachSubcommand(cmd_service_rolling_restart(ctx), 1)
 	cmd.AttachSubcommand(cmd_service_restart(), 1)
 	cmd.AttachSubcommand(cmd_service_kill(), 1)
 	cmd.AttachSubcommand(cmd_service_deploy(ctx), 1)
@@ -739,7 +741,7 @@ func cmd_service(ctx context.Context) *flaggy.Subcommand {
 	cmd.AttachSubcommand(cmd_service_show("print"), 1)
 	cmd.AttachSubcommand(cmd_service_status(), 1)
 	cmd.AttachSubcommand(cmd_service_unit(), 1)
-	cmd.AttachSubcommand(cmd_service_config(), 1)
+	cmd.AttachSubcommand(cmd_service_config(ctx), 1)
 	cmd.AttachSubcommand(cmd_service_env(ctx), 1)
 	cmd.RequireSubcommand = true
 	return cmd

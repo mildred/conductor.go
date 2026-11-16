@@ -30,11 +30,12 @@ import (
 )
 
 type Hook struct {
-	Id         string   `json:"id"`
-	When       string   `json:"when"`
-	Exec       []string `json:"exec"`
-	Part       []string `json:"parts"`
-	TimeoutSec int64    `json:"timeout_sec"`
+	Id         string            `json:"id"`
+	When       string            `json:"when"`
+	Exec       []string          `json:"exec"`
+	Part       []string          `json:"parts"`
+	Env        map[string]string `json:"env,omitempty"`
+	TimeoutSec int64             `json:"timeout_sec"`
 }
 
 type CaddyConfig struct {
@@ -229,11 +230,11 @@ func (s *Service) GetVersion() ServiceVersion {
 }
 
 func (s *Service) VersionBefore(year, month, day, hour int) bool {
-	return s.GetVersion().Before(time.Date(year, time.Month(month), day, hour, 0, 0, 0, nil))
+	return s.GetVersion().Before(time.Date(year, time.Month(month), day, hour, 0, 0, 0, time.UTC))
 }
 
 func (s *Service) VersionNotBefore(year, month, day, hour int) bool {
-	return !s.GetVersion().Before(time.Date(year, time.Month(month), day, hour, 0, 0, 0, nil))
+	return !s.GetVersion().Before(time.Date(year, time.Month(month), day, hour, 0, 0, 0, time.UTC))
 }
 
 func (s *Service) HasProxyConfig() bool {
@@ -511,11 +512,6 @@ func (service *Service) FillDefaults() error {
 	err := service.Parts.FillDefaults(service)
 	if err != nil {
 		return err
-	}
-
-	if service.StaticDeployments == nil {
-		var static_deployments = false
-		service.StaticDeployments = &static_deployments
 	}
 
 	if service.ProxyConfigTemplate == "" {
@@ -986,6 +982,7 @@ func (s *Service) RunHooks(ctx context.Context, when string, part string, vars [
 			}
 
 			cmdline := hook.ExpandedExec(vars)
+			combined_vars := hook.ExpandedEnv(vars, true)
 
 			log.Printf("[%d] Run %s\n", idx, shellescape.QuoteCommand(cmdline))
 			//  cmd := exec.Command("systemd-run",
@@ -996,7 +993,7 @@ func (s *Service) RunHooks(ctx context.Context, when string, part string, vars [
 			//  		"--unit=" + fmt.Sprintf("hook-%s-%s", depl.DeploymentName, when),
 			//  	}, hook.Exec...)...)
 			cmd := exec.Command(cmdline[0], cmdline[1:]...)
-			cmd.Env = append(cmd.Environ(), vars...)
+			cmd.Env = append(cmd.Environ(), combined_vars...)
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 			return cmd.Run()
@@ -1019,6 +1016,23 @@ func (s *Service) RunHooks(ctx context.Context, when string, part string, vars [
 
 func (h *Hook) ExpandedExec(vars []string) []string {
 	return utils.ExpandAllVars(h.Exec, vars)
+}
+
+func (h *Hook) ExpandedEnv(vars []string, combine bool) []string {
+	var res []string
+	if combine {
+		res = append([]string{}, vars...)
+	}
+
+	if h.Env == nil {
+		return res
+	}
+
+	for k, v := range h.Env {
+		res = append(res, k+"="+utils.ExpandVars(v, vars))
+	}
+
+	return res
 }
 
 func (cmd *ServiceCommand) ExpandedExec(vars []string) []string {

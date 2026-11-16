@@ -52,7 +52,16 @@ func stopServicesOrLog(ctx context.Context, depl *deployment.Deployment, units [
 	}
 }
 
-func StartOrReload(service_name string, opts StartOrReloadOpts) error {
+func StartOrReloadByName(ctx context.Context, service_name string, opts StartOrReloadOpts) error {
+	service, err := LoadServiceByName(service_name)
+	if err != nil {
+		return err
+	}
+
+	return StartOrReload(ctx, service, service_name, opts)
+}
+
+func StartOrReload(ctx context.Context, service *Service, service_name string, opts StartOrReloadOpts) error {
 	if opts.Restart {
 		defer utils.AddPrefix(log.Default(), "[%s] restart: ", service_name)()
 	} else {
@@ -65,7 +74,6 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 
 	var action_name string = "start"
 	var err error
-	var ctx = context.Background()
 	var deferred func() = func() {}
 
 	sd, err := utils.NewSystemdClient(ctx)
@@ -73,10 +81,7 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 		return err
 	}
 
-	service_dir, err := ServiceDirByName(service_name)
-	if err != nil {
-		return err
-	}
+	service_dir := service.BasePath
 
 	pidfile, err := pidfile.CreateUpdateOrRetryPIDFile(ctx, ServiceLockFilename(service_dir), time.Second)
 	if err != nil {
@@ -117,19 +122,6 @@ func StartOrReload(service_name string, opts StartOrReloadOpts) error {
 	}
 
 	defer deferred()
-
-	//
-	// Fetch service config
-	//
-
-	service, err := LoadServiceByName(service_name)
-	if err != nil {
-		return err
-	}
-
-	if service.IsStaticDeployment() && opts.ReuseDeplIfStatic {
-		opts.ReuseDepl = true
-	}
 
 	//
 	// Ensure conductor-service-config@.service is reloaded

@@ -36,7 +36,7 @@ func setDisableConfig(definition_path string, disable bool) error {
 	return nil
 }
 
-func Enable(ctx context.Context, name string, now bool) error {
+func Enable(ctx context.Context, name string, now, reload bool) error {
 	definition_path, err := ServiceDirByName(name)
 	if err != nil {
 		return err
@@ -52,7 +52,7 @@ func Enable(ctx context.Context, name string, now bool) error {
 		return err
 	}
 
-	return service_internal.EnableService(context.Background(), svc, now)
+	return service_internal.EnableService(context.Background(), svc, now, reload)
 }
 
 func Disable(ctx context.Context, name string, now bool) error {
@@ -100,7 +100,7 @@ func Start(ctx context.Context, definition_path string, opts StartOpts) error {
 	}
 
 	if !background {
-		err = service_internal.StartOrReload(definition_path, service_internal.StartOrReloadOpts{
+		err = service_internal.StartOrReload(ctx, svc, definition_path, service_internal.StartOrReloadOpts{
 			ExitWhenStarted: true,
 			StartConfig:     true,
 		})
@@ -255,14 +255,18 @@ type ReloadOpts struct {
 	NoBlock    bool
 }
 
-func Reload(ctx context.Context, definition_path string, opts ReloadOpts) error {
-	if opts.Foreground && opts.Background {
-		return fmt.Errorf("cannot specify both backgroudn and foreground operation")
-	}
-
+func ReloadByName(ctx context.Context, definition_path string, opts ReloadOpts) error {
 	svc, err := LoadServiceByName(definition_path)
 	if err != nil {
 		return err
+	}
+
+	return Reload(ctx, svc, definition_path, opts)
+}
+
+func Reload(ctx context.Context, svc *Service, definition_path string, opts ReloadOpts) error {
+	if opts.Foreground && opts.Background {
+		return fmt.Errorf("cannot specify both backgroudn and foreground operation")
 	}
 
 	background := opts.Background || svc.IsDynamicDeployment()
@@ -275,7 +279,7 @@ func Reload(ctx context.Context, definition_path string, opts ReloadOpts) error 
 	}
 
 	if !background {
-		return service_internal.StartOrReload(definition_path, service_internal.StartOrReloadOpts{
+		return service_internal.StartOrReload(ctx, svc, definition_path, service_internal.StartOrReloadOpts{
 			Restart:   true,
 			ReuseDepl: true,
 		})

@@ -15,8 +15,13 @@ import (
 	"github.com/mildred/conductor.go/src/utils"
 )
 
-func EnableService(ctx context.Context, svc *service.Service, now bool) error {
+func EnableService(ctx context.Context, svc *service.Service, now bool, reload bool) error {
 	vars, err := svc.Vars(ctx)
+	if err != nil {
+		return err
+	}
+
+	unit, err := service.ServiceUnitByName(svc.BasePath)
 	if err != nil {
 		return err
 	}
@@ -36,6 +41,15 @@ func EnableService(ctx context.Context, svc *service.Service, now bool) error {
 		return err
 	}
 
+	var cmd *exec.Cmd
+	cmd = utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "enable", unit)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	err = cmd.Run()
+	if err != nil {
+		return err
+	}
+
 	err = svc.RunHooks(ctx, "post-enable-service", "", vars, 60*time.Second)
 	if err != nil {
 		return err
@@ -43,33 +57,39 @@ func EnableService(ctx context.Context, svc *service.Service, now bool) error {
 
 	background := svc.IsDynamicDeployment()
 
-	if now && !background {
-		err := StartOrReload(svc.BasePath, StartOrReloadOpts{
-			StartConfig:     true,
-			ExitWhenStarted: true,
-		})
-		if err != nil {
-			return err
+	if background {
+		if now {
+			cmd = utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "enable", "--now", unit)
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			err := utils.RunWithJournal(ctx, cmd, unit)
+			if err != nil {
+				return err
+			}
+		}
+		if reload {
+			cmd = utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "reload", unit)
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			err := utils.RunWithJournal(ctx, cmd, unit)
+			if err != nil {
+				return err
+			}
+		}
+	} else {
+		if now || reload {
+			err := StartOrReload(ctx, svc, svc.BasePath, StartOrReloadOpts{
+				StartConfig:     true,
+				ReuseDepl:       !reload,
+				ExitWhenStarted: true,
+			})
+			if err != nil {
+				return err
+			}
 		}
 	}
 
-	unit, err := service.ServiceUnitByName(svc.BasePath)
-	if err != nil {
-		return err
-	}
-
-	var cmd *exec.Cmd
-	if now {
-		cmd = utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "enable", "--now", unit)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		return utils.RunWithJournal(ctx, cmd, unit)
-	} else {
-		cmd = utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "enable", unit)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		return cmd.Run()
-	}
+	return nil
 }
 
 func DisableService(ctx context.Context, svc *service.Service, now bool) error {

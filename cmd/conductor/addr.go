@@ -12,7 +12,7 @@ import (
 	"github.com/mildred/conductor.go/src/config"
 )
 
-func cmd_addr_down() *flaggy.Subcommand {
+func cmd_addr_down(ctx context.Context) *flaggy.Subcommand {
 	var hostname string
 
 	cmd := flaggy.NewSubcommand("down")
@@ -35,12 +35,12 @@ func cmd_addr_down() *flaggy.Subcommand {
 
 		defer a.Close()
 
-		return a.Down(context.Background(), hostname)
+		return a.Down(ctx, hostname)
 	})
 	return cmd
 }
 
-func cmd_addr_up() *flaggy.Subcommand {
+func cmd_addr_up(ctx context.Context) *flaggy.Subcommand {
 	var hostname string
 
 	cmd := flaggy.NewSubcommand("up")
@@ -63,7 +63,7 @@ func cmd_addr_up() *flaggy.Subcommand {
 
 		defer a.Close()
 
-		return a.Up(context.Background(), hostname)
+		return a.Up(ctx, hostname)
 	})
 	return cmd
 }
@@ -137,12 +137,12 @@ func cmd_addr_ula_prefix() *flaggy.Subcommand {
 	return cmd
 }
 
-func cmd_addr() *flaggy.Subcommand {
+func cmd_addr(ctx context.Context) *flaggy.Subcommand {
 	cmd := flaggy.NewSubcommand("addr")
 	cmd.Description = "Address subcommand"
 	cmd.AttachSubcommand(cmd_addr_update(), 1)
-	cmd.AttachSubcommand(cmd_addr_up(), 1)
-	cmd.AttachSubcommand(cmd_addr_down(), 1)
+	cmd.AttachSubcommand(cmd_addr_up(ctx), 1)
+	cmd.AttachSubcommand(cmd_addr_down(ctx), 1)
 	cmd.AttachSubcommand(cmd_addr_ula_prefix(), 1)
 	cmd.RequireSubcommand = true
 	return cmd

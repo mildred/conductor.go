@@ -16,8 +16,16 @@ import (
 	"github.com/mildred/conductor.go/src/utils"
 )
 
-func ReloadServices(inclusive bool, verbose bool) error {
-	var ctx = context.Background()
+type ReloadServiceOpts struct {
+	Inclusive          bool
+	Verbose            bool
+	ReloadServiceNames []string
+}
+
+func ReloadServices(ctx context.Context, opts ReloadServiceOpts) error {
+	inclusive := opts.Inclusive
+	verbose := opts.Verbose
+
 	sd, err := utils.NewSystemdClient(ctx)
 	if err != nil {
 		return err
@@ -156,7 +164,9 @@ func ReloadServices(inclusive bool, verbose bool) error {
 	for _, svc := range start_list {
 		log.Println()
 		log.SetPrefix(fmt.Sprintf("%sreload %s: ", log_prefix, svc.Name))
-		err = service_internal.EnableService(ctx, svc, true)
+		reload := slices.Contains(opts.ReloadServiceNames, svc.Name)
+		enable_now := !reload
+		err = service_internal.EnableService(ctx, svc, enable_now, reload)
 		if err != nil {
 			errs = errors.Join(errs, fmt.Errorf("- Cannot enable %s, %v.", svc.BasePath, err))
 		}

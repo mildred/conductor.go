@@ -66,7 +66,7 @@ func cmd_private_service_template() *flaggy.Subcommand {
 	return cmd
 }
 
-func cmd_private_service_start() *flaggy.Subcommand {
+func cmd_private_service_start(ctx context.Context) *flaggy.Subcommand {
 	var service string
 	var max_deployment_index = 10
 
@@ -80,7 +80,7 @@ func cmd_private_service_start() *flaggy.Subcommand {
 		"deployment is started, old deployments for the service are stopped."
 
 	cmd.CommandUsed = Hook(func() error {
-		return service_internal.StartOrReload(service, service_internal.StartOrReloadOpts{
+		return service_internal.StartOrReloadByName(ctx, service, service_internal.StartOrReloadOpts{
 			Restart:            false,
 			MaxDeploymentIndex: max_deployment_index,
 			ReuseDeplIfStatic:  true,
@@ -90,7 +90,7 @@ func cmd_private_service_start() *flaggy.Subcommand {
 	return cmd
 }
 
-func cmd_private_service_reload() *flaggy.Subcommand {
+func cmd_private_service_reload(ctx context.Context) *flaggy.Subcommand {
 	var service string
 	var reuse bool
 	var max_deployment_index int = 10
@@ -102,7 +102,7 @@ func cmd_private_service_reload() *flaggy.Subcommand {
 	cmd.Bool(&reuse, "", "reuse", "Reuse an existing deployment if possible [opposite of --fresh]")
 	cmd.Int(&max_deployment_index, "", "max-deployment-index", "Service will fail to deploy if it cannot find a deployment number below this")
 	cmd.CommandUsed = Hook(func() error {
-		return service_internal.StartOrReload(service, service_internal.StartOrReloadOpts{
+		return service_internal.StartOrReloadByName(ctx, service, service_internal.StartOrReloadOpts{
 			Restart:            true,
 			ReuseDepl:          reuse,
 			MaxDeploymentIndex: max_deployment_index,
@@ -160,11 +160,11 @@ func cmd_private_service_deregister() *flaggy.Subcommand {
 	return cmd
 }
 
-func cmd_private_service() *flaggy.Subcommand {
+func cmd_private_service(ctx context.Context) *flaggy.Subcommand {
 	cmd := flaggy.NewSubcommand("service")
 	cmd.Description = "Manage conductor services"
-	cmd.AttachSubcommand(cmd_private_service_start(), 1)
-	cmd.AttachSubcommand(cmd_private_service_reload(), 1)
+	cmd.AttachSubcommand(cmd_private_service_start(ctx), 1)
+	cmd.AttachSubcommand(cmd_private_service_reload(ctx), 1)
 	cmd.AttachSubcommand(cmd_private_service_stop(), 1)
 	cmd.AttachSubcommand(cmd_private_service_cleanup(), 1)
 	cmd.AttachSubcommand(cmd_private_service_register(), 1)

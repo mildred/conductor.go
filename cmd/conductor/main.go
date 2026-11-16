@@ -47,7 +47,7 @@ func cmd_private_policy_server() *flaggy.Subcommand {
 func cmd_private(ctx context.Context) *flaggy.Subcommand {
 	cmd := flaggy.NewSubcommand("_")
 	cmd.Description = "Internal commands"
-	cmd.AttachSubcommand(cmd_private_service(), 1)
+	cmd.AttachSubcommand(cmd_private_service(ctx), 1)
 	cmd.AttachSubcommand(cmd_private_deployment(ctx), 1)
 	cmd.AttachSubcommand(cmd_private_policy_server(), 1)
 	cmd.AttachSubcommand(cmd_private_api_server(), 1)
@@ -70,7 +70,10 @@ func cmd_reload(ctx context.Context) *flaggy.Subcommand {
 	cmd.Bool(&verbose, "v", "verbose", "Be verbose")
 
 	cmd.CommandUsed = Hook(func() error {
-		return service_public.ReloadServices(inclusive, verbose)
+		return service_public.ReloadServices(ctx, service_public.ReloadServiceOpts{
+			Inclusive: inclusive,
+			Verbose:   verbose,
+		})
 	})
 	return cmd
 }
@@ -254,7 +257,7 @@ func Main(ctx context.Context) error {
 	f.AttachSubcommand(cmd_deployment(ctx), 1)
 	f.AttachSubcommand(cmd_function(), 1)
 	f.AttachSubcommand(cmd_policy(), 1)
-	f.AttachSubcommand(cmd_addr(), 1)
+	f.AttachSubcommand(cmd_addr(ctx), 1)
 	f.AttachSubcommand(cmd_peer(), 1)
 	f.AttachSubcommand(cmd_run(ctx), 1)
 	f.AttachSubcommand(cmd_reload(ctx), 1)
