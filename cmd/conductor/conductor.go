@@ -258,6 +258,7 @@ func Main(ctx context.Context) error {
 	f.AttachSubcommand(cmd_function(), 1)
 	f.AttachSubcommand(cmd_policy(), 1)
 	f.AttachSubcommand(cmd_addr(ctx), 1)
+	f.AttachSubcommand(cmd_force_bind(ctx), 1)
 	f.AttachSubcommand(cmd_peer(), 1)
 	f.AttachSubcommand(cmd_run(ctx), 1)
 	f.AttachSubcommand(cmd_reload(ctx), 1)
