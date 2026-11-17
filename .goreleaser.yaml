@@ -16,6 +16,7 @@ before:
     - go generate ./...
 
 builds:
+
   - id: tubectl
     goos:
       - linux
@@ -26,6 +27,17 @@ builds:
     binary: tubectl
     dir: tubular
     main: ./cmd/tubectl
+
+  - id: force-bind
+    goos:
+      - linux
+    goarch:
+      - amd64
+      # - arm
+      # - arm64
+    binary: force-bind
+    main: ./cmd/force-bind
+
   - id: conductor
     env:
       - CGO_ENABLED=0

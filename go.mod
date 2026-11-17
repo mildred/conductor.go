@@ -1,6 +1,6 @@
 module github.com/mildred/conductor.go
 
-go 1.25.0
+go 1.26.0
 
 require (
 	github.com/PaesslerAG/jsonpath v0.1.1
@@ -26,12 +26,14 @@ require (
 	github.com/google/go-github/v30 v30.1.0 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/inconshreveable/go-update v0.0.0-20160112193335-8152e7eb6ccf // indirect
+	github.com/oraoto/go-pidfd v0.1.1 // indirect
+	github.com/seccomp/libseccomp-golang v0.12.0 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/tcnksm/go-gitconfig v0.1.2 // indirect
 	github.com/ulikunitz/xz v0.5.12 // indirect
 	golang.org/x/net v0.48.0 // indirect
 	golang.org/x/oauth2 v0.26.0 // indirect
-	golang.org/x/sys v0.43.0 // indirect
+	golang.org/x/sys v0.50.0 // indirect
 )
 
 replace github.com/integrii/flaggy => github.com/mildred/flaggy v0.0.0-20261023083048-92ca2ea7c944

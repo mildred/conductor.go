@@ -67,10 +67,6 @@ JSON
 
 set -x
 
-env
-jq . ./caddy.json
-
-date
 /usr/local/bin/caddy run --watch --config "./caddy.json"
 date
 res=$?
