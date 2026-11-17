@@ -90,16 +90,13 @@ func Update(version string, desired_version string, check bool) error {
 		log.Println("Release note:\n", rel.ReleaseNotes)
 	}
 
-	tubectl_path := path.Join(path.Dir(exe), "tubectl")
-
-	f, err := os.OpenFile(tubectl_path, os.O_RDONLY|os.O_CREATE, 0777)
-	if err == nil {
-		f.Close()
+	err = updateTool(exe, rel, "tubectl")
+	if err != nil {
+		return nil
 	}
 
-	err = selfupdate.DefaultUpdater().UpdateTo(rel, tubectl_path)
+	err = updateTool(exe, rel, "force-bind")
 	if err != nil {
-		log.Println("Binary update for tubectl failed:", err)
 		return nil
 	}
 
@@ -119,6 +116,23 @@ func Update(version string, desired_version string, check bool) error {
 
 	return nil
 
+}
+
+func updateTool(exe string, rel *selfupdate.Release, tool_name string) error {
+	path := path.Join(path.Dir(exe), tool_name)
+
+	f, err := os.OpenFile(path, os.O_RDONLY|os.O_CREATE, 0777)
+	if err == nil {
+		f.Close()
+	}
+
+	err = selfupdate.DefaultUpdater().UpdateTo(rel, path)
+	if err != nil {
+		log.Printf("Binary update for %s failed: %v", tool_name, err)
+		return nil
+	}
+
+	return nil
 }
 
 func isInstalled() (bool, string, error) {
