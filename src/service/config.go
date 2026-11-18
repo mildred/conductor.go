@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -12,6 +13,7 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/alessio/shellescape"
@@ -27,6 +29,8 @@ import (
 	"github.com/mildred/conductor.go/src/dirs"
 	"github.com/mildred/conductor.go/src/tmpl"
 	"github.com/mildred/conductor.go/src/utils"
+
+	. "github.com/mildred/conductor.go/src/parts"
 )
 
 type Hook struct {
@@ -69,7 +73,6 @@ type Service struct {
 	StaticDeployments       *bool                      `json:"static_deployments"`
 	LoadBalancerService     *string                    `json:"load_balancer_service,omitempty"`
 	Conditions              []ServiceCondition         `json:"conditions"`
-	Transitive              bool                       `json:"transitive,omitempty"`
 	Requires                []ServiceRequire           `json:"requires,omitempty"`
 	Config                  map[string]*ConfigValue    `json:"config,omitempty"` // key-value pairs for config and templating, CHANNEL=staging
 	ConfigTemplate          string                     `json:"config_template,omitempty"`
@@ -220,6 +223,15 @@ func ServiceNameFromFile(service_file string) (string, error) {
 
 func (s *Service) GetServiceName() (string, error) {
 	return ServiceNameFromFile(filepath.Join(s.BasePath, ConfigName))
+}
+
+func (s *Service) GetServiceNameOrPath() (string, error) {
+	name, err := ServiceNameFromFile(filepath.Join(s.BasePath, ConfigName))
+	if err != nil || name == "" {
+		return s.BasePath, err
+	} else {
+		return name, nil
+	}
 }
 
 func (s *Service) GetVersion() ServiceVersion {
@@ -935,6 +947,8 @@ func (s *Service) EvaluateCondition(verbose bool) (condition bool, disable bool,
 	return condition, disable, err
 }
 
+var HookInLogs bool = true
+
 func (s *Service) RunHooks(ctx context.Context, when string, part string, vars []string, extend_timeout time.Duration) error {
 	var err error
 	var executed = 0
@@ -984,7 +998,7 @@ func (s *Service) RunHooks(ctx context.Context, when string, part string, vars [
 			cmdline := hook.ExpandedExec(vars)
 			combined_vars := hook.ExpandedEnv(vars, true)
 
-			log.Printf("[%d] Run %s\n", idx, shellescape.QuoteCommand(cmdline))
+			log.Printf("Run #%d %s\n", idx, shellescape.QuoteCommand(cmdline))
 			//  cmd := exec.Command("systemd-run",
 			//  	append([]string{
 			//  		"--scope",
@@ -994,8 +1008,29 @@ func (s *Service) RunHooks(ctx context.Context, when string, part string, vars [
 			//  	}, hook.Exec...)...)
 			cmd := exec.Command(cmdline[0], cmdline[1:]...)
 			cmd.Env = append(cmd.Environ(), combined_vars...)
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
+			if HookInLogs {
+				var wg sync.WaitGroup
+				defer wg.Wait()
+
+				stdout, e := cmd.StdoutPipe()
+				if e != nil {
+					log.Printf("%s: failed to redirect stdout logs, %v", when, err)
+					cmd.Stdout = os.Stdout
+					cmd.Stderr = os.Stderr
+				} else {
+					cmd.Stderr = cmd.Stdout
+					wg.Go(func() {
+						scanner := bufio.NewScanner(stdout)
+						for scanner.Scan() {
+							log.Printf(": %s", scanner.Text())
+						}
+					})
+				}
+
+			} else {
+				cmd.Stdout = os.Stdout
+				cmd.Stderr = os.Stderr
+			}
 			return cmd.Run()
 		}()
 		if err != nil {
@@ -1006,7 +1041,7 @@ func (s *Service) RunHooks(ctx context.Context, when string, part string, vars [
 	}
 	if executed == 0 {
 		revert_log()
-		log.Printf("No hook executed for %s", when)
+		log.Printf("Nothing to execute for hook %s", when)
 	} else {
 		duration := time.Now().Sub(start_time)
 		log.Printf("Completed %d hooks in %v\n", executed, duration)

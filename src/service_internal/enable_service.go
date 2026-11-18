@@ -68,7 +68,7 @@ func EnableService(ctx context.Context, svc *service.Service, now bool, reload b
 			}
 		}
 		if reload {
-			cmd = utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "reload", unit)
+			cmd = utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "reload-or-restart", unit)
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 			err := utils.RunWithJournal(ctx, cmd, unit)

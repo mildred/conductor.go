@@ -15,6 +15,15 @@ import (
 	"github.com/mildred/conductor.go/src/dirs"
 )
 
+func JoinDirectives(directives ...[]string) (conf string) {
+	for _, dirs := range directives {
+		for _, directive := range dirs {
+			conf += strings.ReplaceAll(directive, "\n", "\\\n") + "\n"
+		}
+	}
+	return conf
+}
+
 func ExtendTimeout(ctx context.Context, extra_time time.Duration) {
 	const loop_duration = 30 * time.Second
 	for ctx.Err() == nil {

@@ -28,7 +28,7 @@ type StopOpts struct {
 }
 
 func Stop(ctx context.Context, service_name string, opts StopOpts) error {
-	defer utils.AddPrefix(log.Default(), "[%s] stop: ", service_name)()
+	defer utils.AddPrefix(log.Default(), "[stop %s] ", service_name)()
 
 	if opts.UnstoppableTimeout == 0 {
 		opts.UnstoppableTimeout = 5 * time.Second

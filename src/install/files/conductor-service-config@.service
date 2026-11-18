@@ -12,10 +12,11 @@ WorkingDirectory=%f
 TimeoutStartSec=0
 RemainAfterExit=yes
 
+Environment=CONDUCTOR_LOG_COMMAND=1
 Environment=CONDUCTOR_SYSTEMD_UNIT=%n
 
-ExecStartPre=-/bin/sh -xc "exec conductor _ service deregister %f"
-ExecStartPre=/bin/sh  -xc "exec conductor _ service register %f"
+ExecStartPre=-conductor     _ service deregister %f
+ExecStartPre=conductor      _ service register %f
 ExecStart=/bin/true
-ExecReload=/bin/sh  -xc "exec conductor _ service register %f"
-ExecStopPost=/bin/sh  -xc "exec conductor _ service deregister %f"
+ExecReload=conductor        _ service register %f
+ExecStopPost=exec conductor _ service deregister %f

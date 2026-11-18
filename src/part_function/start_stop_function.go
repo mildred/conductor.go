@@ -1,4 +1,4 @@
-package deployment_internal
+package function
 
 import (
 	"context"
@@ -10,42 +10,31 @@ import (
 	"github.com/mildred/conductor.go/src/cgi"
 
 	. "github.com/mildred/conductor.go/src/deployment"
+	. "github.com/mildred/conductor.go/src/deployment_internal"
 )
 
-func StartFunction(ctx context.Context, depl *Deployment, function bool) error {
+func (p *FunctionDeploymentPart) StartDeployment(ctx context.Context, depl *Deployment) error {
 	var err error
 	switch depl.Function.Format {
 	case "cgi":
-		if function {
-			err = StartCGIFunction(ctx, depl, depl.Function)
-			if err != nil {
-				return fmt.Errorf("while starting CGI function, %v", err)
-			}
-		} else {
-			// Nothing to start, this is started on demand
+		err = StartCGIFunction(ctx, depl, depl.Function)
+		if err != nil {
+			return fmt.Errorf("while starting CGI function, %v", err)
 		}
 	case "http-stdio":
-		if function {
-			err = StartHttpStdioFunction(ctx, depl, depl.Function)
-			if err != nil {
-				return fmt.Errorf("while starting HTTP stdio function, %v", err)
-			}
-		} else {
-			// Nothing to start, this is started on demand
+		err = StartHttpStdioFunction(ctx, depl, depl.Function)
+		if err != nil {
+			return fmt.Errorf("while starting HTTP stdio function, %v", err)
 		}
 	case "sdactivate":
-		if function {
-			vars, err := depl.Vars(ctx)
-			if err != nil {
-				return err
-			}
+		vars, err := depl.Vars(ctx)
+		if err != nil {
+			return err
+		}
 
-			err = StartSDActivateFunction(ctx, depl, depl.Function, depl.Function.ExpandedExec(vars))
-			if err != nil {
-				return fmt.Errorf("while starting Systemd socket activated function, %v", err)
-			}
-		} else {
-			// Nothing to start, this is started on demand
+		err = StartSDActivateFunction(ctx, depl, depl.Function, depl.Function.ExpandedExec(vars))
+		if err != nil {
+			return fmt.Errorf("while starting Systemd socket activated function, %v", err)
 		}
 	default:
 		err = fmt.Errorf("Unknown function format %s", depl.Function.Format)
@@ -167,6 +156,10 @@ func ExecuteDecodedFunction(ctx context.Context, depl *Deployment, f *Deployment
 	return nil
 }
 
-func StopFunction(ctx context.Context, depl *Deployment, function bool) error {
-	return terminateMainProcess(ctx, depl)
+func (p *FunctionDeploymentPart) StartPostDeployment(ctx context.Context, depl *Deployment) error {
+	return nil
+}
+
+func (p *FunctionDeploymentPart) StopDeployment(ctx context.Context, depl *Deployment) error {
+	return TerminateMainProcess(ctx, depl)
 }

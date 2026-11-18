@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
+	"log"
 	"os"
 	"os/exec"
 	"regexp"
@@ -246,7 +248,7 @@ func (a *Addr) Update() error {
 
 	new_hosts := joinLines(result)
 	if new_hosts != string(hosts) {
-		fmt.Fprintf(os.Stderr, ": update %q\n", "/etc/hosts")
+		log.Printf("update %q\n", "/etc/hosts")
 		err := os.WriteFile("/etc/hosts", []byte(new_hosts), st.Mode())
 		if err != nil {
 			return err
@@ -294,7 +296,7 @@ func (a *Addr) GetAddr(new_host string) (ip4, ip6, varname string, err error) {
 	return ip4, ip6, envname(new_host), err
 }
 
-func (a *Addr) Up(ctx context.Context, new_host string) error {
+func (a *Addr) Up(ctx context.Context, new_host string, stdout, stderr io.Writer) error {
 	//  local NEW_HOST="$1"
 	//  local i prefix ip4 ip6
 
@@ -318,14 +320,14 @@ func (a *Addr) Up(ctx context.Context, new_host string) error {
 
 	data, err := os.ReadFile(env_filename)
 	if err == nil {
-		fmt.Fprintf(os.Stderr, "%s: already exists\n\n", env_filename)
+		log.Printf("ERROR: %+s already exists\n\n", env_filename)
 
 		for _, h := range hosts {
 			if h.IsHost(new_host, 0) {
-				fmt.Fprintf(os.Stdout, "%s\n", *h.Line)
+				fmt.Fprintf(stdout, "%s\n", *h.Line)
 			}
 		}
-		fmt.Fprintf(os.Stdout, "\n%s\n", string(data))
+		fmt.Fprintf(stdout, "\n%s\n", string(data))
 		return nil
 	}
 
@@ -421,7 +423,7 @@ func (a *Addr) Up(ctx context.Context, new_host string) error {
 	}
 	new_hosts = append(new_hosts, Host{Address: ip4, Hostnames: []string{new_host, new_host + "4"}})
 	new_hosts = append(new_hosts, Host{Address: ip6, Hostnames: []string{new_host, new_host + "6"}})
-	fmt.Fprintf(os.Stderr, ": write %q\n", hosts_filename)
+	log.Printf(": write %q\n", hosts_filename)
 	err = os.WriteFile(hosts_filename, []byte(assembleHostsFile(new_hosts)), 0644)
 	if err != nil {
 		return err
@@ -438,38 +440,38 @@ func (a *Addr) Up(ctx context.Context, new_host string) error {
 		fmt.Sprintf("HOSTADDR4=%s", ip4),
 		fmt.Sprintf("HOSTADDR6=%s", ip6),
 	})
-	fmt.Fprintf(os.Stderr, ": write %q\n", env_filename)
+	log.Printf(": write %q\n", env_filename)
 	err = os.WriteFile(env_filename, []byte(envs), 0644)
 	if err != nil {
 		return err
 	}
 
-	fmt.Fprintf(os.Stderr, "+ ip link add %s type dummy 2>/dev/null || true\n", a.InterfaceName())
+	log.Printf("+ ip link add %s type dummy 2>/dev/null || true\n", a.InterfaceName())
 	cmd := exec.CommandContext(ctx, "ip", "link", "add", a.InterfaceName(), "type", "dummy")
-	cmd.Stdout = os.Stdout
+	cmd.Stdout = stdout
 	cmd.Stderr = nil
 	_ = cmd.Run()
 
-	fmt.Fprintf(os.Stderr, "+ ip link set dev %s up\n", a.InterfaceName())
+	log.Printf("+ ip link set dev %s up\n", a.InterfaceName())
 	cmd = exec.CommandContext(ctx, "ip", "link", "set", "dev", a.InterfaceName(), "up")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
 	err = cmd.Run()
 	if err != nil {
 		return err
 	}
 
 	if ip6 != "" {
-		fmt.Fprintf(os.Stderr, "+ ip addr del %s dev lo 2>/dev/null || true\n", ip6)
+		log.Printf("+ ip addr del %s dev lo 2>/dev/null || true\n", ip6)
 		cmd = exec.CommandContext(ctx, "ip", "addr", "del", ip6, "dev", "lo")
-		cmd.Stdout = os.Stdout
+		cmd.Stdout = stdout
 		cmd.Stderr = nil
 		_ = cmd.Run()
 
-		fmt.Fprintf(os.Stderr, "+ ip addr add %s dev %s\n", ip6, a.InterfaceName())
+		log.Printf("+ ip addr add %s dev %s\n", ip6, a.InterfaceName())
 		cmd = exec.CommandContext(ctx, "ip", "addr", "add", ip6, "dev", a.InterfaceName())
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
+		cmd.Stdout = stdout
+		cmd.Stderr = stderr
 		err = cmd.Run()
 		if err != nil {
 			return err
@@ -486,11 +488,11 @@ func (a *Addr) Up(ctx context.Context, new_host string) error {
 	//  echo
 	//  cat "/run/$UNIT_NAME/$NEW_HOST.env"
 
-	fmt.Fprintf(os.Stdout, "%s %s %s4\n%s %s %s6\n\n%s\n", ip4, new_host, new_host, ip6, new_host, new_host, envs)
+	fmt.Fprintf(stdout, "%s %s %s4\n%s %s %s6\n\n%s\n", ip4, new_host, new_host, ip6, new_host, new_host, envs)
 	return nil
 }
 
-func (a *Addr) Gen(ctx context.Context, new_host string, genfile string) error {
+func (a *Addr) Gen(ctx context.Context, new_host string, genfile string, stdout, stderr io.Writer) error {
 	//  local NEW_HOST="$1"
 	//  local generated=false
 	//  if [ -e "/run/$UNIT_NAME/$NEW_HOST.generated" ]; then
@@ -530,10 +532,10 @@ func (a *Addr) Gen(ctx context.Context, new_host string, genfile string) error {
 		}
 	}
 
-	return a.Up(ctx, new_host)
+	return a.Up(ctx, new_host, stdout, stderr)
 }
 
-func (a *Addr) Down(ctx context.Context, new_host string) error {
+func (a *Addr) Down(ctx context.Context, new_host string, stdout, stderr io.Writer) error {
 	//  local NEW_HOST="$1"
 	//  local i prefix ip4 ip6
 
@@ -618,29 +620,29 @@ func (a *Addr) Down(ctx context.Context, new_host string) error {
 			new_hosts = append(new_hosts, h)
 		}
 	}
-	fmt.Fprintf(os.Stderr, ": write %q\n", hosts_filename)
+	log.Printf(": write %q\n", hosts_filename)
 	err = os.WriteFile(hosts_filename, []byte(assembleHostsFile(new_hosts)), 0644)
 	if err != nil {
 		return err
 	}
 
-	fmt.Fprintf(os.Stderr, "+ rm -f %q\n", env_filename)
+	log.Printf("+ rm -f %q\n", env_filename)
 	err = os.RemoveAll(env_filename)
 	if err != nil {
 		return err
 	}
 
 	if ip6 != "" {
-		fmt.Fprintf(os.Stderr, "+ ip addr del %s dev lo\n", ip6)
+		log.Printf("+ ip addr del %s dev lo\n", ip6)
 		cmd := exec.CommandContext(ctx, "ip", "addr", "del", ip6, "dev", "lo")
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
+		cmd.Stdout = stdout
+		cmd.Stderr = stderr
 		_ = cmd.Run()
 
-		fmt.Fprintf(os.Stderr, "+ ip addr del %s dev %s\n", ip6, a.InterfaceName())
+		log.Printf("+ ip addr del %s dev %s\n", ip6, a.InterfaceName())
 		cmd = exec.CommandContext(ctx, "ip", "addr", "del", ip6, "dev", a.InterfaceName())
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
+		cmd.Stdout = stdout
+		cmd.Stderr = stderr
 		err = cmd.Run()
 		if err != nil {
 			return err

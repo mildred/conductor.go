@@ -146,7 +146,7 @@ func Stop(ctx context.Context, definition_path string, opts StopOpts) error {
 		if err != nil {
 			return err
 		}
-		defer utils.AddPrefix(log.Default(), "[%s] stop: ", definition_path)()
+		defer utils.AddPrefix(log.Default(), "[stop %s] ", definition_path)()
 	}
 
 	var args []string = []string{dirs.SystemdModeFlag(), "stop"}

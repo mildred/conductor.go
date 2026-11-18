@@ -2,6 +2,9 @@ package service_util
 
 import (
 	"context"
+	"fmt"
+	"io"
+	"log"
 
 	"github.com/mildred/conductor.go/src/addr"
 
@@ -9,6 +12,9 @@ import (
 )
 
 func BringAddrUp(ctx context.Context, service *Service) error {
+	prefix := log.Prefix()
+	defer log.SetPrefix(prefix)
+
 	addrNames, err := service.AddrNames("")
 	if err != nil {
 		return err
@@ -21,7 +27,9 @@ func BringAddrUp(ctx context.Context, service *Service) error {
 		defer a.Close()
 
 		for _, addrName := range addrNames {
-			err = a.Up(ctx, addrName)
+			log.SetPrefix(fmt.Sprintf("%s[up %s] ", prefix, addrName))
+			err = a.Up(ctx, addrName, io.Discard, io.Discard)
+			log.SetPrefix(prefix)
 			if err != nil {
 				return err
 			}
@@ -31,6 +39,9 @@ func BringAddrUp(ctx context.Context, service *Service) error {
 }
 
 func BringAddrDown(ctx context.Context, service *Service) error {
+	prefix := log.Prefix()
+	defer log.SetPrefix(prefix)
+
 	addrNames, err := service.AddrNames("")
 	if err != nil {
 		return err
@@ -43,7 +54,9 @@ func BringAddrDown(ctx context.Context, service *Service) error {
 		defer a.Close()
 
 		for _, addrName := range addrNames {
-			err = a.Down(ctx, addrName)
+			log.SetPrefix(fmt.Sprintf("%s[down %s] ", prefix, addrName))
+			err = a.Down(ctx, addrName, io.Discard, io.Discard)
+			log.SetPrefix(prefix)
 			if err != nil {
 				return err
 			}

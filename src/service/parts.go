@@ -6,17 +6,21 @@ import (
 	"fmt"
 
 	"github.com/mildred/conductor.go/src/caddy"
+
+	. "github.com/mildred/conductor.go/src/parts"
 )
 
-const PodType = "pod"
-const FunctionType = "function"
-const DaemonType = "daemon"
+var ServicePartImplementations = map[PartType]func(p AbstractServicePart) ServicePartImplementation{}
+
+type ServicePartImplementation interface {
+}
 
 type ServiceParts []AbstractServicePart
 
 type AbstractServicePart interface {
+	ServicePartImplementation
 	PartName() string
-	PartType() string
+	PartType() PartType
 	FixPaths(string) error
 	FillDefaults(service *Service) error
 	ReverseProxyConfigs(ctx context.Context, service *Service) (configs caddy.ConfigItems, err error)
@@ -25,19 +29,21 @@ type AbstractServicePart interface {
 }
 
 type MinimalServicePart struct {
-	Name string `json:"name"`
-	Type string `json:"type"`
+	Name string   `json:"name"`
+	Type PartType `json:"type"`
 }
+
+func (part *MinimalServicePart) PartName() string   { return part.Name }
+func (part *MinimalServicePart) PartType() PartType { return part.Type }
 
 type ServicePart struct {
 	MinimalServicePart
-	PartIdTemplate    string   `json:"part_id_template"`
-	ExcludeVars       []string `json:"exclude_vars"`
-	ServiceDirectives []string `json:"service_directives,omitempty"`
+	ServicePartImplementation `json:"-"`
+	PartIdTemplate            string   `json:"part_id_template"`
+	ExcludeVars               []string `json:"exclude_vars"`
+	ServiceDirectives         []string `json:"service_directives,omitempty"`
 }
 
-func (part *ServicePart) PartName() string          { return part.Name }
-func (part *ServicePart) PartType() string          { return part.Type }
 func (part *ServicePart) GenericPart() *ServicePart { return part }
 
 func (parts *ServiceParts) FindPart(name string) AbstractServicePart {
@@ -87,6 +93,16 @@ func (parts *ServiceParts) FindMainFunction() *ServiceFunction {
 	return res
 }
 
+func (parts *ServiceParts) FindSocket(name string) *ServiceSocket {
+	res, _ := parts.FindPart(name).(*ServiceSocket)
+	return res
+}
+
+func (parts *ServiceParts) FindMainSocket(name string) *ServiceSocket {
+	res, _ := parts.FindMainPart().(*ServiceSocket)
+	return res
+}
+
 func (parts *ServiceParts) FillDefaults(service *Service) error {
 	for _, part := range *parts {
 		if err := part.FillDefaults(service); err != nil {
@@ -126,6 +142,8 @@ func (parts *ServiceParts) UnmarshalJSON(data []byte) error {
 			err = parts.UnmarshalJSONDaemon(minimal_part.Name, raw_part)
 		} else if minimal_part.Type == FunctionType {
 			err = parts.UnmarshalJSONFunction(minimal_part.Name, raw_part)
+		} else if minimal_part.Type == SocketType {
+			err = parts.UnmarshalJSONSocket(minimal_part.Name, raw_part)
 		} else {
 			err = fmt.Errorf("cannot decode part type %q", minimal_part.Type)
 		}
@@ -148,6 +166,7 @@ func (parts *ServiceParts) UnmarshalJSONPod(name string, raw_part json.RawMessag
 		if p := parts.FindPart(name); p != nil {
 			return fmt.Errorf("Cannot add new part %+v of type %s, a %v if the same name exists", name, PodType, p.PartType())
 		}
+		existing_pod.ServicePartImplementation = ServicePartImplementations[existing_pod.Type](existing_pod)
 		*parts = append(*parts, existing_pod)
 	}
 	return json.Unmarshal(raw_part, existing_pod)
@@ -164,6 +183,7 @@ func (parts *ServiceParts) UnmarshalJSONDaemon(name string, raw_part json.RawMes
 		if p := parts.FindPart(name); p != nil {
 			return fmt.Errorf("Cannot add new part %+v of type %s, a %v if the same name exists", name, DaemonType, p.PartType())
 		}
+		p.ServicePartImplementation = ServicePartImplementations[p.Type](p)
 		*parts = append(*parts, p)
 	}
 	return json.Unmarshal(raw_part, p)
@@ -180,7 +200,25 @@ func (parts *ServiceParts) UnmarshalJSONFunction(name string, raw_part json.RawM
 		if p := parts.FindPart(name); p != nil {
 			return fmt.Errorf("Cannot add new part %+v of type %s, a %v if the same name exists", name, FunctionType, p.PartType())
 		}
+		existing_function.ServicePartImplementation = ServicePartImplementations[existing_function.Type](existing_function)
 		*parts = append(*parts, existing_function)
 	}
 	return json.Unmarshal(raw_part, existing_function)
+}
+
+func (parts *ServiceParts) UnmarshalJSONSocket(name string, raw_part json.RawMessage) error {
+	p := parts.FindSocket(name)
+	if p == nil {
+		p = &ServiceSocket{
+			ServicePart: ServicePart{
+				MinimalServicePart: MinimalServicePart{name, SocketType},
+			},
+		}
+		if p := parts.FindPart(name); p != nil {
+			return fmt.Errorf("Cannot add new part %+v of type %s, a %v if the same name exists", name, SocketType, p.PartType())
+		}
+		p.ServicePartImplementation = ServicePartImplementations[p.Type](p)
+		*parts = append(*parts, p)
+	}
+	return json.Unmarshal(raw_part, p)
 }

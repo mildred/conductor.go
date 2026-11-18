@@ -11,6 +11,7 @@ NotifyAccess=all
 TimeoutSec=300
 RemainAfterExit=yes
 
+Environment=CONDUCTOR_LOG_COMMAND=1
 Environment=CONDUCTOR_SYSTEMD_UNIT=%n
 
 # Do not use notify-reload as systemd cannot detect the ready signal at the end
@@ -18,10 +19,10 @@ Environment=CONDUCTOR_SYSTEMD_UNIT=%n
 # reload is signaled by the exit of the reload process.
 # Type=notify-reload
 
-ExecStart=/bin/sh    -xc 'PID=$$$$; exec conductor _ service start   "$@"' - %f
-ExecReload=/bin/sh   -xc 'PID=$$$$; exec conductor _ service reload  "$@"' - %f
-ExecStop=/bin/sh     -xc 'PID=$$$$; exec conductor _ service stop    "$@"' - %f
-ExecStopPost=/bin/sh -xc 'PID=$$$$; exec conductor _ service cleanup "$@"' - %f
+ExecStart=conductor    _ service start   %f
+ExecReload=conductor   _ service reload  %f
+ExecStop=conductor     _ service stop    %f
+ExecStopPost=conductor _ service cleanup %f
 
 [Install]
 WantedBy=default.target

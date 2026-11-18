@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/mildred/conductor.go/src/parts"
 	"github.com/mildred/conductor.go/src/service"
 )
 
@@ -13,22 +14,52 @@ type DeploymentSeed struct {
 	ServiceDir string                   `json:"service_dir"`
 	ServiceId  string                   `json:"service_id"`
 	PartName   string                   `json:"part_name"`
+	PartType   parts.PartType           `json:"part_type"`
 	PartId     string                   `json:"part_id"`
 	IsPod      bool                     `json:"is_pod"`
 	IsFunction bool                     `json:"is_function"`
 	IsDaemon   bool                     `json:"is_daemon"`
+	IsSocket   bool                     `json:"is_socket"`
+	Once       bool                     `json:"once"`
 	Pod        *service.ServicePod      `json:"-"`
 	Function   *service.ServiceFunction `json:"-"`
 	Daemon     *service.ServiceDaemon   `json:"-"`
+	Socket     *service.ServiceSocket   `json:"-"`
 }
 
 const SeedName = "conductor-deployment-seed.json"
 
-func (seed DeploymentSeed) Prefix() string {
+func (seed *DeploymentSeed) UnmarshalJSON(data []byte) error {
+	type plainDeploymentSeed DeploymentSeed
+	var tmp plainDeploymentSeed = plainDeploymentSeed(*seed)
+
+	err := json.Unmarshal(data, &tmp)
+	if err != nil {
+		return err
+	}
+
+	*seed = DeploymentSeed(tmp)
+
+	if seed.PartType == parts.NoPartType {
+		if seed.IsPod {
+			seed.PartType = parts.PodType
+		} else if seed.IsDaemon {
+			seed.PartType = parts.DaemonType
+		} else if seed.IsFunction {
+			seed.PartType = parts.FunctionType
+		} else {
+			return fmt.Errorf("Missing part_type when unmarshalling deployment seed")
+		}
+	}
+
+	return nil
+}
+
+func (seed DeploymentSeed) Suffix() string {
 	if seed.PartName == "" {
 		return ""
 	} else {
-		return seed.PartName + "-"
+		return "-" + seed.PartName
 	}
 }
 
@@ -57,29 +88,36 @@ func SeedFromService(ctx context.Context, svc *service.Service, part_name string
 		return nil, err
 	}
 
+	part := svc.FindPart(part_name)
+
 	seed := &DeploymentSeed{
 		ServiceDir: svc.BasePath,
 		ServiceId:  svc.Id,
 		PartName:   part_name,
 		PartId:     part_id,
+		PartType:   part.PartType(),
 	}
 
-	part := svc.FindPart(part_name)
-
-	if part.PartType() == service.PodType {
+	if part.PartType() == parts.PodType {
 		pod := part.(*service.ServicePod)
 		seed.IsPod = true
 		seed.Pod = pod
 		return seed, nil
-	} else if part.PartType() == service.FunctionType {
+	} else if part.PartType() == parts.FunctionType {
 		f := part.(*service.ServiceFunction)
 		seed.IsFunction = true
 		seed.Function = f
 		return seed, nil
-	} else if part.PartType() == service.DaemonType {
+	} else if part.PartType() == parts.DaemonType {
 		d := part.(*service.ServiceDaemon)
 		seed.IsDaemon = true
 		seed.Daemon = d
+		return seed, nil
+	} else if part.PartType() == parts.SocketType {
+		s := part.(*service.ServiceSocket)
+		seed.IsSocket = true
+		seed.Socket = s
+		seed.Once = s.Once
 		return seed, nil
 	}
 

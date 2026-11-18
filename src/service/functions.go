@@ -11,6 +11,8 @@ import (
 	"github.com/mildred/conductor.go/src/caddy"
 	"github.com/mildred/conductor.go/src/dirs"
 	"github.com/mildred/conductor.go/src/utils"
+
+	. "github.com/mildred/conductor.go/src/parts"
 )
 
 type ServiceFunction struct {

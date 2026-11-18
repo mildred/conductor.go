@@ -5,8 +5,9 @@ After=default.target
 
 [Service]
 Type=simple
+Environment=CONDUCTOR_LOG_COMMAND=1
 Environment=CONDUCTOR_SYSTEMD_UNIT=%n
-ExecStart=/bin.sh -xc 'exec conductor _ policy-server'
+ExecStart=conductor _ policy-server
 
 [Install]
 WantedBy=default.target

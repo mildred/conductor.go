@@ -80,6 +80,7 @@ func cmd_private_service_start(ctx context.Context) *flaggy.Subcommand {
 		"deployment is started, old deployments for the service are stopped."
 
 	cmd.CommandUsed = Hook(func() error {
+		log_command()
 		return service_internal.StartOrReloadByName(ctx, service, service_internal.StartOrReloadOpts{
 			Restart:            false,
 			MaxDeploymentIndex: max_deployment_index,
@@ -102,6 +103,7 @@ func cmd_private_service_reload(ctx context.Context) *flaggy.Subcommand {
 	cmd.Bool(&reuse, "", "reuse", "Reuse an existing deployment if possible [opposite of --fresh]")
 	cmd.Int(&max_deployment_index, "", "max-deployment-index", "Service will fail to deploy if it cannot find a deployment number below this")
 	cmd.CommandUsed = Hook(func() error {
+		log_command()
 		return service_internal.StartOrReloadByName(ctx, service, service_internal.StartOrReloadOpts{
 			Restart:            true,
 			ReuseDepl:          reuse,
@@ -119,6 +121,7 @@ func cmd_private_service_stop() *flaggy.Subcommand {
 	cmd.Description = "Stop a service"
 	cmd.AddPositionalValue(&service, "service", 1, true, "The service to act on")
 	cmd.CommandUsed = Hook(func() error {
+		log_command()
 		return service_internal.Stop(context.Background(), service, service_internal.StopOpts{})
 	})
 	return cmd
@@ -131,6 +134,7 @@ func cmd_private_service_cleanup() *flaggy.Subcommand {
 	cmd.Description = "Clean up service after it has stopped"
 	cmd.AddPositionalValue(&service, "service", 1, true, "The service to act on")
 	cmd.CommandUsed = Hook(func() error {
+		log_command()
 		return service_internal.Cleanup(context.Background(), service)
 	})
 	return cmd
@@ -143,6 +147,7 @@ func cmd_private_service_register() *flaggy.Subcommand {
 	cmd.Description = "Register service to load balancer"
 	cmd.AddPositionalValue(&service, "service", 1, true, "The service to act on")
 	cmd.CommandUsed = Hook(func() error {
+		log_command()
 		return service_internal.CaddyRegister(context.Background(), true, service)
 	})
 	return cmd
@@ -155,6 +160,7 @@ func cmd_private_service_deregister() *flaggy.Subcommand {
 	cmd.Description = "Deregister service from load balancer"
 	cmd.AddPositionalValue(&service, "service", 1, true, "The service to act on")
 	cmd.CommandUsed = Hook(func() error {
+		log_command()
 		return service_internal.CaddyRegister(context.Background(), false, service)
 	})
 	return cmd

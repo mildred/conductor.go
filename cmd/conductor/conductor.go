@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/alessio/shellescape"
 	"github.com/integrii/flaggy"
 
 	"github.com/mildred/conductor.go/src/api"
@@ -18,15 +19,27 @@ import (
 	"github.com/mildred/conductor.go/src/policies"
 	"github.com/mildred/conductor.go/src/service"
 	"github.com/mildred/conductor.go/src/service_public"
+
+	_ "github.com/mildred/conductor.go/src/part_daemon"
+	_ "github.com/mildred/conductor.go/src/part_function"
+	_ "github.com/mildred/conductor.go/src/part_pod"
+	_ "github.com/mildred/conductor.go/src/part_socket"
 )
 
 var version = "dev"
+
+func log_command() {
+	if os.Getenv("CONDUCTOR_LOG_COMMAND") != "" {
+		log.Printf("+ PID=%d %v", os.Getpid(), shellescape.QuoteCommand(os.Args))
+	}
+}
 
 func cmd_private_api_server() *flaggy.Subcommand {
 	cmd := flaggy.NewSubcommand("api-server")
 	cmd.Description = "Run an API server"
 
 	cmd.CommandUsed = Hook(func() error {
+		log_command()
 		return api.RunServer(api.RunServerOpts{
 			SocketActivationAndIdle: true,
 		})
@@ -39,6 +52,7 @@ func cmd_private_policy_server() *flaggy.Subcommand {
 	cmd.Description = "Run a policy server"
 
 	cmd.CommandUsed = Hook(func() error {
+		log_command()
 		return policies.RunServer()
 	})
 	return cmd

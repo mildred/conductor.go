@@ -17,6 +17,7 @@ import (
 	"github.com/mildred/conductor.go/src/addr"
 	"github.com/mildred/conductor.go/src/caddy"
 	"github.com/mildred/conductor.go/src/dirs"
+	"github.com/mildred/conductor.go/src/parts"
 	"github.com/mildred/conductor.go/src/service"
 	"github.com/mildred/conductor.go/src/tmpl"
 	"github.com/mildred/conductor.go/src/utils"
@@ -38,6 +39,14 @@ func CGIFunctionServiceUnit(name string, instance string) string {
 	return fmt.Sprintf("conductor-cgi-function-%s@%s.service", name, instance)
 }
 
+func SocketPartSocketUnit(name string) string {
+	return fmt.Sprintf("conductor-socket-%s.socket", name)
+}
+
+func SocketPartServiceUnit(name string) string {
+	return fmt.Sprintf("conductor-socket-%s.service", name)
+}
+
 func DeploymentServiceUnit(name string) string {
 	return fmt.Sprintf("conductor-deployment@%s.service", name)
 }
@@ -55,6 +64,9 @@ func DeploymentSocketConfigUnit(name string) string {
 }
 
 func DeploymentRunPath(name string) string {
+	if name == "" {
+		panic("DeploymentRunPath called with empty string")
+	}
 	return path.Join(DeploymentRunDir, name)
 }
 
@@ -107,63 +119,119 @@ func DeploymentDirByNameOnly(name string) string {
 
 type Deployment struct {
 	*service.Service
-	Seed                 *DeploymentSeed     `json:"-"`
-	ServiceDir           string              `json:"service_dir"`
-	ServiceId            string              `json:"service_id"`
-	DeploymentName       string              `json:"conductor_deployment"`
-	DeploymentDir        string              `json:"-"`
-	PartName             string              `json:"part_name"`
-	PartId               string              `json:"part_id"`
-	PodName              string              `json:"pod_name"`
-	TemplatedPod         string              `json:"templated_pod"`
-	TemplatedConfigMap   string              `json:"templated_config_map"`
-	TemplatedProxyConfig json.RawMessage     `json:"templated_proxy_config"`
-	Pod                  *DeploymentPod      `json:"pod,omitempty"`
-	Daemon               *DeploymentDaemon   `json:"daemon,omitempty"`
-	Function             *DeploymentFunction `json:"function,omitempty"`
-	ProxyConfigValue     caddy.ConfigItems   `json:"_proxy_config"`
+	DeploymentPartImplementation `json:"-"`
+	Seed                         *DeploymentSeed     `json:"-"`
+	ServiceDir                   string              `json:"service_dir"`
+	ServiceId                    string              `json:"service_id"`
+	DeploymentName               string              `json:"conductor_deployment"`
+	DeploymentDir                string              `json:"-"`
+	PartName                     string              `json:"part_name"`
+	PartId                       string              `json:"part_id"`
+	PartType                     parts.PartType      `json:"part_type"`
+	PodName                      string              `json:"pod_name"`
+	Once                         bool                `json:"once"`
+	TemplatedPod                 string              `json:"templated_pod"`
+	TemplatedConfigMap           string              `json:"templated_config_map"`
+	TemplatedProxyConfig         json.RawMessage     `json:"templated_proxy_config"`
+	Pod                          *DeploymentPod      `json:"pod,omitempty"`
+	Daemon                       *DeploymentDaemon   `json:"daemon,omitempty"`
+	Function                     *DeploymentFunction `json:"function,omitempty"`
+	Socket                       *DeploymentSocket   `json:"socket,omitempty"`
+	ProxyConfigValue             caddy.ConfigItems   `json:"_proxy_config"`
 }
 
 func NewDeploymentFromService(svc *service.Service, deployment_name string, seed *DeploymentSeed) *Deployment {
-	var pod *DeploymentPod
-	var daemon *DeploymentDaemon
-	var f *DeploymentFunction
+	depl := &Deployment{
+		Service:                      svc,
+		DeploymentPartImplementation: nil,
+		Seed:                         seed,
+		ServiceDir:                   svc.BasePath,
+		ServiceId:                    svc.Id,
+		DeploymentName:               deployment_name,
+		DeploymentDir:                DeploymentDirByNameOnly(deployment_name),
+		PartName:                     seed.PartName,
+		PartType:                     seed.PartType,
+		PartId:                       seed.PartId,
+		PodName:                      "conductor-" + deployment_name,
+		Once:                         seed.Once,
+		TemplatedPod:                 "",
+		TemplatedConfigMap:           "",
+		TemplatedProxyConfig:         nil,
+		Pod:                          nil,
+		Function:                     nil,
+		Daemon:                       nil,
+		Socket:                       nil,
+	}
+
+	depl.DeploymentPartImplementation = DeploymentPartImplementations[seed.PartType](depl)
 
 	if service_pod := svc.FindPod(seed.PartName); service_pod != nil {
-		pod = &DeploymentPod{
+		depl.Pod = &DeploymentPod{
 			ServicePod: service_pod,
 		}
 	}
 
 	if service_daemon := svc.FindDaemon(seed.PartName); service_daemon != nil {
-		daemon = &DeploymentDaemon{
+		depl.Daemon = &DeploymentDaemon{
 			ServiceDaemon: service_daemon,
 		}
 	}
 
 	if service_func := svc.FindFunction(seed.PartName); service_func != nil {
-		f = &DeploymentFunction{
+		depl.Function = &DeploymentFunction{
 			ServiceFunction: service_func,
 		}
 	}
 
-	return &Deployment{
-		Seed:                 seed,
-		Service:              svc,
-		ServiceDir:           svc.BasePath,
-		ServiceId:            svc.Id,
-		DeploymentName:       deployment_name,
-		DeploymentDir:        DeploymentDirByNameOnly(deployment_name),
-		PartName:             seed.PartName,
-		PartId:               seed.PartId,
-		PodName:              "conductor-" + deployment_name,
-		TemplatedPod:         "",
-		TemplatedConfigMap:   "",
-		TemplatedProxyConfig: nil,
-		Pod:                  pod,
-		Function:             f,
-		Daemon:               daemon,
+	if service_socket := svc.Parts.FindSocket(seed.PartName); service_socket != nil {
+		depl.Socket = &DeploymentSocket{
+			ServiceSocket: service_socket,
+		}
 	}
+
+	return depl
+}
+
+func LoadDeployment(deployment_dir, fname string) (*Deployment, error) {
+	// log.Printf("Read file %s\n", fname)
+	f, err := os.Open(fname)
+	if err != nil {
+		return nil, err
+	}
+
+	res := &Deployment{
+		DeploymentDir: deployment_dir,
+	}
+	err = json.NewDecoder(f).Decode(res)
+
+	// log.Printf("Loaded deployment %s, service %s-%s\n", res.DeploymentName, res.AppName, res.InstanceName)
+	return res, err
+}
+
+func (depl *Deployment) UnmarshalJSON(data []byte) error {
+	type plainDeployment Deployment
+	var tmp plainDeployment = plainDeployment(*depl)
+
+	err := json.Unmarshal(data, &tmp)
+	if err != nil {
+		return err
+	}
+
+	*depl = Deployment(tmp)
+	if depl.DeploymentDir == "" {
+		return fmt.Errorf("Missing deployment_dir when unmarshalling deployment")
+	}
+
+	if depl.PartType == parts.NoPartType {
+		depl.PartType = depl.FindPart(depl.PartName).PartType()
+	}
+
+	depl.Service.BasePath = depl.ServiceDir
+	depl.Service.Id = depl.ServiceId
+
+	depl.DeploymentPartImplementation = DeploymentPartImplementations[depl.PartType](depl)
+
+	return nil
 }
 
 func ReadDeploymentByName(name string, allow_dir_in_name, allow_service_name bool) (*Deployment, error) {
@@ -441,24 +509,6 @@ func LoadDeploymentDir(dir string) (*Deployment, error) {
 	return LoadDeployment(dir, path.Join(dir, ConfigName))
 }
 
-func LoadDeployment(deployment_dir, fname string) (*Deployment, error) {
-	// log.Printf("Read file %s\n", fname)
-	f, err := os.Open(fname)
-	if err != nil {
-		return nil, err
-	}
-
-	res := &Deployment{}
-	err = json.NewDecoder(f).Decode(res)
-
-	res.Service.BasePath = res.ServiceDir
-	res.Service.Id = res.ServiceId
-	res.DeploymentDir = deployment_dir
-
-	// log.Printf("Loaded deployment %s, service %s-%s\n", res.DeploymentName, res.AppName, res.InstanceName)
-	return res, err
-}
-
 func (depl *Deployment) FindPodIPAddressContainer(id string) (string, error) {
 	data, err := exec.Command("podman", "container", "inspect", id).Output()
 	if ee, ok := err.(*exec.ExitError); ok {
@@ -575,7 +625,9 @@ func (depl *Deployment) SocketConfigUnit() string {
 }
 
 func (depl *Deployment) MainUnit() string {
-	if depl.SocketActivated() {
+	if depl.PartType == parts.SocketType {
+		return SocketPartSocketUnit(depl.DeploymentName)
+	} else if depl.SocketActivated() {
 		return DeploymentSocketUnit(depl.DeploymentName)
 	} else {
 		return DeploymentServiceUnit(depl.DeploymentName)
@@ -584,11 +636,14 @@ func (depl *Deployment) MainUnit() string {
 
 func DeploymentMainUnit(s *service.Service, part_name string, deployment_name string) string {
 	part := s.FindPart(part_name)
-	if part != nil && part.IsSocketActivated() {
-		return DeploymentSocketUnit(deployment_name)
-	}
 
-	return DeploymentServiceUnit(deployment_name)
+	if part.PartType() == parts.SocketType {
+		return SocketPartSocketUnit(deployment_name)
+	} else if part != nil && part.IsSocketActivated() {
+		return DeploymentSocketUnit(deployment_name)
+	} else {
+		return DeploymentServiceUnit(deployment_name)
+	}
 }
 
 func DeploymentSocketUnitOrBlank(s *service.Service, part_name string, deployment_name string) string {
@@ -598,4 +653,21 @@ func DeploymentSocketUnitOrBlank(s *service.Service, part_name string, deploymen
 	}
 
 	return ""
+}
+
+func AllUnitsStopOrder(ctx context.Context, name string) (units []UnitOrder, err error) {
+	tmp_depl := &Deployment{
+		DeploymentName: name,
+		DeploymentDir:  DeploymentDirByNameOnly(name),
+	}
+	for _, typ := range parts.AllPartTypes {
+		if create, ok := DeploymentPartImplementations[typ]; ok {
+			u, e := create(tmp_depl).AllUnitsStopOrder(ctx)
+			if e != nil {
+				err = errors.Join(err, e)
+			}
+			units = append(units, u...)
+		}
+	}
+	return units, err
 }

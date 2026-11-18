@@ -9,6 +9,8 @@ import (
 
 	"github.com/mildred/conductor.go/src/caddy"
 	"github.com/mildred/conductor.go/src/utils"
+
+	. "github.com/mildred/conductor.go/src/parts"
 )
 
 type ServicePod struct {

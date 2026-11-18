@@ -43,6 +43,7 @@ func ReloadServices(ctx context.Context, opts ReloadServiceOpts) error {
 	var seen_service_dirs []string
 	var start_list []*service.Service
 	var stop_list []*service.Service
+	var dead_list []*service.Service
 	var manual_stop_list []string
 
 	for _, dir := range service.ServiceDirs {
@@ -89,11 +90,14 @@ func ReloadServices(ctx context.Context, opts ReloadServiceOpts) error {
 				continue
 			}
 
-			if disable || !condition {
+			if disable {
 				stop_list = append(stop_list, serv)
-				if verbose && disable {
+				if verbose {
 					log.Printf("service is disabled explicitely")
-				} else if verbose && !condition {
+				}
+			} else if !condition {
+				dead_list = append(dead_list, serv)
+				if verbose {
 					log.Printf("service is disabled because conditions do not match")
 				}
 			} else {
@@ -110,6 +114,31 @@ func ReloadServices(ctx context.Context, opts ReloadServiceOpts) error {
 		}
 
 		log.SetPrefix(fmt.Sprintf("%sreload: ", log_prefix))
+	}
+
+	var new_start_list []*service.Service = start_list
+	start_list = nil
+	for len(new_start_list) > 0 {
+		start_list = append(start_list, new_start_list...)
+		cur_start_list := new_start_list
+		new_start_list = nil
+
+		for _, srv := range cur_start_list {
+			for _, req := range srv.Requires {
+				path := req.Path
+				if path == "" {
+					path, err = service.ServiceDirByName(req.Name)
+					if err != nil {
+						return err
+					}
+				}
+				i := slices.IndexFunc(stop_list, func(ss *service.Service) bool { return ss.BasePath == path })
+				if i >= 0 {
+					new_start_list = append(new_start_list, stop_list[i])
+					stop_list = append(stop_list[:i], stop_list[i+1:]...)
+				}
+			}
+		}
 	}
 
 	if !inclusive {

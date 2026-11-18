@@ -12,6 +12,7 @@ RestartPreventExitStatus=10 11
 
 WorkingDirectory=%t/conductor/deployments/%i
 
+Environment=CONDUCTOR_LOG_COMMAND=1
 Environment=CONDUCTOR_DEPLOYMENT=%i
 Environment=CONDUCTOR_SYSTEMD_UNIT=%n
 
@@ -20,12 +21,12 @@ Environment=CONDUCTOR_SYSTEMD_UNIT=%n
 # LogExtraFields=CONDUCTOR_INSTANCE=${CONDUCTOR_INSTANCE}
 # LogExtraFields=CONDUCTOR_DEPLOYMENT=${CONDUCTOR_DEPLOYMENT}
 
-ExecStartPre=/bin/sh  -xc 'PID=$$$$; exec conductor _ deployment prepare'
-ExecStart=/bin/sh     -xc 'PID=$$$$; exec conductor _ deployment start'
-ExecStartPost=/bin/sh -xc 'PID=$$$$; exec conductor _ deployment start-post'
+ExecStartPre=conductor  _ deployment prepare
+ExecStart=conductor     _ deployment start
+ExecStartPost=conductor _ deployment start-post
 
 TimeoutSec=300
 
-ExecStop=/bin/sh     -xc 'PID=$$$$; exec conductor _ deployment stop'
-ExecStopPost=/bin/sh -xc 'PID=$$$$; exec conductor _ deployment cleanup'
+ExecStop=conductor      _ deployment stop
+ExecStopPost=conductor  _ deployment cleanup
 

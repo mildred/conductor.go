@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"os"
 
 	"github.com/integrii/flaggy"
 
@@ -35,7 +36,7 @@ func cmd_addr_down(ctx context.Context) *flaggy.Subcommand {
 
 		defer a.Close()
 
-		return a.Down(ctx, hostname)
+		return a.Down(ctx, hostname, os.Stdout, os.Stderr)
 	})
 	return cmd
 }
@@ -63,7 +64,7 @@ func cmd_addr_up(ctx context.Context) *flaggy.Subcommand {
 
 		defer a.Close()
 
-		return a.Up(ctx, hostname)
+		return a.Up(ctx, hostname, os.Stdout, os.Stderr)
 	})
 	return cmd
 }

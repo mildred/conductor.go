@@ -16,6 +16,7 @@ func cmd_private_deployment_prepare() *flaggy.Subcommand {
 	cmd.AddPositionalValue(&deployment_name, "deployment", 1, false, "The deployment, default to the current directory deployment")
 
 	cmd.CommandUsed = Hook(func() error {
+		log_command()
 		return deployment_internal.Prepare(deployment_name)
 	})
 	return cmd
@@ -31,6 +32,7 @@ func cmd_private_deployment_start() *flaggy.Subcommand {
 	cmd.AddPositionalValue(&deployment_name, "deployment", 1, false, "The deployment, default to the current directory deployment")
 
 	cmd.CommandUsed = Hook(func() error {
+		log_command()
 		return deployment_internal.Start(deployment_name, function)
 	})
 	return cmd
@@ -46,6 +48,7 @@ func cmd_private_deployment_start_post() *flaggy.Subcommand {
 	cmd.AddPositionalValue(&deployment_name, "deployment", 1, false, "The deployment, default to the current directory deployment")
 
 	cmd.CommandUsed = Hook(func() error {
+		log_command()
 		return deployment_internal.StartPost(deployment_name, function)
 	})
 	return cmd
@@ -61,6 +64,7 @@ func cmd_private_deployment_stop() *flaggy.Subcommand {
 	cmd.AddPositionalValue(&deployment_name, "deployment", 1, false, "The deployment, default to the current directory deployment")
 
 	cmd.CommandUsed = Hook(func() error {
+		log_command()
 		return deployment_internal.Stop(context.Background(), deployment_name, function)
 	})
 	return cmd
@@ -74,6 +78,7 @@ func cmd_private_deployment_cleanup() *flaggy.Subcommand {
 	cmd.AddPositionalValue(&deployment_name, "deployment", 1, false, "The deployment, default to the current directory deployment")
 
 	cmd.CommandUsed = Hook(func() error {
+		log_command()
 		return deployment_internal.Cleanup(deployment_name)
 	})
 	return cmd
@@ -89,6 +94,7 @@ func cmd_private_deployment_register() *flaggy.Subcommand {
 	cmd.AddPositionalValue(&deployment_name, "deployment", 1, false, "The deployment, default to the current directory deployment")
 
 	cmd.CommandUsed = Hook(func() error {
+		log_command()
 		config_name := "deployment"
 		if socket {
 			config_name = "deployment-socket"
@@ -108,6 +114,7 @@ func cmd_private_deployment_deregister() *flaggy.Subcommand {
 	cmd.AddPositionalValue(&deployment_name, "deployment", 1, false, "The deployment, default to the current directory deployment")
 
 	cmd.CommandUsed = Hook(func() error {
+		log_command()
 		config_name := "deployment"
 		if socket {
 			config_name = "deployment-socket"

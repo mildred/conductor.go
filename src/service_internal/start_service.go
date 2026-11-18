@@ -14,9 +14,9 @@ import (
 
 	"github.com/mildred/conductor.go/src/caddy"
 	"github.com/mildred/conductor.go/src/deployment"
-	"github.com/mildred/conductor.go/src/deployment_internal"
 	"github.com/mildred/conductor.go/src/deployment_util"
 	"github.com/mildred/conductor.go/src/dirs"
+	"github.com/mildred/conductor.go/src/part_pod"
 	"github.com/mildred/conductor.go/src/pidfile"
 	"github.com/mildred/conductor.go/src/service_util"
 	"github.com/mildred/conductor.go/src/tmpl"
@@ -62,10 +62,11 @@ func StartOrReloadByName(ctx context.Context, service_name string, opts StartOrR
 }
 
 func StartOrReload(ctx context.Context, service *Service, service_name string, opts StartOrReloadOpts) error {
+	nice_service_name, _ := service.GetServiceNameOrPath()
 	if opts.Restart {
-		defer utils.AddPrefix(log.Default(), "[%s] restart: ", service_name)()
+		defer utils.AddPrefix(log.Default(), "[restart %s] ", nice_service_name)()
 	} else {
-		defer utils.AddPrefix(log.Default(), "[%s] start: ", service_name)()
+		defer utils.AddPrefix(log.Default(), "[restart %s] ", nice_service_name)()
 	}
 
 	if opts.MaxDeploymentIndex == 0 {
@@ -202,62 +203,74 @@ func StartOrReload(ctx context.Context, service *Service, service_name string, o
 
 		depl, depl_status, err := deployment_util.StartNewOrExistingFromService(ctx, service, seed, deployment_util.StartNewOrExistingOpts{
 			MaxIndex:  opts.MaxDeploymentIndex,
-			ReuseDepl: opts.ReuseDepl,
+			ReuseDepl: opts.ReuseDepl || opts.ReuseDeplIfStatic && service.IsStaticDeployment(),
 		})
 		if err != nil {
 			return err
 		}
 
-		err = depl.TemplateAll(ctx)
-		if err != nil {
-			return fmt.Errorf("failed to template deployment, %v", err)
-		}
+		err = func() error {
+			defer utils.AddPrefix(log.Default(), fmt.Sprintf("[activate %s] ", depl.DeploymentName))()
 
-		vars, err := depl.Vars(ctx)
-		if err != nil {
-			return err
-		}
-
-		err = depl.RunHooks(ctx, "pre-create", depl.PartName, vars, 60*time.Second)
-		if err != nil {
-			return err
-		}
-
-		if seed.IsPod {
-			//
-			// Create the pod or fail
-			//
-
-			log.Printf("Create the deployment pod\n")
-			err := deployment_internal.KubePlayPod(depl, deployment_internal.PodCreate, depl.DeploymentDir)
+			err = depl.TemplateAll(ctx)
 			if err != nil {
-				err = fmt.Errorf("failed to create deployment pod, %v", err)
+				return fmt.Errorf("failed to template deployment, %v", err)
+			}
+
+			vars, err := depl.Vars(ctx)
+			if err != nil {
 				return err
 			}
-		}
 
-		err = depl.RunHooks(ctx, "pre-activate", depl.PartName, vars, 60*time.Second)
-		if err != nil {
-			return err
-		}
+			err = depl.RunHooks(ctx, "pre-create", depl.PartName, vars, 60*time.Second)
+			if err != nil {
+				return err
+			}
 
-		unit_name := depl.MainUnit()
+			if seed.IsPod {
+				//
+				// Create the pod or fail
+				//
 
-		depl_names = append(depl_names, depl.DeploymentName)
+				log.Printf("Create the deployment pod\n")
+				err := pod.KubePlayPod(depl, pod.PodCreate, depl.DeploymentDir)
+				if err != nil {
+					err = fmt.Errorf("failed to create deployment pod, %v", err)
+					return err
+				}
+			}
 
-		if seed.IsPod || seed.IsDaemon {
+			err = depl.RunHooks(ctx, "pre-activate", depl.PartName, vars, 60*time.Second)
+			if err != nil {
+				return err
+			}
 
-			ctx, cancel := context.WithCancel(context.Background())
-			go utils.ExtendTimeout(ctx, 60*time.Second)
+			unit_name := depl.MainUnit()
 
-			err = func() error {
-				defer cancel()
+			depl_names = append(depl_names, depl.DeploymentName)
 
-				if depl_status == "active" {
-					log.Printf("Found started pod deployment %s", depl.DeploymentName)
-				} else if depl_status == "activating" || depl_status == "inactive" {
-					log.Printf("Found %s pod deployment %s, waiting to be started...", depl_status, depl.DeploymentName)
-					cmd := utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "start", unit_name)
+			if seed.IsPod || seed.IsDaemon {
+
+				ctx, cancel := context.WithCancel(context.Background())
+				go utils.ExtendTimeout(ctx, 60*time.Second)
+
+				err = func() error {
+					defer cancel()
+
+					if depl_status == "active" {
+						log.Printf("Found started pod deployment %s", depl.DeploymentName)
+					} else if depl_status == "activating" || depl_status == "inactive" {
+						log.Printf("Found %s pod deployment %s, waiting to be started...", depl_status, depl.DeploymentName)
+					} else {
+						log.Printf("Starting new pod deployment %s...", depl.DeploymentName)
+					}
+
+					action := "start"
+					if opts.Restart {
+						action = "reload-or-restart"
+					}
+
+					cmd := utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), action, unit_name)
 					cmd.Stdout = os.Stdout
 					cmd.Stderr = os.Stderr
 					err = utils.RunWithJournal(ctx, cmd, unit_name)
@@ -265,43 +278,51 @@ func StartOrReload(ctx context.Context, service *Service, service_name string, o
 					if err != nil {
 						return err
 					}
-				} else {
-					log.Printf("Starting new pod deployment %s...", depl.DeploymentName)
-					cmd := utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "start", unit_name)
-					cmd.Stdout = os.Stdout
-					cmd.Stderr = os.Stderr
-					err = utils.RunWithJournal(ctx, cmd, unit_name)
-					started_services = append(started_services, unit_name)
-					if err != nil {
-						return err
-					}
+
+					return nil
+				}()
+				if err != nil {
+					stopServicesOrLog(ctx, depl, started_services)
+					started_services = nil
+					return err
 				}
 
-				return nil
-			}()
+			} else if seed.IsFunction {
+
+				log.Printf("Starting new CGI function deployment %s...", depl.DeploymentName)
+				cmd := utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "start", deployment.CGIFunctionSocketUnit(depl.DeploymentName))
+				cmd.Stdout = os.Stdout
+				cmd.Stderr = os.Stderr
+				err = utils.RunWithJournal(ctx, cmd, deployment.CGIFunctionSocketUnit(depl.DeploymentName))
+				started_services = append(started_services, deployment.CGIFunctionSocketUnit(depl.DeploymentName))
+				if err != nil {
+					stopServicesOrLog(ctx, depl, started_services)
+					started_services = nil
+					return err
+				}
+
+			} else if seed.IsSocket {
+
+				log.Printf("Starting new socket (%s) deployment %s...", depl.PartType, depl.DeploymentName)
+				cmd := utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "reload-or-restart", depl.MainUnit())
+				cmd.Stdout = os.Stdout
+				cmd.Stderr = os.Stderr
+				err = utils.RunWithJournal(ctx, cmd, depl.MainUnit())
+				if err != nil {
+					stopServicesOrLog(ctx, depl, started_services)
+					started_services = nil
+					return err
+				}
+
+			}
+
+			err = depl.RunHooks(ctx, "post-activate", depl.PartName, vars, 60*time.Second)
 			if err != nil {
-				stopServicesOrLog(ctx, depl, started_services)
-				started_services = nil
 				return err
 			}
 
-		} else if seed.IsFunction {
-
-			log.Printf("Starting new CGI function deployment %s...", depl.DeploymentName)
-			cmd := utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "start", deployment.CGIFunctionSocketUnit(depl.DeploymentName))
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			err = utils.RunWithJournal(ctx, cmd, deployment.CGIFunctionSocketUnit(depl.DeploymentName))
-			started_services = append(started_services, deployment.CGIFunctionSocketUnit(depl.DeploymentName))
-			if err != nil {
-				stopServicesOrLog(ctx, depl, started_services)
-				started_services = nil
-				return err
-			}
-
-		}
-
-		err = depl.RunHooks(ctx, "post-activate", depl.PartName, vars, 60*time.Second)
+			return nil
+		}()
 		if err != nil {
 			return err
 		}
@@ -333,33 +354,42 @@ func StartOrReload(ctx context.Context, service *Service, service_name string, o
 
 		log.Printf("Removing deployment %s...\n", d.DeploymentName)
 
-		vars, err := d.Vars(ctx)
-		if err != nil {
-			return err
-		}
+		err := func() error {
+			defer utils.AddPrefix(log.Default(), fmt.Sprintf("[remove %s] ", d.DeploymentName))()
 
-		err = d.RunHooks(ctx, "pre-remove", d.PartName, vars, 60*time.Second)
-		if err != nil {
-			log.Printf("ERROR executing pre-remote hooks for %s (but continuing): %v", d.DeploymentName, err)
-			continue
-		}
+			vars, err := d.Vars(ctx)
+			if err != nil {
+				return err
+			}
 
-		ctx, cancel := context.WithCancel(context.Background())
-		go utils.ExtendTimeout(ctx, 60*time.Second)
+			err = d.RunHooks(ctx, "pre-remove", d.PartName, vars, 60*time.Second)
+			if err != nil {
+				log.Printf("ERROR executing pre-remote hooks for %s (but continuing): %v", d.DeploymentName, err)
+				return nil
+			}
 
-		err = func() error {
-			defer cancel()
-			return deployment_util.RemoveTimeout(ctx, d.DeploymentName, opts.StopTimeout, opts.TermTimeout)
+			ctx, cancel := context.WithCancel(context.Background())
+			go utils.ExtendTimeout(ctx, 60*time.Second)
+
+			err = func() error {
+				defer cancel()
+				return deployment_util.RemoveTimeout(ctx, d.DeploymentName, opts.StopTimeout, opts.TermTimeout)
+			}()
+			if err != nil {
+				log.Printf("ERROR removing deployment %s (but continuing): %v", d.DeploymentName, err)
+				return nil
+			}
+
+			err = d.RunHooks(ctx, "post-remove", d.PartName, vars, 60*time.Second)
+			if err != nil {
+				log.Printf("ERROR executing post-remote hooks for %s (but continuing): %v", d.DeploymentName, err)
+				return nil
+			}
+
+			return nil
 		}()
 		if err != nil {
-			log.Printf("ERROR removing deployment %s (but continuing): %v", d.DeploymentName, err)
-			continue
-		}
-
-		err = d.RunHooks(ctx, "post-remove", d.PartName, vars, 60*time.Second)
-		if err != nil {
-			log.Printf("ERROR executing post-remote hooks for %s (but continuing): %v", d.DeploymentName, err)
-			continue
+			return err
 		}
 
 	}

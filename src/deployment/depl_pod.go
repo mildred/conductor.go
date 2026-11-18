@@ -16,10 +16,6 @@ type DeploymentPod struct {
 	IPAddress string `json:"ip_address"`
 }
 
-type DeploymentDaemon struct {
-	*service.ServiceDaemon
-}
-
 func (pod *DeploymentPod) TemplatePod(ctx context.Context, depl *Deployment) error {
 	log.Printf("prepare: Templating the pod\n")
 	vars, err := depl.Vars(ctx)

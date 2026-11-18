@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/coreos/go-systemd/v22/dbus"
+	"github.com/coreos/go-systemd/v22/unit"
 	"github.com/taigrr/systemctl"
 	"github.com/taigrr/systemctl/properties"
 
@@ -35,14 +36,15 @@ func StartNewOrExistingFromService(ctx context.Context, svc *service.Service, se
 
 	part := seed.PartName
 	if part == "" {
-		defer utils.AddPrefix(log.Default(), "[default part] ")()
+		defer utils.AddPrefix(log.Default(), "default part: ")()
 	} else {
-		defer utils.AddPrefix(log.Default(), "[part %s] ", part)()
+		defer utils.AddPrefix(log.Default(), "part %s: ", part)()
 	}
 
 	var started_deployments []*Deployment
 	var starting_deployments []*Deployment
 	var stopped_deployments []*Deployment
+	var once_deployments []*Deployment
 	// var deployment_units []string
 	deployments, err := List(ListOpts{
 		FilterServiceDir: svc.BasePath,
@@ -85,6 +87,7 @@ func StartNewOrExistingFromService(ctx context.Context, svc *service.Service, se
 			}
 			continue
 		}
+
 		part_id, _ := part_ids[depl.PartName]
 		if depl.PartId != part_id {
 			if should_match {
@@ -92,6 +95,14 @@ func StartNewOrExistingFromService(ctx context.Context, svc *service.Service, se
 			}
 			continue
 		}
+
+		if depl.Once != seed.Once {
+			if should_match {
+				log.Printf("Deployment %s do not match (once %v != %v)", depl.DeploymentName, depl.Once, seed.Once)
+			}
+			continue
+		}
+
 		var stat dbus.UnitStatus
 
 		// for _, st := range statuses {
@@ -106,7 +117,9 @@ func StartNewOrExistingFromService(ctx context.Context, svc *service.Service, se
 			return nil, "", err
 		}
 
-		if stat.ActiveState == "failed" {
+		if depl.Once {
+			once_deployments = append(once_deployments, depl)
+		} else if stat.ActiveState == "failed" {
 			log.Printf("Deployment %s do not match (state is %s / %s)", depl.DeploymentName, stat.ActiveState, stat.SubState)
 			continue
 		} else if stat.ActiveState == "active" {
@@ -131,7 +144,10 @@ func StartNewOrExistingFromService(ctx context.Context, svc *service.Service, se
 
 	var name string
 
-	if len(started_deployments) > 0 && opts.ReuseDepl {
+	if len(once_deployments) > 0 {
+		log.Printf("Found deployment %q", once_deployments[0].DeploymentName)
+		return once_deployments[0], "", nil
+	} else if len(started_deployments) > 0 && opts.ReuseDepl {
 		log.Printf("Found started deployment %q", started_deployments[0].DeploymentName)
 		return started_deployments[0], "active", nil
 	} else if len(starting_deployments) > 0 {
@@ -147,7 +163,7 @@ func StartNewOrExistingFromService(ctx context.Context, svc *service.Service, se
 			return nil, "", err
 		}
 
-		log.Printf("Create a new deployment %q", name)
+		log.Printf("Create a new deployment %q (from stopped)", name)
 	} else {
 		if len(started_deployments) > 0 && !opts.ReuseDepl {
 			log.Printf("Requesting a fresh deployment, create new...")
@@ -159,21 +175,9 @@ func StartNewOrExistingFromService(ctx context.Context, svc *service.Service, se
 		// Find a deployment name
 		//
 
-		var i = 1
-		for i <= opts.MaxIndex {
-			name = fmt.Sprintf("%s-%s-%s%d", svc.AppName, svc.InstanceName, seed.Prefix(), i)
-			log.Printf("Trying new deployment name %s", name)
-			_, err := os.Stat(path.Join(DeploymentRunDir, name))
-			if err != nil && !os.IsNotExist(err) {
-				return nil, "", err
-			} else if err == nil {
-				// the deployment exists, try next integer
-				i = i + 1
-				name = ""
-				continue
-			} else {
-				break
-			}
+		name, err = FindDeploymentName(svc, seed, opts.MaxIndex)
+		if err != nil {
+			return nil, "", err
 		}
 
 		if name == "" && len(started_deployments) > 0 {
@@ -190,6 +194,7 @@ func StartNewOrExistingFromService(ctx context.Context, svc *service.Service, se
 	// Symlink the service config over to the deployment directory
 	//
 
+	log.Printf("Create new deployment %+s from service %v", name, svc.BasePath)
 	dir, err := CreateDeploymentFromService(ctx, name, svc, seed)
 	if err != nil {
 		return nil, "", err
@@ -201,6 +206,65 @@ func StartNewOrExistingFromService(ctx context.Context, svc *service.Service, se
 	}
 
 	return depl, "", nil
+}
+
+func FindDeploymentName(svc *service.Service, seed *deployment.DeploymentSeed, maxIndex int) (name string, err error) {
+	var prefix string
+	if svc.AppName == "" || svc.InstanceName == "" {
+		if svc.Name == "" {
+			prefix = unit.UnitNamePathEscape(svc.BasePath)
+		} else {
+			prefix = svc.Name
+		}
+	} else {
+		prefix = fmt.Sprintf("%s-%s", svc.AppName, svc.InstanceName)
+	}
+
+	var i int
+	if seed.Once {
+		i = 0
+	} else {
+		i = 1
+	}
+
+	var candidates []string
+
+	for i <= maxIndex {
+		if i == 0 {
+			name = fmt.Sprintf("%s%s", prefix, seed.Suffix())
+		} else {
+			name = fmt.Sprintf("%s%s-%d", prefix, seed.Suffix(), i)
+		}
+
+		if seed.Once {
+			// TODO: handle the case when the deployment exists but is a different
+			// service
+			break
+		} else {
+			_, err := os.Stat(path.Join(DeploymentRunDir, name))
+			if err != nil && !os.IsNotExist(err) {
+				return "", err
+			} else if err == nil {
+				// the deployment exists, try next integer
+				i = i + 1
+				candidates = append(candidates, name)
+				name = ""
+				continue
+			} else {
+				break
+			}
+		}
+	}
+
+	if name == "" {
+		log.Printf("Dis not found deployment name, candidates were: %s", name, strings.Join(candidates, ", "))
+	} else if len(candidates) > 0 {
+		log.Printf("Found new deployment name %s (candidates were: %s)", name, strings.Join(candidates, ", "))
+	} else {
+		log.Printf("Found new deployment name %s", name)
+	}
+
+	return name, nil
 }
 
 func CreateDeploymentFromService(ctx context.Context, name string, svc *service.Service, seed *DeploymentSeed) (string, error) {
@@ -238,50 +302,15 @@ func CreateDeploymentFromService(ctx context.Context, name string, svc *service.
 
 	depl := deployment.NewDeploymentFromService(svc, name, seed)
 
-	var unit_name string
-	var socket_unit_name string
-	var service_directives []string
-	var socket_directives []string
-	if seed.IsPod {
-		pod := svc.FindPod(seed.PartName)
-		unit_name = DeploymentServiceUnit(name)
-		socket_unit_name = DeploymentSocketUnitOrBlank(svc, seed.PartName, name)
-		service_directives = pod.ServiceDirectives
-		if pod.SocketActivated {
-			vars, err := depl.Vars(ctx)
-			if err != nil {
-				return "", err
-			}
-
-			socket_directives = pod.ExpandedSocketDirectives(vars)
-			if len(socket_directives) == 0 {
-				return "", fmt.Errorf("Cannot create socket file %s: missing socket directives in pod configuration", DeploymentSocketUnit(name))
-			}
-		}
-	} else if seed.IsDaemon {
-		unit_name = DeploymentServiceUnit(name)
-		daemon := svc.FindDaemon(seed.PartName)
-		service_directives = daemon.ServiceDirectives
-	} else if seed.IsFunction {
-		fct := svc.FindFunction(seed.PartName)
-		if fct.IsSingle() {
-			unit_name = CGIFunctionServiceUnitSingle(name)
-		} else {
-			unit_name = CGIFunctionServiceUnit(name, "")
-		}
-		service_directives = fct.ServiceDirectives
-		err = CreateCGIFunctionUnits(name, fct)
-		if err != nil {
-			return "", err
-		}
+	reload, err := depl.CreateDeploymentUnits(ctx)
+	if err != nil {
+		return "", err
 	}
 
-	var reload = false
-
-	if unit_name != "" {
+	for _, service_unit := range depl.AllServiceUnits() {
 		reload = true
 
-		err = os.MkdirAll(dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode(), unit_name+".d"), 0755)
+		err = os.MkdirAll(dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode(), service_unit+".d"), 0755)
 		if err != nil {
 			return "", err
 		}
@@ -290,39 +319,9 @@ func CreateDeploymentFromService(ctx context.Context, name string, svc *service.
 		conf += fmt.Sprintf("LogExtraFields=CONDUCTOR_APP=%s\n", svc.AppName)
 		conf += fmt.Sprintf("LogExtraFields=CONDUCTOR_INSTANCE=%s\n", svc.InstanceName)
 		conf += fmt.Sprintf("LogExtraFields=CONDUCTOR_DEPLOYMENT=%s\n", name)
-		err = os.WriteFile(dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode(), unit_name+".d/50-journal.conf"), []byte(conf), 0644)
+		err = os.WriteFile(dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode(), service_unit+".d/50-journal.conf"), []byte(conf), 0644)
 		if err != nil {
 			return "", err
-		}
-
-		if len(service_directives) > 0 {
-			var conf string = "[Service]\n"
-			for _, directive := range service_directives {
-				conf += strings.ReplaceAll(directive, "\n", "\\\n") + "\n"
-			}
-			err = os.WriteFile(dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode(), unit_name+".d/90-extra-directives.conf"), []byte(conf), 0644)
-			if err != nil {
-				return "", err
-			}
-		}
-	}
-
-	if socket_unit_name != "" {
-		if len(socket_directives) > 0 {
-			reload = true
-
-			var conf string
-			conf += "[Unit]\n"
-			conf += "Requires=" + DeploymentSocketConfigUnit(name) + "\n\n"
-			conf += "[Socket]\n"
-			for _, directive := range socket_directives {
-				directive = strings.ReplaceAll(directive, "\n", "\\\n")
-				conf += directive + "\n"
-			}
-			err = os.WriteFile(dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode(), DeploymentSocketUnit(name)), []byte(conf), 0644)
-			if err != nil {
-				return "", err
-			}
 		}
 	}
 
@@ -337,88 +336,4 @@ func CreateDeploymentFromService(ctx context.Context, name string, svc *service.
 	}
 
 	return dir, nil
-}
-
-func CreateCGIFunctionUnits(name string, f *service.ServiceFunction) error {
-	var unit_name, accept, service_config string
-	if f.IsSingle() {
-		unit_name = CGIFunctionServiceUnitSingle(name)
-		accept = "no"
-	} else {
-		unit_name = CGIFunctionServiceUnit(name, "")
-		accept = "yes"
-		service_config = "Type=oneshot\n" +
-			"StandardInput=socket\n" +
-			"StandardOutput=socket\n" +
-			"StandardError=journal\n"
-	}
-
-	var service = `[Unit]
-Description=Conductor CGI Function ` + name + `
-CollectMode=inactive-or-failed
-
-[Service]
-` + service_config + `
-WorkingDirectory=` + DeploymentDirByNameOnly(name) + `
-Environment=CONDUCTOR_DEPLOYMENT=` + name + `
-Environment=CONDUCTOR_SYSTEMD_UNIT=%n
-
-ExecStart=/bin/sh -xc 'PID=$$$$; exec conductor _ deployment start --function'
-`
-
-	var socket = `[Unit]
-Description=Conductor CGI Function socket for ` + name + `
-Requires=` + DeploymentServiceUnit(name) + `
-Requires=` + DeploymentConfigUnit(name) + `
-
-[Socket]
-ListenStream=` + DeploymentSocketPath(name) + `
-Accept=` + accept + `
-
-[Install]
-WantedBy=sockets.target
-`
-
-	var function_conf = `[Unit]
-Requires=` + DeploymentConfigUnit(name) + `
-Before=` + DeploymentConfigUnit(name) + `
-
-[Service]
-Type=oneshot
-ExitType=main
-RemainAfterExit=yes
-Restart=on-failure
-`
-
-	log.Printf("Create %s", dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode()))
-	err := os.MkdirAll(dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode()), 0755)
-	if err != nil {
-		return err
-	}
-
-	log.Printf("Write %s", dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode(), CGIFunctionSocketUnit(name)))
-	err = os.WriteFile(dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode(), CGIFunctionSocketUnit(name)), []byte(socket), 0o644)
-	if err != nil {
-		return err
-	}
-
-	log.Printf("Write %s", dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode(), unit_name))
-	err = os.WriteFile(dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode(), unit_name), []byte(service), 0o644)
-	if err != nil {
-		return err
-	}
-
-	log.Printf("Create %s", dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode(), DeploymentServiceUnit(name)+".d"))
-	err = os.MkdirAll(dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode(), DeploymentServiceUnit(name)+".d"), 0755)
-	if err != nil {
-		return err
-	}
-
-	log.Printf("Write %s", dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode(), DeploymentServiceUnit(name)+".d", "function.conf"))
-	err = os.WriteFile(dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode(), DeploymentServiceUnit(name)+".d", "function.conf"), []byte(function_conf), 0o644)
-	if err != nil {
-		return err
-	}
-
-	return nil
 }

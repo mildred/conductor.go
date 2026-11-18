@@ -1,4 +1,4 @@
-package deployment_internal
+package pod
 
 import (
 	"context"
@@ -16,11 +16,11 @@ import (
 
 	"github.com/mildred/conductor.go/src/dirs"
 	"github.com/mildred/conductor.go/src/status_socket"
-	"github.com/mildred/conductor.go/src/tmpl"
 	"github.com/mildred/conductor.go/src/trace_connections"
 	"github.com/mildred/conductor.go/src/utils"
 
 	. "github.com/mildred/conductor.go/src/deployment"
+	. "github.com/mildred/conductor.go/src/deployment_internal"
 )
 
 // Note for deployment hooks, there could be different ways to hook:
@@ -32,7 +32,7 @@ import (
 //
 // - or as a HTTP query to the pod IP address with a retry mechanism
 
-func StartPod(ctx context.Context, depl *Deployment) error {
+func (p *PodDeploymentPart) StartDeployment(ctx context.Context, depl *Deployment) error {
 	reset_log_prefix := utils.AddPrefix(log.Default(), "start pod: ")
 	defer reset_log_prefix()
 
@@ -215,7 +215,7 @@ func StartPod(ctx context.Context, depl *Deployment) error {
 		log.Printf("systemd-socket-proxyd stopped, triggering a deployment stop\n")
 
 		reset_log_prefix()
-		err = StopPodOrDaemon(ctx, depl)
+		err = p.StopDeployment(ctx, depl)
 		if err != nil {
 			SdNotifyOrLog(err.Error())
 			return err
@@ -255,7 +255,7 @@ func StartPod(ctx context.Context, depl *Deployment) error {
 
 }
 
-func StopPodOrDaemon(ctx context.Context, depl *Deployment) error {
+func (p *PodDeploymentPart) StopDeployment(ctx context.Context, depl *Deployment) error {
 	defer utils.AddPrefix(log.Default(), "stop pod: ")()
 
 	//
@@ -283,68 +283,37 @@ func StopPodOrDaemon(ctx context.Context, depl *Deployment) error {
 	// Remove the IP address from the load balancer
 	//
 
-	log.Printf(" Removing deployment from load-balancer...\n")
-	cmd := utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "stop", DeploymentConfigUnit(depl.DeploymentName))
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	err = utils.RunWithJournal(ctx, cmd, DeploymentConfigUnit(depl.DeploymentName))
+	err = StopDeploymentConfig(ctx, depl)
 	if err != nil {
 		log.Printf("ERROR when removing from the load-balancer: %v\n", err)
 	}
 
-	if depl.Pod != nil {
+	//
+	// Stop the containers
+	//
 
-		//
-		// Stop the containers
-		//
+	log.Printf("Stopping the containers...\n")
+	err = KubePlayPod(depl, PodStop, ".")
+	if err != nil {
+		err = fmt.Errorf("failed to stop pod, %v", err)
+		SdNotifyOrLog(err.Error())
+		return err
+	}
 
-		log.Printf("Stopping the containers...\n")
-		err = KubePlayPod(depl, PodStop, ".")
-		if err != nil {
-			err = fmt.Errorf("failed to stop pod, %v", err)
-			SdNotifyOrLog(err.Error())
-			return err
-		}
+	//
+	// Reset the pod IP address
+	//
 
-		//
-		// Reset the pod IP address
-		//
-
-		depl.Pod.IPAddress = ""
-		err = depl.Save(ConfigName)
-		if err != nil {
-			err = fmt.Errorf("failed to save pod to reset IP address, %v", err)
-			SdNotifyOrLog(err.Error())
-			return err
-		}
-	} else if depl.Daemon != nil {
-
-		err = terminateMainProcess(ctx, depl)
-		if err != nil {
-			SdNotifyOrLog(err.Error())
-			return err
-		}
-
-	} else {
-		return fmt.Errorf("Cannot stop something that is neither a pod or a daemon")
+	depl.Pod.IPAddress = ""
+	err = depl.Save(ConfigName)
+	if err != nil {
+		err = fmt.Errorf("failed to save pod to reset IP address, %v", err)
+		SdNotifyOrLog(err.Error())
+		return err
 	}
 
 	log.Printf("Stop sequence completed\n")
 	return nil
-}
-
-func Template(ctx context.Context, dir string, template string) error {
-	depl, err := LoadDeployment(dir, path.Join(dir, ConfigName))
-	if err != nil {
-		return err
-	}
-
-	vars, err := depl.Vars(ctx)
-	if err != nil {
-		return err
-	}
-
-	return tmpl.RunTemplateStdout(context.Background(), template, vars)
 }
 
 type KubePlayOperation = int

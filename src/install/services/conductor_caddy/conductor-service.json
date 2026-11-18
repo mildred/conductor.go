@@ -1,20 +1,88 @@
 {
+  // Version string to load specific configuration defaults (use today)
   "version": "2026-11-12",
+
   "app_name": "conductor_caddy",
   "instance_name": "",
+
+  // disable load balancer for this service
   "load_balancer_service": "",
+
+  // do not auto-restart deployments (static deployments)
   "auto_restart": false,
+
+  // hide from list if systemd unit is disabled
   "hide_if_disabled": true,
-  "transitive": true,
+
+  // disable unless required
   "disable": true,
+
+  // services to required even if they are disabled
   "requires": [
-    {"name": "conductor_tube_ports", "after": true}
+    // {"name": "conductor_tube_ports", "after": true}
   ],
+
+  // Parts are template for new deployments, on service restart, the old
+  // deployments are removed in favor of the new deployments based on the same
+  // parts.
   "parts": [
     {
+      // No name specified, this is the default part
+      // "name": "",
+
+      // Part type is daemon, direct execution
       "type": "daemon",
-      "exec": ["./run-caddy.sh"]
-    }
+
+      // Executable to run on daemon startup
+      "exec": ["./run-caddy.sh"],
+
+      // sockets to include in the Sockets= directive and passed in extra file
+      // descriptors. The part Requires= and After= the socket.
+      "sockets": [ "http" ],
+
+      // Use force-bind to ensure the part does not bind anything else than in
+      // the rules below
+      "force_bind": {
+        "permissive": false,
+        ":80": "sd=0",
+        ":443": "sd=1",
+      }
+    },
+    {
+      // name for the part, if not specified it is the empty string (for the
+      // default part)
+      "name": "http",
+
+      // Part type is socket
+      "type": "socket",
+
+      // the socket is only created once. When restarting the service, the
+      // socket can be recreated but it will never have duplicates
+      "once": true,
+
+      // the part name to activate, if true, the default part, if false or
+      // null, the socket will not have a service that activates on traffic
+      // sets the Service= directive
+      "activate": true,
+
+      // socket directives
+      "directives": [
+        "ListenStream=$CONDUCTOR_SERVICE_ADDR4:80",
+        "ListenStream=$CONDUCTOR_SERVICE_ADDR4:443",
+        "ListenStream=[$CONDUCTOR_SERVICE_ADDR6]:80",
+        "ListenStream=[$CONDUCTOR_SERVICE_ADDR6]:443",
+      ],
+
+      // tubes to register on socket activation, a separate service file is
+      // created with a Sockets= directive Requires= to the socket and After=
+      // the socket.
+      "register_tubes": [
+        [ "$CONDUCTOR_SERVICE_NAME" ],
+        [ "$CONDUCTOR_SERVICE_NAME" ],
+        [ "$CONDUCTOR_SERVICE_NAME" ],
+        [ "$CONDUCTOR_SERVICE_NAME" ],
+      ]
+    },
   ],
   "hooks": [
     {

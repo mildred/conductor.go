@@ -40,6 +40,7 @@ cat <<JSON >./caddy.json
         "master": {
           "@id": "http.server",
           "listen": [
+            "$CONDUCTOR_SERVICE_ADDR_NAME:80",
             "$CONDUCTOR_SERVICE_ADDR_NAME:443"
           ],
           "routes": [
