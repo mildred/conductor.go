@@ -2,8 +2,10 @@ package socket
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/mildred/conductor.go/src/deployment"
 	"github.com/mildred/conductor.go/src/dirs"
@@ -45,14 +47,28 @@ func (p *SocketDeploymentPart) CreateDeploymentUnits(ctx context.Context) (reloa
 		return reload, err
 	}
 
-	/*
-		// ERROR: cannot find other parts unit name at start time
-		var activate_service []string
-		if sk.Activate.Part != nil {
-			part := p.Depl.FindPart(ak.Activate.Part)
-			deployment.DeploymentMainUnit()
+	var activate_service []string
+	if sk.Activate.Part != nil {
+		part := p.Depl.OtherParts[*sk.Activate.Part]
+		if part == nil {
+			var other_parts_names []string
+			for n, _ := range p.Depl.OtherParts {
+				other_parts_names = append(other_parts_names, fmt.Sprintf("%+s", n))
+			}
+			if *sk.Activate.Part == "" {
+				return reload, fmt.Errorf("could not find activate main part (available parts are: %s)", strings.Join(other_parts_names, ", "))
+			} else {
+				return reload, fmt.Errorf("could not find activate part %+v (available parts are: %s)", *sk.Activate.Part, strings.Join(other_parts_names, ", "))
+			}
 		}
-	*/
+		unit_name := deployment.DeploymentMainUnit(p.Depl.Service, part.PartName, part.DeploymentName)
+		if !strings.HasSuffix(unit_name, ".service") {
+			return reload, fmt.Errorf("activate %v part %+v main unit %+v is not a service, the part might not have the correct type or might already be socket activated", part.PartType, part.PartName, unit_name)
+		}
+		activate_service = []string{
+			"Service=" + unit_name,
+		}
+	}
 
 	socket_unit_name := deployment.SocketPartSocketUnit(name)
 	service_unit_name := deployment.SocketPartServiceUnit(name)
@@ -63,7 +79,7 @@ func (p *SocketDeploymentPart) CreateDeploymentUnits(ctx context.Context) (reloa
 		"Requires=" + service_unit_name,
 		"",
 		"[Socket]",
-	}, utils.ExpandAllVars(sk.Directives, vars), []string{
+	}, activate_service, utils.ExpandAllVars(sk.Directives, vars), []string{
 		"",
 		"[Install]",
 		"WantedBy=sockets.target",

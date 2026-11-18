@@ -2,6 +2,7 @@ package service_internal
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -187,6 +188,10 @@ func StartOrReload(ctx context.Context, service *Service, service_name string, o
 	parts := service.PartNames()
 
 	var depl_names []string
+	var seeds []*deployment.DeploymentSeed
+	var deployments []*deployment.Deployment
+	var deployment_statuses []string
+	var depl_other_parts = map[string]*deployment.OtherPart{}
 
 	for _, part_name := range parts {
 
@@ -201,7 +206,7 @@ func StartOrReload(ctx context.Context, service *Service, service_name string, o
 			return err
 		}
 
-		depl, depl_status, err := deployment_util.StartNewOrExistingFromService(ctx, service, seed, deployment_util.StartNewOrExistingOpts{
+		depl, depl_status, err := deployment_util.PrepareNewOrExistingFromService(ctx, service, seed, deployment_util.StartNewOrExistingOpts{
 			MaxIndex:  opts.MaxDeploymentIndex,
 			ReuseDepl: opts.ReuseDepl || opts.ReuseDeplIfStatic && service.IsStaticDeployment(),
 		})
@@ -209,8 +214,74 @@ func StartOrReload(ctx context.Context, service *Service, service_name string, o
 			return err
 		}
 
-		err = func() error {
+		depl_names = append(depl_names, depl.DeploymentName)
+		deployments = append(deployments, depl)
+		deployment_statuses = append(deployment_statuses, depl_status)
+		seeds = append(seeds, seed)
+		depl_other_parts[depl.PartName] = deployment.NewOtherPartFromDeployment(depl)
+	}
+
+	//
+	// Save all cross-data between deployments from a same service
+	//
+
+	for i, depl := range deployments {
+		seed := seeds[i]
+		seed.OtherParts = depl_other_parts
+
+		if depl.Service != nil {
+			depl.OtherParts = depl_other_parts
+			e := depl.SaveDefaultLocation()
+			if e != nil {
+				err = errors.Join(err, e)
+			}
+		}
+	}
+	if err != nil {
+		return err
+	}
+
+	//
+	// Create seed only deployments
+	//
+
+	for i, depl := range deployments {
+		seed := seeds[i]
+		if depl.Service != nil {
+			continue
+		}
+
+		depl, err := deployment_util.CreateDeploymentFromService(ctx, depl.DeploymentName, service, seed)
+		if err != nil {
+			return err
+		}
+
+		deployments[i] = depl
+	}
+
+	//
+	// Start all deployments
+	//
+
+	for i, _ := range parts {
+		seed := seeds[i]
+		depl := deployments[i]
+		depl_status := deployment_statuses[i]
+
+		if depl_status == "active" {
+			log.Printf("Found started %s deployment %s", depl.PartType, depl.DeploymentName)
+		} else if depl_status == "activating" || depl_status == "inactive" {
+			log.Printf("Found %s %s deployment %s, waiting to be started...", depl_status, depl.PartType, depl.DeploymentName)
+		} else {
+			log.Printf("Starting new %s deployment %s...", depl.PartType, depl.DeploymentName)
+		}
+
+		e := func() error {
 			defer utils.AddPrefix(log.Default(), fmt.Sprintf("[activate %s] ", depl.DeploymentName))()
+
+			if depl.PartType == "" {
+				return fmt.Errorf("deployment is missing its type")
+			}
 
 			err = depl.TemplateAll(ctx)
 			if err != nil {
@@ -247,8 +318,6 @@ func StartOrReload(ctx context.Context, service *Service, service_name string, o
 
 			unit_name := depl.MainUnit()
 
-			depl_names = append(depl_names, depl.DeploymentName)
-
 			if seed.IsPod || seed.IsDaemon {
 
 				ctx, cancel := context.WithCancel(context.Background())
@@ -256,14 +325,6 @@ func StartOrReload(ctx context.Context, service *Service, service_name string, o
 
 				err = func() error {
 					defer cancel()
-
-					if depl_status == "active" {
-						log.Printf("Found started pod deployment %s", depl.DeploymentName)
-					} else if depl_status == "activating" || depl_status == "inactive" {
-						log.Printf("Found %s pod deployment %s, waiting to be started...", depl_status, depl.DeploymentName)
-					} else {
-						log.Printf("Starting new pod deployment %s...", depl.DeploymentName)
-					}
 
 					action := "start"
 					if opts.Restart {
@@ -303,7 +364,7 @@ func StartOrReload(ctx context.Context, service *Service, service_name string, o
 
 			} else if seed.IsSocket {
 
-				log.Printf("Starting new socket (%s) deployment %s...", depl.PartType, depl.DeploymentName)
+				log.Printf("Starting new socket deployment %s...", depl.DeploymentName)
 				cmd := utils.LogCommand(ctx, "systemctl", dirs.SystemdModeFlag(), "reload-or-restart", depl.MainUnit())
 				cmd.Stdout = os.Stdout
 				cmd.Stderr = os.Stderr
@@ -323,10 +384,13 @@ func StartOrReload(ctx context.Context, service *Service, service_name string, o
 
 			return nil
 		}()
-		if err != nil {
-			return err
+		if e != nil {
+			err = errors.Join(err, e)
 		}
 
+	}
+	if err != nil {
+		return err
 	}
 
 	//
@@ -340,14 +404,14 @@ func StartOrReload(ctx context.Context, service *Service, service_name string, o
 
 	log.Printf("Removing obsolete deployments (except %v)...\n", depl_names)
 
-	deployments, err := deployment.List(deployment.ListOpts{
+	all_system_deployments, err := deployment.List(deployment.ListOpts{
 		FilterServiceDir: service.BasePath,
 	})
 	if err != nil {
 		return err
 	}
 
-	for _, d := range deployments {
+	for _, d := range all_system_deployments {
 		if slices.Contains(depl_names, d.DeploymentName) {
 			continue
 		}

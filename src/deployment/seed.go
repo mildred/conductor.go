@@ -21,6 +21,7 @@ type DeploymentSeed struct {
 	IsDaemon   bool                     `json:"is_daemon"`
 	IsSocket   bool                     `json:"is_socket"`
 	Once       bool                     `json:"once"`
+	OtherParts map[string]*OtherPart    `json:"other_parts,omitempty"`
 	Pod        *service.ServicePod      `json:"-"`
 	Function   *service.ServiceFunction `json:"-"`
 	Daemon     *service.ServiceDaemon   `json:"-"`

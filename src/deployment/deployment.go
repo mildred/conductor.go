@@ -120,24 +120,47 @@ func DeploymentDirByNameOnly(name string) string {
 type Deployment struct {
 	*service.Service
 	DeploymentPartImplementation `json:"-"`
-	Seed                         *DeploymentSeed     `json:"-"`
-	ServiceDir                   string              `json:"service_dir"`
-	ServiceId                    string              `json:"service_id"`
-	DeploymentName               string              `json:"conductor_deployment"`
-	DeploymentDir                string              `json:"-"`
-	PartName                     string              `json:"part_name"`
-	PartId                       string              `json:"part_id"`
-	PartType                     parts.PartType      `json:"part_type"`
-	PodName                      string              `json:"pod_name"`
-	Once                         bool                `json:"once"`
-	TemplatedPod                 string              `json:"templated_pod"`
-	TemplatedConfigMap           string              `json:"templated_config_map"`
-	TemplatedProxyConfig         json.RawMessage     `json:"templated_proxy_config"`
-	Pod                          *DeploymentPod      `json:"pod,omitempty"`
-	Daemon                       *DeploymentDaemon   `json:"daemon,omitempty"`
-	Function                     *DeploymentFunction `json:"function,omitempty"`
-	Socket                       *DeploymentSocket   `json:"socket,omitempty"`
-	ProxyConfigValue             caddy.ConfigItems   `json:"_proxy_config"`
+	Seed                         *DeploymentSeed       `json:"-"`
+	ServiceDir                   string                `json:"service_dir"`
+	ServiceId                    string                `json:"service_id"`
+	DeploymentName               string                `json:"conductor_deployment"`
+	DeploymentDir                string                `json:"-"`
+	PartName                     string                `json:"part_name"`
+	PartId                       string                `json:"part_id"`
+	PartType                     parts.PartType        `json:"part_type"`
+	PodName                      string                `json:"pod_name"`
+	Once                         bool                  `json:"once"`
+	TemplatedPod                 string                `json:"templated_pod"`
+	TemplatedConfigMap           string                `json:"templated_config_map"`
+	OtherParts                   map[string]*OtherPart `json:"other_parts,omitempty"`
+	TemplatedProxyConfig         json.RawMessage       `json:"templated_proxy_config"`
+	Pod                          *DeploymentPod        `json:"pod,omitempty"`
+	Daemon                       *DeploymentDaemon     `json:"daemon,omitempty"`
+	Function                     *DeploymentFunction   `json:"function,omitempty"`
+	Socket                       *DeploymentSocket     `json:"socket,omitempty"`
+	ProxyConfigValue             caddy.ConfigItems     `json:"_proxy_config"`
+}
+
+type OtherPart struct {
+	PartName       string         `json:"part_name"`
+	PartType       parts.PartType `json:"part_type"`
+	DeploymentName string         `json:"deployment_name"`
+	DeploymentDir  string         `json:"deployment_dir"`
+	ServiceId      string         `json:"service_id"`
+	PartId         string         `json:"part_id"`
+	Once           bool           `json:"once,omitempty"`
+}
+
+func NewOtherPartFromDeployment(depl *Deployment) *OtherPart {
+	return &OtherPart{
+		PartName:       depl.PartName,
+		PartType:       depl.PartType,
+		DeploymentName: depl.DeploymentName,
+		DeploymentDir:  depl.DeploymentDir,
+		ServiceId:      depl.ServiceId,
+		PartId:         depl.PartId,
+		Once:           depl.Once,
+	}
 }
 
 func NewDeploymentFromService(svc *service.Service, deployment_name string, seed *DeploymentSeed) *Deployment {
@@ -154,6 +177,7 @@ func NewDeploymentFromService(svc *service.Service, deployment_name string, seed
 		PartId:                       seed.PartId,
 		PodName:                      "conductor-" + deployment_name,
 		Once:                         seed.Once,
+		OtherParts:                   seed.OtherParts,
 		TemplatedPod:                 "",
 		TemplatedConfigMap:           "",
 		TemplatedProxyConfig:         nil,
@@ -492,6 +516,10 @@ func (depl *Deployment) Vars(ctx context.Context) ([]string, error) {
 	}
 
 	return vars, nil
+}
+
+func (depl *Deployment) SaveDefaultLocation() error {
+	return depl.Save(path.Join(depl.DeploymentDir, ConfigName))
 }
 
 func (depl *Deployment) Save(fname string) error {

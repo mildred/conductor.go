@@ -3,6 +3,7 @@ package deployment_util
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -29,6 +30,27 @@ type StartNewOrExistingOpts struct {
 }
 
 func StartNewOrExistingFromService(ctx context.Context, svc *service.Service, seed *DeploymentSeed, opts StartNewOrExistingOpts) (*Deployment, string, error) {
+	depl, status, err := PrepareNewOrExistingFromService(ctx, svc, seed, opts)
+	if err != nil {
+		return nil, "", err
+	}
+
+	if depl.Service == nil {
+
+		//
+		// TODO: fill the OtherParts of the seed
+		//
+
+		depl, err = CreateDeploymentFromService(ctx, depl.DeploymentName, svc, seed)
+		if err != nil {
+			return nil, "", err
+		}
+	}
+
+	return depl, status, nil
+}
+
+func PrepareNewOrExistingFromService(ctx context.Context, svc *service.Service, seed *DeploymentSeed, opts StartNewOrExistingOpts) (*Deployment, string, error) {
 	// sd, err := utils.NewSystemdClient(ctx)
 	// if err != nil {
 	//   return nil, "", err
@@ -190,22 +212,7 @@ func StartNewOrExistingFromService(ctx context.Context, svc *service.Service, se
 		log.Printf("Create a new deployment %s", name)
 	}
 
-	//
-	// Symlink the service config over to the deployment directory
-	//
-
-	log.Printf("Create new deployment %+s from service %v", name, svc.BasePath)
-	dir, err := CreateDeploymentFromService(ctx, name, svc, seed)
-	if err != nil {
-		return nil, "", err
-	}
-
-	depl, err := ReadDeployment(dir, name)
-	if err != nil {
-		return nil, "", err
-	}
-
-	return depl, "", nil
+	return &Deployment{DeploymentName: name}, "", nil
 }
 
 func FindDeploymentName(svc *service.Service, seed *deployment.DeploymentSeed, maxIndex int) (name string, err error) {
@@ -267,27 +274,43 @@ func FindDeploymentName(svc *service.Service, seed *deployment.DeploymentSeed, m
 	return name, nil
 }
 
-func CreateDeploymentFromService(ctx context.Context, name string, svc *service.Service, seed *DeploymentSeed) (string, error) {
+var ErrUnsupportedDeploy error = errors.New("This operation is no longer supported as deployment of a single part breaks the link it might have with other parts.")
+
+func CreateDeploymentFromService(ctx context.Context, name string, svc *service.Service, seed *DeploymentSeed) (*Deployment, error) {
+	defer utils.AddPrefix(log.Default(), "[create %s] ", name)()
+
+	//
+	// Symlink the service config over to the deployment directory (write the seed)
+	//
+
+	log.Printf("Create new deployment %+s from part %+s of service %v", name, seed.PartName, svc.BasePath)
+
+	var last_err error
+	if seed.OtherParts == nil {
+		log.Printf("\nWARNING: %s\n\n", ErrUnsupportedDeploy.Error())
+		last_err = ErrUnsupportedDeploy
+	}
+
 	dir := DeploymentRunPath(name)
 
 	err := os.MkdirAll(dir, 0755)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	err = os.Symlink(path.Join(svc.BasePath, service.ConfigName), path.Join(dir, service.ConfigName))
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	seed_data, err := json.Marshal(seed)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	err = os.WriteFile(path.Join(dir, SeedName), seed_data, 0644)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	// var env string
@@ -304,7 +327,7 @@ func CreateDeploymentFromService(ctx context.Context, name string, svc *service.
 
 	reload, err := depl.CreateDeploymentUnits(ctx)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	for _, service_unit := range depl.AllServiceUnits() {
@@ -312,7 +335,7 @@ func CreateDeploymentFromService(ctx context.Context, name string, svc *service.
 
 		err = os.MkdirAll(dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode(), service_unit+".d"), 0755)
 		if err != nil {
-			return "", err
+			return nil, err
 		}
 
 		var conf string = "[Service]\n"
@@ -321,7 +344,7 @@ func CreateDeploymentFromService(ctx context.Context, name string, svc *service.
 		conf += fmt.Sprintf("LogExtraFields=CONDUCTOR_DEPLOYMENT=%s\n", name)
 		err = os.WriteFile(dirs.Join(dirs.RuntimeDir, "systemd", dirs.SystemdMode(), service_unit+".d/50-journal.conf"), []byte(conf), 0644)
 		if err != nil {
-			return "", err
+			return nil, err
 		}
 	}
 
@@ -331,9 +354,18 @@ func CreateDeploymentFromService(ctx context.Context, name string, svc *service.
 		cmd.Stderr = os.Stderr
 		err = cmd.Run()
 		if err != nil {
-			return "", fmt.Errorf("while running systemctl %s daemon-reload, %v", dirs.SystemdModeFlag(), err)
+			return nil, fmt.Errorf("while running systemctl %s daemon-reload, %v", dirs.SystemdModeFlag(), err)
 		}
 	}
 
-	return dir, nil
+	//
+	// Once created, read the deployment anew (do not use the seed)
+	//
+
+	depl, err = ReadDeployment(dir, name)
+	if err != nil {
+		return nil, err
+	}
+
+	return depl, last_err
 }

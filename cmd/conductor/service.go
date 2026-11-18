@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -311,21 +312,25 @@ func cmd_service_deploy(ctx context.Context) *flaggy.Subcommand {
 
 		if depl_name == "" {
 			ctx := context.Background()
-			depl, status, err := deployment_util.StartNewOrExistingFromService(ctx, service, seed, deployment_util.StartNewOrExistingOpts{
+			depl, status, e := deployment_util.StartNewOrExistingFromService(ctx, service, seed, deployment_util.StartNewOrExistingOpts{
 				MaxIndex:  max_index,
 				ReuseDepl: reuse,
 			})
-			if err != nil {
-				return err
+			if e == deployment_util.ErrUnsupportedDeploy {
+				err = errors.Join(err, e)
+			} else if e != nil {
+				return e
 			}
 
 			fmt.Printf("Deployment (%s): %s\n", status, depl.DeploymentName)
 			depl_name = depl.DeploymentName
 			main_unit = depl.MainUnit()
 		} else {
-			dir, err := deployment_util.CreateDeploymentFromService(ctx, depl_name, service, seed)
-			if err != nil {
-				return err
+			dir, e := deployment_util.CreateDeploymentFromService(ctx, depl_name, service, seed)
+			if e == deployment_util.ErrUnsupportedDeploy {
+				err = errors.Join(err, e)
+			} else if e != nil {
+				return e
 			}
 
 			fmt.Printf("Deployment created in: %s\n", dir)
@@ -338,14 +343,14 @@ func cmd_service_deploy(ctx context.Context) *flaggy.Subcommand {
 			cmd.Stdin = os.Stdin
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
-			err := utils.RunWithJournal(context.Background(), cmd, main_unit)
-			if err != nil {
-				return err
+			e := utils.RunWithJournal(context.Background(), cmd, main_unit)
+			if e != nil {
+				err = errors.Join(err, e)
 			}
 		} else {
 			fmt.Printf("You can start it with: systemctl start %s\n", main_unit)
 		}
-		return nil
+		return err
 	})
 	return cmd
 }

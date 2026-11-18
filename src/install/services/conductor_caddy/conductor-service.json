@@ -62,7 +62,7 @@
 
       // the part name to activate, if true, the default part, if false or
       // null, the socket will not have a service that activates on traffic
-      // sets the Service= directive
+      // defines the Service= directive
       "activate": true,
 
       // socket directives
