@@ -88,6 +88,7 @@ import "C"
 type ForceBindOpts struct {
 	Rules              *Rules
 	PreventUnknownBind bool
+	PreventPortZero    bool
 }
 
 var UseProcMem = true
@@ -264,10 +265,16 @@ func (fb *forceBind) handleBind(ctx context.Context, l *log.Logger, notif_fd uin
 
 	var local_sockaddr unix.Iovec
 
-	pidfd, err := pidfd.Open(int(pid), 0)
+	real_pid, err := PIDFromTID(int(pid))
 	if err != nil {
 		l.Printf("[%d] bind(%d, 0x%x, %d) detected", pid, arg_sockfd, arg_sockaddr, arg_socklen)
-		return fmt.Errorf("could not pidfd_open(%d), %v", pid, err)
+		return fmt.Errorf("could not get PID from %d, %v", pid, err)
+	}
+
+	pidfd, err := pidfd.Open(int(real_pid), 0)
+	if err != nil {
+		l.Printf("[%d] bind(%d, 0x%x, %d) detected", pid, arg_sockfd, arg_sockaddr, arg_socklen)
+		return fmt.Errorf("could not pidfd_open(%d), %v", real_pid, err)
 	}
 
 	var buf = make([]byte, arg_socklen)
@@ -347,7 +354,10 @@ func (fb *forceBind) handleBind(ctx context.Context, l *log.Logger, notif_fd uin
 	match := fb.Rules.Lookup(addr, port)
 
 	if match == nil {
-		if fb.PreventUnknownBind {
+		if port == 0 && !fb.PreventPortZero {
+			l.Printf("[%d] bind(%d, %s), continuing (port 0)", pid, arg_sockfd, addrport.String())
+			return nil
+		} else if fb.PreventUnknownBind {
 			l.Printf("[%d] bind(%d, %s) errno=EACCESS, unknown bind", pid, arg_sockfd, addrport.String())
 			resp.Error = int32(unix.EACCES)
 			resp.Flags = 0
@@ -358,7 +368,12 @@ func (fb *forceBind) handleBind(ctx context.Context, l *log.Logger, notif_fd uin
 		}
 	}
 
-	l.Printf("[%d] bind(%d, %s), detected, redirecting to %s", pid, arg_sockfd, addrport.String(), match.RuleString())
+	if match.Allow {
+		l.Printf("[%d] bind(%d, %s), detected, rule is allowing", pid, arg_sockfd, addrport.String())
+		return nil
+	} else {
+		l.Printf("[%d] bind(%d, %s), detected, redirecting to %s", pid, arg_sockfd, addrport.String(), match.RuleString())
+	}
 
 	fd, _, err := match.Fd(ctx, sockfd, port)
 	if err == ErrBlock {
@@ -368,6 +383,9 @@ func (fb *forceBind) handleBind(ctx context.Context, l *log.Logger, notif_fd uin
 		return nil
 	} else if err != nil {
 		return fmt.Errorf("bind(%d, %s), cannot obtain file descriptor for %s, %v", arg_sockfd, addrport.String(), match.String(), err)
+	} else if int(fd) == sockfd {
+		l.Printf("bind(%d, %s), allowed file descriptor %d", arg_sockfd, addrport.String(), sockfd)
+		return nil
 	}
 
 	err = IoctlSeccompNotifAddfd(uintptr(notif_fd), notif.ID, unix.SECCOMP_ADDFD_FLAG_SETFD, uint32(fd), uint32(arg_sockfd), 0)

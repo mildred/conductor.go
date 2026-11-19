@@ -47,7 +47,7 @@ func (p *SocketDeploymentPart) CreateDeploymentUnits(ctx context.Context) (reloa
 		return reload, err
 	}
 
-	var activate_service []string
+	var activate_service string
 	if sk.Activate.Part != nil {
 		part := p.Depl.OtherParts[*sk.Activate.Part]
 		if part == nil {
@@ -65,9 +65,7 @@ func (p *SocketDeploymentPart) CreateDeploymentUnits(ctx context.Context) (reloa
 		if !strings.HasSuffix(unit_name, ".service") {
 			return reload, fmt.Errorf("activate %v part %+v main unit %+v is not a service, the part might not have the correct type or might already be socket activated", part.PartType, part.PartName, unit_name)
 		}
-		activate_service = []string{
-			"Service=" + unit_name,
-		}
+		activate_service = unit_name
 	}
 
 	socket_unit_name := deployment.SocketPartSocketUnit(name)
@@ -76,10 +74,15 @@ func (p *SocketDeploymentPart) CreateDeploymentUnits(ctx context.Context) (reloa
 	socket_conf := utils.JoinDirectives([]string{
 		"[Unit]",
 		"Description=Conductor socket for " + name,
-		"Requires=" + service_unit_name,
+		// Use Wants rather than Requires to avoid the signaling service stop to
+		// trigger a socket stop, especially since the signalling unit is a oneshot
+		// and does not remain after exit
+		"Wants=" + service_unit_name,
+		"Before=" + service_unit_name,
 		"",
 		"[Socket]",
-	}, activate_service, utils.ExpandAllVars(sk.Directives, vars), []string{
+		"Service=" + activate_service,
+	}, utils.ExpandAllVars(sk.Directives, vars), []string{
 		"",
 		"[Install]",
 		"WantedBy=sockets.target",
@@ -94,11 +97,14 @@ func (p *SocketDeploymentPart) CreateDeploymentUnits(ctx context.Context) (reloa
 	service_conf := utils.JoinDirectives([]string{
 		"[Unit]",
 		"Description=Conductor signaling service for socket " + name,
-		"PartOf=" + socket_unit_name,
+		// "PartOf=" + socket_unit_name,
 		"",
 		"[Service]",
 		"Sockets=" + socket_unit_name,
 		"Type=oneshot",
+		// do not remain after exit to allow the signalling unit to restart when the
+		// socket restarts. It should not remain active while the socket restarts
+		"RemainAfterExit=no",
 		"WorkingDirectory=" + p.Depl.DeploymentDir,
 		"",
 		"Environment=CONDUCTOR_LOG_COMMAND=1",

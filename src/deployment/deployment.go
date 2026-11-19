@@ -151,15 +151,15 @@ type OtherPart struct {
 	Once           bool           `json:"once,omitempty"`
 }
 
-func NewOtherPartFromDeployment(depl *Deployment) *OtherPart {
+func NewOtherPartFromService(svc *service.Service, deployment_name string, seed *DeploymentSeed) *OtherPart {
 	return &OtherPart{
-		PartName:       depl.PartName,
-		PartType:       depl.PartType,
-		DeploymentName: depl.DeploymentName,
-		DeploymentDir:  depl.DeploymentDir,
-		ServiceId:      depl.ServiceId,
-		PartId:         depl.PartId,
-		Once:           depl.Once,
+		PartName:       seed.PartName,
+		PartType:       seed.PartType,
+		DeploymentName: deployment_name,
+		DeploymentDir:  DeploymentDirByNameOnly(deployment_name),
+		ServiceId:      seed.ServiceId,
+		PartId:         seed.PartId,
+		Once:           seed.Once,
 	}
 }
 

@@ -12,6 +12,7 @@ import (
 	"github.com/coreos/go-systemd/v22/daemon"
 
 	"github.com/mildred/conductor.go/src/deployment_internal"
+	"github.com/mildred/conductor.go/src/service"
 	"github.com/mildred/conductor.go/src/utils"
 
 	. "github.com/mildred/conductor.go/src/deployment"
@@ -25,7 +26,17 @@ func (p *DaemonDeploymentPart) StartDeployment(ctx context.Context, depl *Deploy
 		return err
 	}
 
-	cmd := exec.Command(depl.Daemon.Exec[0], depl.Daemon.Exec[1:]...)
+	var cmdline []string
+	if depl.Daemon.ForceBindEnabled() {
+		cmdline, err = service.WrapForceBind(depl.Daemon.ForceBindFlags(), depl.Daemon.Exec...)
+		if err != nil {
+			return err
+		}
+	} else {
+		cmdline = depl.Daemon.Exec
+	}
+
+	cmd := exec.Command(cmdline[0], cmdline[1:]...)
 	cmd.Env = append(cmd.Environ(), vars...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -42,6 +53,17 @@ func (p *DaemonDeploymentPart) StartDeployment(ctx context.Context, depl *Deploy
 
 	log.Printf("start: Startup sequence completed\n")
 	_, err = daemon.SdNotify(false, daemon.SdNotifyReady)
+	if err != nil {
+		return err
+	}
+
+	//
+	// Notify MAINPID as this process is stopping
+	//
+
+	log.Printf("start: Notify MAINPID=%d\n", cmd.Process.Pid)
+	_, err = daemon.SdNotify(false, fmt.Sprintf("MAINPID=%d", cmd.Process.Pid))
+
 	return err
 }
 

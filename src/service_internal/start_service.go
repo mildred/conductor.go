@@ -18,6 +18,7 @@ import (
 	"github.com/mildred/conductor.go/src/deployment_util"
 	"github.com/mildred/conductor.go/src/dirs"
 	"github.com/mildred/conductor.go/src/part_pod"
+	"github.com/mildred/conductor.go/src/parts"
 	"github.com/mildred/conductor.go/src/pidfile"
 	"github.com/mildred/conductor.go/src/service_util"
 	"github.com/mildred/conductor.go/src/tmpl"
@@ -185,7 +186,12 @@ func StartOrReload(ctx context.Context, service *Service, service_name string, o
 
 	var started_services []string
 
-	parts := service.PartNames()
+	// Filter sockets first because they need to be started first else thy won't
+	// start
+	// TODO: the service that depends on a socket should require the socket
+	parts := append(append([]AbstractServicePart{},
+		utils.Filter(service.Parts, func(p AbstractServicePart) bool { return p.PartType() == parts.SocketType })...),
+		utils.Filter(service.Parts, func(p AbstractServicePart) bool { return p.PartType() != parts.SocketType })...)
 
 	var depl_names []string
 	var seeds []*deployment.DeploymentSeed
@@ -193,7 +199,9 @@ func StartOrReload(ctx context.Context, service *Service, service_name string, o
 	var deployment_statuses []string
 	var depl_other_parts = map[string]*deployment.OtherPart{}
 
-	for _, part_name := range parts {
+	for _, part := range parts {
+
+		part_name := part.PartName()
 
 		if part_name == "" {
 			log.Printf("Loaded service, configure socket for default part...\n")
@@ -214,11 +222,22 @@ func StartOrReload(ctx context.Context, service *Service, service_name string, o
 			return err
 		}
 
+		// BE CAREFUL, do not use `depl` until after CreateDeploymentFromSeed has
+		// been called. Before that the deployment could be a dummy struct with only
+		// a DeploymentName and nothing else
+
 		depl_names = append(depl_names, depl.DeploymentName)
 		deployments = append(deployments, depl)
 		deployment_statuses = append(deployment_statuses, depl_status)
 		seeds = append(seeds, seed)
-		depl_other_parts[depl.PartName] = deployment.NewOtherPartFromDeployment(depl)
+		other := deployment.NewOtherPartFromService(service, depl.DeploymentName, seed)
+		depl_other_parts[seed.PartName] = other
+
+		if seed.PartName == "" {
+			log.Printf("default part: deployment %s (part %+s#%d)\n", other.DeploymentName, seed.PartName, len(depl_other_parts))
+		} else {
+			log.Printf("part %s: deployment %s (part %+s#%d)\n", seed.PartName, other.DeploymentName, seed.PartName, len(depl_other_parts))
+		}
 	}
 
 	//
@@ -234,6 +253,12 @@ func StartOrReload(ctx context.Context, service *Service, service_name string, o
 			e := depl.SaveDefaultLocation()
 			if e != nil {
 				err = errors.Join(err, e)
+			}
+
+			if depl.PartName == "" {
+				log.Printf("default part: save deployment %s including %d other parts\n", depl.DeploymentName, len(depl.OtherParts))
+			} else {
+				log.Printf("part %s: save deployment %s including %d other parts\n", depl.PartName, depl.DeploymentName, len(depl.OtherParts))
 			}
 		}
 	}
@@ -251,7 +276,19 @@ func StartOrReload(ctx context.Context, service *Service, service_name string, o
 			continue
 		}
 
-		depl, err := deployment_util.CreateDeploymentFromService(ctx, depl.DeploymentName, service, seed)
+		err := deployment_util.SeedDeploymentFromService(ctx, depl.DeploymentName, service, seed)
+		if err != nil {
+			return err
+		}
+	}
+
+	for i, depl := range deployments {
+		seed := seeds[i]
+		if depl.Service != nil {
+			continue
+		}
+
+		depl, err := deployment_util.CreateDeploymentFromSeed(ctx, depl.DeploymentName, service, seed)
 		if err != nil {
 			return err
 		}
@@ -263,7 +300,7 @@ func StartOrReload(ctx context.Context, service *Service, service_name string, o
 	// Start all deployments
 	//
 
-	for i, _ := range parts {
+	for i, _ := range deployments {
 		seed := seeds[i]
 		depl := deployments[i]
 		depl_status := deployment_statuses[i]

@@ -226,10 +226,15 @@ func (s *Service) GetServiceName() (string, error) {
 }
 
 func (s *Service) GetServiceNameOrPath() (string, error) {
+	if s.Name != "" {
+		return s.Name, nil
+	}
+
 	name, err := ServiceNameFromFile(filepath.Join(s.BasePath, ConfigName))
 	if err != nil || name == "" {
 		return s.BasePath, err
 	} else {
+		s.Name = name
 		return name, nil
 	}
 }
@@ -452,6 +457,8 @@ func loadService(path string, fix_paths bool, base *Service, inh *InheritFile) (
 		service.AutoRestart = nil
 	}
 
+	_, _ = service.GetServiceNameOrPath()
+
 	return service, nil
 }
 
@@ -656,10 +663,8 @@ func (service *Service) Vars(ctx context.Context) ([]string, error) {
 }
 
 func (service *Service) VarsExcluding(ctx context.Context, excluded []string) ([]string, error) {
-	name := service.Name
-	if name == "" {
-		name = service.BasePath
-	}
+	name, _ := service.GetServiceNameOrPath()
+
 	var vars []string
 	for k, v := range service.Config {
 		if !slices.Contains(excluded, k) {

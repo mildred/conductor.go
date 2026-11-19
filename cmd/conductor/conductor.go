@@ -29,6 +29,12 @@ import (
 var version = "dev"
 
 func log_command() {
+	prefix := log.Prefix()
+	defer log.SetPrefix(prefix)
+
+	if sd_unit := os.Getenv("CONDUCTOR_SYSTEMD_UNIT"); sd_unit != "" {
+		log.SetPrefix(prefix + sd_unit + ": ")
+	}
 	if os.Getenv("CONDUCTOR_LOG_COMMAND") != "" {
 		log.Printf("+ PID=%d %v", os.Getpid(), shellescape.QuoteCommand(os.Args))
 	}

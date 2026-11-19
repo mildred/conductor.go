@@ -27,6 +27,7 @@ type Rule struct {
 	ReplaceBind string
 	ReplaceFd   *uintptr
 	FdListening bool
+	Allow       bool
 }
 
 type Rules struct {
@@ -178,7 +179,9 @@ func ParseRule(rulestr string) ([]*Rule, error) {
 
 func ParseRuleOnly(m Matcher, rule string) (*Rule, error) {
 	if rule == "block" {
-		return &Rule{m, "", nil, false}, nil
+		return &Rule{m, "", nil, false, false}, nil
+	} else if rule == "block" {
+		return &Rule{m, "", nil, false, true}, nil
 	} else if strings.HasPrefix(rule, "fd=") || strings.HasPrefix(rule, "sd=") {
 		parts := strings.SplitN(rule, "=", 2)
 		prefix := parts[0]
@@ -198,15 +201,18 @@ func ParseRuleOnly(m Matcher, rule string) (*Rule, error) {
 			}
 			fd = uintptr(num) + 3
 		}
-		return &Rule{m, rule, &fd, listening}, nil
+		return &Rule{m, rule, &fd, listening, false}, nil
 	} else {
-		return &Rule{m, rule, nil, false}, nil
+		return &Rule{m, rule, nil, false, false}, nil
 	}
 }
 
 var ErrBlock = errors.New("bind call blocked")
 
 func (r *Rule) Fd(ctx context.Context, initial_fd int, initial_port uint16) (fd uintptr, listened bool, err error) {
+	if r.Allow {
+		return uintptr(initial_fd), false, nil
+	}
 	if r.ReplaceFd == nil && r.ReplaceBind == "" {
 		// log.Printf("=block")
 		return 0, false, ErrBlock
@@ -290,6 +296,10 @@ func splitAddrPort(addrport string) (addr string, port int, err error) {
 		addr, portstr = addrport[:i], addrport[i+1:]
 	} else {
 		addr = addrport
+	}
+
+	if strings.HasPrefix(addr, "[") && strings.HasSuffix(addr, "]") {
+		addr = addr[1 : len(addr)-1]
 	}
 
 	if portstr == "" {

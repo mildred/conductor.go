@@ -11,7 +11,9 @@ type ServiceDaemon struct {
 	ServicePart
 	ServiceDaemonReverseProxy
 	ServiceDaemonNotSocketActivated
-	Exec []string `json:"exec"`
+	ServiceDaemonForceBind
+	Sockets []string `json:"sockets,omitempty"`
+	Exec    []string `json:"exec"`
 }
 
 func (part *ServiceDaemon) ReverseProxyConfigs(ctx context.Context, service *Service) (configs caddy.ConfigItems, err error) {

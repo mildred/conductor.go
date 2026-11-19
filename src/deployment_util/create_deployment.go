@@ -276,8 +276,24 @@ func FindDeploymentName(svc *service.Service, seed *deployment.DeploymentSeed, m
 
 var ErrUnsupportedDeploy error = errors.New("This operation is no longer supported as deployment of a single part breaks the link it might have with other parts.")
 
-func CreateDeploymentFromService(ctx context.Context, name string, svc *service.Service, seed *DeploymentSeed) (*Deployment, error) {
-	defer utils.AddPrefix(log.Default(), "[create %s] ", name)()
+func CreateDeploymentFromService(ctx context.Context, name string, svc *service.Service, seed *DeploymentSeed) (depl *Deployment, err error) {
+	e := SeedDeploymentFromService(ctx, name, svc, seed)
+	if e == ErrUnsupportedDeploy {
+		err = errors.Join(err, e)
+	} else if err != nil {
+		return nil, e
+	}
+
+	depl, e = CreateDeploymentFromSeed(ctx, name, svc, seed)
+	if e != nil {
+		err = errors.Join(err, e)
+	}
+
+	return depl, err
+}
+
+func SeedDeploymentFromService(ctx context.Context, name string, svc *service.Service, seed *DeploymentSeed) error {
+	defer utils.AddPrefix(log.Default(), "[seed %s] ", name)()
 
 	//
 	// Symlink the service config over to the deployment directory (write the seed)
@@ -295,23 +311,37 @@ func CreateDeploymentFromService(ctx context.Context, name string, svc *service.
 
 	err := os.MkdirAll(dir, 0755)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	err = os.Symlink(path.Join(svc.BasePath, service.ConfigName), path.Join(dir, service.ConfigName))
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	seed_data, err := json.Marshal(seed)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	err = os.WriteFile(path.Join(dir, SeedName), seed_data, 0644)
 	if err != nil {
-		return nil, err
+		return err
 	}
+
+	if seed.PartName == "" {
+		log.Printf("Wrote seed for default part with %d parts included", len(seed.OtherParts))
+	} else {
+		log.Printf("Wrote seed for part %+s with %d parts included", seed.PartName, len(seed.OtherParts))
+	}
+
+	return last_err
+}
+
+func CreateDeploymentFromSeed(ctx context.Context, name string, svc *service.Service, seed *DeploymentSeed) (*Deployment, error) {
+	defer utils.AddPrefix(log.Default(), "[create %s] ", name)()
+
+	dir := DeploymentRunPath(name)
 
 	// var env string
 	// env += fmt.Sprintf("CONDUCTOR_APP=%s\n", svc.AppName)
@@ -325,9 +355,10 @@ func CreateDeploymentFromService(ctx context.Context, name string, svc *service.
 
 	depl := deployment.NewDeploymentFromService(svc, name, seed)
 
+	log.Printf("Create deployment units")
 	reload, err := depl.CreateDeploymentUnits(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("creating deployment units for deployment %s, %v", name, err)
 	}
 
 	for _, service_unit := range depl.AllServiceUnits() {
@@ -367,5 +398,5 @@ func CreateDeploymentFromService(ctx context.Context, name string, svc *service.
 		return nil, err
 	}
 
-	return depl, last_err
+	return depl, nil
 }
