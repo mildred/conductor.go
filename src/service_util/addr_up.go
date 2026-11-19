@@ -15,7 +15,7 @@ func BringAddrUp(ctx context.Context, service *Service) error {
 	prefix := log.Prefix()
 	defer log.SetPrefix(prefix)
 
-	addrNames, err := service.AddrNames("")
+	addrNames, err := service.AddrNames()
 	if err != nil {
 		return err
 	}
@@ -42,7 +42,7 @@ func BringAddrDown(ctx context.Context, service *Service) error {
 	prefix := log.Prefix()
 	defer log.SetPrefix(prefix)
 
-	addrNames, err := service.AddrNames("")
+	addrNames, err := service.AddrNames()
 	if err != nil {
 		return err
 	}

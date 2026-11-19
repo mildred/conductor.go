@@ -29,8 +29,6 @@ import (
 	"github.com/mildred/conductor.go/src/dirs"
 	"github.com/mildred/conductor.go/src/tmpl"
 	"github.com/mildred/conductor.go/src/utils"
-
-	. "github.com/mildred/conductor.go/src/parts"
 )
 
 type Hook struct {
@@ -77,6 +75,7 @@ type Service struct {
 	Config                  map[string]*ConfigValue    `json:"config,omitempty"` // key-value pairs for config and templating, CHANNEL=staging
 	ConfigTemplate          string                     `json:"config_template,omitempty"`
 	ProxyConfigTemplate     string                     `json:"proxy_config_template,omitempty"` // Template file for the load-balancer config
+	Addr                    AddrConfig                 `json:"addr,omitempty"`
 	Parts                   ServiceParts               `json:"parts,omitempty"`
 	PodsDeprecated          []json.RawMessage          `json:"pods,omitempty"`
 	FunctionsDeprecated     []json.RawMessage          `json:"functions,omitempty"`
@@ -673,7 +672,7 @@ func (service *Service) VarsExcluding(ctx context.Context, excluded []string) ([
 	}
 
 	var firstAddrName string
-	addrNames, err := service.AddrNames("")
+	addrNames, err := service.AddrNames()
 	if err != nil {
 		return nil, err
 	}
@@ -739,38 +738,34 @@ func (service *Service) VarsExcluding(ctx context.Context, excluded []string) ([
 	return vars, nil
 }
 
-func (service *Service) AddrNames(filter_part string) ([]string, error) {
-	var parts []string
-	has_daemon := false
-	for _, p := range service.Parts {
-		if p.PartType() == DaemonType {
-			has_daemon = true
-			if p.PartName() != "" && (filter_part == "" || p.PartName() == filter_part) {
-				parts = append(parts, p.PartName())
-			}
-		}
-	}
-
-	name, err := service.GetServiceName()
+// Return all the address names for the service, filtering by parts name. If no
+// filter provided, all addresses are returned. If the default part or the
+// global service address is included (same default address), the returned list
+// will start with the service address then the default part address
+func (service *Service) AddrNames(filter_part ...string) (res []string, err error) {
+	service_name, err := service.GetServiceName()
 	if err != nil {
 		return nil, err
 	}
 
-	if !has_daemon {
-		return []string{}, nil
-	} else if name == "" {
-		return []string{}, nil
-	} else {
-		var res []string
-		root_name := utils.ToDNSName(name)
-		if filter_part == "" {
-			res = append(res, root_name)
+	if len(filter_part) == 0 || slices.Contains(filter_part, "") {
+		addr := service.Addr.GetName(service_name, "")
+		if addr != "" && !slices.Contains(res, addr) {
+			res = append(res, addr)
 		}
-		for _, p := range parts {
-			res = append(res, utils.ToDNSName(p)+"."+root_name)
-		}
-		return res, nil
 	}
+
+	for _, p := range service.Parts {
+		if len(filter_part) == 0 || slices.Contains(filter_part, p.PartName()) {
+			addr := p.AddrName(service_name)
+
+			if addr != "" && !slices.Contains(res, addr) {
+				res = append(res, addr)
+			}
+		}
+	}
+
+	return res, err
 }
 
 func (service *Service) FindPart(part_name string) AbstractServicePart {

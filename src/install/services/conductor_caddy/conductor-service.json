@@ -22,6 +22,10 @@
     // {"name": "conductor_tube_ports", "after": true}
   ],
 
+  // Generate an address for /etc/hosts (a new IPv4 loopback address and IPv6
+  // non routable address)
+  "addr": true,
+
   // Parts are template for new deployments, on service restart, the old
   // deployments are removed in favor of the new deployments based on the same
   // parts.

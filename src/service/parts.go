@@ -21,6 +21,7 @@ type AbstractServicePart interface {
 	ServicePartImplementation
 	PartName() string
 	PartType() PartType
+	AddrName(service_name string) string
 	FixPaths(string) error
 	FillDefaults(service *Service) error
 	ReverseProxyConfigs(ctx context.Context, service *Service) (configs caddy.ConfigItems, err error)
@@ -39,12 +40,17 @@ func (part *MinimalServicePart) PartType() PartType { return part.Type }
 type ServicePart struct {
 	MinimalServicePart
 	ServicePartImplementation `json:"-"`
-	PartIdTemplate            string   `json:"part_id_template"`
-	ExcludeVars               []string `json:"exclude_vars"`
-	ServiceDirectives         []string `json:"service_directives,omitempty"`
+	Addr                      AddrConfig `json:"addr,omitempty"`
+	PartIdTemplate            string     `json:"part_id_template"`
+	ExcludeVars               []string   `json:"exclude_vars"`
+	ServiceDirectives         []string   `json:"service_directives,omitempty"`
 }
 
 func (part *ServicePart) GenericPart() *ServicePart { return part }
+
+func (part *ServicePart) AddrName(service_name string) string {
+	return part.Addr.GetName(service_name, part.PartName())
+}
 
 func (parts *ServiceParts) FindPart(name string) AbstractServicePart {
 	for _, part := range *parts {
